@@ -1,0 +1,12 @@
+[submodule "apps/CreationStation"]
+	path = apps/CreationStation
+	url = https://github.com/wwestlake/CreationStation.git
+[submodule "apps/CreationEngine"]
+	path = apps/CreationEngine
+	url = https://github.com/wwestlake/Creation-Engine.git
+[submodule "apps/CreationMovie"]
+	path = apps/CreationMovie
+	url = https://github.com/wwestlake/Creation-Movie.git
+[submodule "apps/CreationLive"]
+	path = apps/CreationLive
+	url = https://github.com/wwestlake/Creation-Live.git
