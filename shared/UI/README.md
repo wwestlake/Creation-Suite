@@ -1,7 +1,25 @@
 # Shared UI
 
-This module is for future shared UI primitives only.
+This module owns suite shell UI that multiple apps must render the same
+way.
 
-Do not move product-specific panels or workflows here early. Shared UI
-should stay limited to reusable controls, styles, and shell-level suite
-components that multiple apps genuinely need.
+Shared here now:
+
+- the suite header / transport shell
+- the suite settings panel shell
+- suite storage and VFS settings UI
+- suite AI account and per-app routing settings UI
+- shared EULA reader panel
+
+Shared here next:
+
+- common header layout policy
+- suite settings multi-page navigation
+- shared account chip presentation
+- shared menu and shell primitives
+
+Left per app:
+
+- domain workflows
+- app-specific editors and inspectors
+- transport behavior wiring

@@ -1,0 +1,51 @@
+#pragma once
+
+#include <juce_core/juce_core.h>
+
+#include "creation/assets/AssetCatalog.h"
+
+namespace creation::assets
+{
+enum class SuiteAppDomain
+{
+    unknown,
+    station,
+    engine,
+    movie,
+    live
+};
+
+struct ProjectManifest
+{
+    juce::String projectId;
+    juce::String projectName;
+    SuiteAppDomain appDomain = SuiteAppDomain::unknown;
+    int schemaVersion = 1;
+    int revision = 0;
+    juce::String createdWithSuiteVersion;
+    juce::String createdByAppVersion;
+    juce::Time createdAt;
+    juce::Time modifiedAt;
+    AssetCatalog assetCatalog;
+    juce::StringArray tags;
+};
+
+struct ProjectContainerPaths
+{
+    static constexpr const char* manifestPath = "Project/project-manifest.json";
+    static constexpr const char* assetRoot = "Assets/";
+    static constexpr const char* sourceAssetRoot = "Assets/Source/";
+    static constexpr const char* derivedAssetRoot = "Assets/Derived/";
+    static constexpr const char* metadataRoot = "Metadata/";
+    static constexpr const char* exportsRoot = "Exports/";
+};
+
+juce::String toStorageToken(SuiteAppDomain domain);
+SuiteAppDomain suiteAppDomainFromStorageToken(const juce::String& token);
+juce::String toDisplayName(SuiteAppDomain domain);
+
+juce::var toVar(const ProjectManifest& manifest);
+bool fromVar(const juce::var& value, ProjectManifest& outManifest);
+juce::String serializeManifest(const ProjectManifest& manifest, bool prettyPrint = true);
+bool deserializeManifest(const juce::String& jsonText, ProjectManifest& outManifest, juce::String& errorMessage);
+}

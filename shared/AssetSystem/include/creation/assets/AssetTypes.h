@@ -45,12 +45,15 @@ struct AssetDescriptor
 {
     AssetId id;
     AssetVersionId versionId;
+    AssetId originalAssetId;
+    AssetVersionId derivedFromVersionId;
     juce::String displayName;
     AssetKind kind = AssetKind::unknown;
     juce::String category;
     juce::String description;
     juce::String mediaType;
     juce::String logicalPath;
+    juce::String sourceApp;
     juce::String sourceTool;
     juce::String version { "1" };
     juce::StringArray tags;

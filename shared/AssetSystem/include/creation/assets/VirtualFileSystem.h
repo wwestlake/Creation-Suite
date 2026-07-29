@@ -21,6 +21,11 @@ public:
 
     bool exists(const juce::String& virtualPath) const;
     bool readFile(const juce::String& virtualPath, juce::MemoryBlock& outData) const;
+    juce::StringArray listEntries() const;
+    bool materializeEntry(const juce::String& virtualPath,
+                          const juce::File& targetDirectory,
+                          juce::String& errorMessage,
+                          bool overwriteExisting = true) const;
 
 private:
     struct MountedArchive

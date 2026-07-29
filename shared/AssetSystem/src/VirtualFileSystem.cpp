@@ -72,4 +72,59 @@ bool VirtualFileSystem::readFile(const juce::String& virtualPath, juce::MemoryBl
 
     return false;
 }
+
+juce::StringArray VirtualFileSystem::listEntries() const
+{
+    juce::StringArray entries;
+
+    const juce::ScopedLock scopedLock(lock);
+    for (const auto& mount : mounts)
+    {
+        const auto numEntries = mount.zip->getNumEntries();
+        for (int index = 0; index < numEntries; ++index)
+            if (const auto* entry = mount.zip->getEntry(index))
+                if (! entries.contains(entry->filename))
+                    entries.add(entry->filename);
+    }
+
+    return entries;
+}
+
+bool VirtualFileSystem::materializeEntry(const juce::String& virtualPath,
+                                         const juce::File& targetDirectory,
+                                         juce::String& errorMessage,
+                                         bool overwriteExisting) const
+{
+    const auto normalized = normalizePath(virtualPath);
+
+    const juce::ScopedLock scopedLock(lock);
+    for (const auto& mount : mounts)
+    {
+        const auto* entry = mount.zip->getEntry(normalized);
+        if (entry == nullptr)
+            continue;
+
+        if (! targetDirectory.exists() && ! targetDirectory.createDirectory())
+        {
+            errorMessage = "Could not create the materialization directory.";
+            return false;
+        }
+
+        const auto result = mount.zip->uncompressEntry(mount.zip->getIndexOfFileName(normalized),
+                                                       targetDirectory,
+                                                       overwriteExisting ? juce::ZipFile::OverwriteFiles::yes
+                                                                         : juce::ZipFile::OverwriteFiles::no,
+                                                       juce::ZipFile::FollowSymlinks::no);
+        if (result.failed())
+        {
+            errorMessage = result.getErrorMessage();
+            return false;
+        }
+
+        return true;
+    }
+
+    errorMessage = "The requested virtual path was not found in any mounted archive.";
+    return false;
+}
 }
