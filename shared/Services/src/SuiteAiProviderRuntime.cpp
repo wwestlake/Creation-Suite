@@ -7,6 +7,8 @@ juce::String SuiteAiProviderRuntime::normalizeProviderId(const juce::String& pro
     auto normalized = providerNameOrId.trim().toLowerCase();
     if (normalized.contains("ollama"))
         return "ollama";
+    if (normalized.contains("lm studio") || normalized.contains("lm-studio"))
+        return "lm-studio";
 
     if (normalized.isEmpty())
         return "openai";
@@ -44,13 +46,14 @@ SuiteAiProviderRuntimeProfile SuiteAiProviderRuntime::resolveProfile(const juce:
         profile.supportsOpenAiChatStyle = provider->supportsOpenAiChatStyle;
     }
 
-    if (profile.providerId == "ollama")
+    if (profile.providerId == "ollama" || profile.providerId == "lm-studio")
     {
         profile.modelCatalogPath = "/api/tags";
         profile.modelCatalogArrayProperty = "models";
         profile.modelCatalogIdProperty = "name";
-        profile.chatCompletionsPath = "/api/chat";
+        profile.chatCompletionsPath = profile.providerId == "ollama" ? "/api/chat" : "/chat/completions";
         profile.chatResponseTextProperty = "message.content";
+        profile.requiresApiKey = false;
     }
 
     return profile;
@@ -60,6 +63,8 @@ juce::String SuiteAiProviderRuntime::defaultModelName(const SuiteAiProviderRunti
 {
     if (profile.providerId == "ollama")
         return "llama3.2:3b";
+    if (profile.providerId == "lm-studio")
+        return "local-model";
 
     return "gpt-4.1-mini";
 }
@@ -84,7 +89,10 @@ bool SuiteAiProviderRuntime::shouldReplaceBaseUrlOnProviderSwitch(const juce::St
     if (nextProfile.isOllamaStyle())
         return current.contains("api.openai.com");
 
-    return current.contains("localhost:11434") || current.contains("127.0.0.1:11434");
+    return current.contains("localhost:11434")
+        || current.contains("127.0.0.1:11434")
+        || current.contains("localhost:1234")
+        || current.contains("127.0.0.1:1234");
 }
 
 juce::String SuiteAiProviderRuntime::buildAuthHeaders(const SuiteAiProviderRuntimeProfile& profile,

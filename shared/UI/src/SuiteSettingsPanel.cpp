@@ -1,4 +1,6 @@
 #include <creation/ui/SuiteSettingsPanel.h>
+#include <creation/ui/CreationSuiteLogos.h>
+#include <creation/services/SuiteAiProviderRuntime.h>
 
 namespace
 {
@@ -36,6 +38,7 @@ void configureCombo(juce::ComboBox& comboBox)
 SuiteSettingsPanel::SuiteSettingsPanel()
     : aiProviders(creation::services::SuiteAiProviderCatalog::createDefaultCatalog())
 {
+    suiteLogo = creation::ui::getSuiteLogoImage(creation::ui::SuiteLogoId::suite);
     titleLabel.setText("Creation Suite Control", juce::dontSendNotification);
     titleLabel.setFont(juce::Font(24.0f).boldened());
     titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
@@ -120,6 +123,30 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     };
     addAndMakeVisible(removeAccountButton);
 
+    testAccountButton.onClick = [this]
+    {
+        pushCurrentEditorToSelectedAccount();
+        if (! juce::isPositiveAndBelow(selectedAccountIndex, aiSettings.accounts.size()))
+        {
+            setStatusText("Select an AI account first.");
+            return;
+        }
+
+        const auto& account = aiSettings.accounts.getReference(selectedAccountIndex);
+        creation::services::SuiteAiResolvedRuntimeSettings runtimeSettings;
+        runtimeSettings.accountId = account.accountId;
+        runtimeSettings.providerId = account.providerId;
+        runtimeSettings.providerDisplayName = creation::services::SuiteAiProviderRuntime::resolveProfile(account.providerId).displayName;
+        runtimeSettings.baseUrl = account.baseUrl;
+        runtimeSettings.modelName = account.modelName;
+        runtimeSettings.apiKey = account.apiKey;
+
+        setStatusText("Testing " + runtimeSettings.providerDisplayName + " account...");
+        if (onTestAiAccountRequested)
+            onTestAiAccountRequested(runtimeSettings);
+    };
+    addAndMakeVisible(testAccountButton);
+
     providerLabel.setText("Provider", juce::dontSendNotification);
     configureLabel(providerLabel);
     addAndMakeVisible(providerLabel);
@@ -141,8 +168,8 @@ SuiteSettingsPanel::SuiteSettingsPanel()
         account.providerId = provider.id;
         if (account.baseUrl.trim().isEmpty())
             account.baseUrl = provider.defaultBaseUrl;
-        if (account.providerId == "ollama" && account.modelName.trim().isEmpty())
-            account.modelName = "llama3.1";
+        if ((account.providerId == "ollama" || account.providerId == "lm-studio") && account.modelName.trim().isEmpty())
+            account.modelName = account.providerId == "ollama" ? "llama3.1" : "local-model";
         pullSelectedAccountIntoEditor();
     };
     addAndMakeVisible(providerCombo);
@@ -325,12 +352,16 @@ void SuiteSettingsPanel::paint(juce::Graphics& g)
     g.fillAll(panelFill());
     g.setColour(panelOutline());
     g.drawRect(getLocalBounds(), 1);
+
+    if (suiteLogo.isValid())
+        g.drawImageWithin(suiteLogo, 18, 16, 58, 58, juce::RectanglePlacement::centred, false);
 }
 
 void SuiteSettingsPanel::resized()
 {
     auto area = getLocalBounds().reduced(18);
-    titleLabel.setBounds(area.removeFromTop(30));
+    auto titleRow = area.removeFromTop(58);
+    titleLabel.setBounds(titleRow.removeFromLeft(300).withTrimmedLeft(72).withTrimmedTop(4));
     subTitleLabel.setBounds(area.removeFromTop(42));
     area.removeFromTop(10);
 
@@ -358,6 +389,8 @@ void SuiteSettingsPanel::resized()
     addAccountButton.setBounds(accountHeaderRow.removeFromLeft(110));
     accountHeaderRow.removeFromLeft(8);
     removeAccountButton.setBounds(accountHeaderRow.removeFromLeft(90));
+    accountHeaderRow.removeFromLeft(8);
+    testAccountButton.setBounds(accountHeaderRow.removeFromLeft(120));
     area.removeFromTop(10);
 
     providerLabel.setBounds(area.removeFromTop(20));

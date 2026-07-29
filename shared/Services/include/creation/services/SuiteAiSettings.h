@@ -44,10 +44,10 @@ struct SuiteAiSettings
 struct SuiteAiResolvedRuntimeSettings
 {
     juce::String accountId;
-    juce::String providerId;
-    juce::String providerDisplayName;
-    juce::String baseUrl;
-    juce::String modelName;
+    juce::String providerId { "openai" };
+    juce::String providerDisplayName { "OpenAI" };
+    juce::String baseUrl { "https://api.openai.com/v1" };
+    juce::String modelName { "gpt-4.1-mini" };
     juce::String apiKey;
 
     bool isValid() const noexcept { return providerId.isNotEmpty() || providerDisplayName.isNotEmpty(); }

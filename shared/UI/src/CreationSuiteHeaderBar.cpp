@@ -1,4 +1,6 @@
 #include <creation/ui/CreationSuiteHeaderBar.h>
+#include <creation/ui/CreationSuiteLogos.h>
+#include <creation/ui/TransportActionIds.h>
 
 namespace
 {
@@ -164,6 +166,7 @@ TransportButtonLookAndFeel& getTransportButtonLookAndFeel()
 CreationSuiteHeaderBar::CreationSuiteHeaderBar()
 {
     setName("Transport");
+    logoImage = creation::ui::getSuiteLogoImage(creation::ui::SuiteLogoId::suite);
 
     titleLabel.setText("Creation Suite", juce::dontSendNotification);
     titleLabel.setJustificationType(juce::Justification::centredLeft);
@@ -173,7 +176,6 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
 
     midiStatusLabel.setVisible(false);
     midiStatusLabel.setColour(juce::Label::textColourId, juce::Colour(0xff8ea0b7));
-    addAndMakeVisible(midiStatusLabel);
 
     projectButton.setButtonText("Project: Untitled");
     projectButton.setTooltip("Open the project menu");
@@ -390,8 +392,7 @@ void CreationSuiteHeaderBar::setStatusText(const juce::String& text)
 
 void CreationSuiteHeaderBar::setMidiStatusText(const juce::String& text)
 {
-    midiStatusLabel.setText(text, juce::dontSendNotification);
-    midiStatusLabel.setVisible(text.isNotEmpty());
+    juce::ignoreUnused(text);
 }
 
 void CreationSuiteHeaderBar::setPlaybackVisualState(bool playing, bool recording)
@@ -426,7 +427,7 @@ void CreationSuiteHeaderBar::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colour(0xff0f1115));
     if (logoImage.isValid())
-        g.drawImageWithin(logoImage, 14, 9, 44, 44, juce::RectanglePlacement::centred, false);
+        g.drawImageWithin(logoImage, 10, 4, 72, 72, juce::RectanglePlacement::centred, false);
 
     g.setColour(juce::Colour(0xff242a36));
     g.drawLine(0.0f, static_cast<float>(getHeight()) - 1.0f, static_cast<float>(getWidth()), static_cast<float>(getHeight()) - 1.0f, 1.0f);
@@ -477,11 +478,11 @@ void CreationSuiteHeaderBar::mouseDown(const juce::MouseEvent& event)
         juce::String targetId;
         juce::String label;
 
-        if (event.eventComponent == &rewindButton) { targetId = "transport_rewind"; label = "Rewind"; }
-        else if (event.eventComponent == &fastForwardButton) { targetId = "transport_fast_forward"; label = "Fast Forward"; }
-        else if (event.eventComponent == &playButton) { targetId = "transport_play"; label = "Play"; }
-        else if (event.eventComponent == &stopButton) { targetId = "transport_stop"; label = "Stop"; }
-        else if (event.eventComponent == &recordButton) { targetId = "transport_record"; label = "Record"; }
+        if (event.eventComponent == &rewindButton) { targetId = creation::ui::transport_actions::rewind; label = "Rewind"; }
+        else if (event.eventComponent == &fastForwardButton) { targetId = creation::ui::transport_actions::fastForward; label = "Fast Forward"; }
+        else if (event.eventComponent == &playButton) { targetId = creation::ui::transport_actions::play; label = "Play"; }
+        else if (event.eventComponent == &stopButton) { targetId = creation::ui::transport_actions::stop; label = "Stop"; }
+        else if (event.eventComponent == &recordButton) { targetId = creation::ui::transport_actions::record; label = "Record"; }
 
         if (targetId.isNotEmpty())
         {
@@ -515,14 +516,13 @@ void CreationSuiteHeaderBar::mouseDown(const juce::MouseEvent& event)
 void CreationSuiteHeaderBar::resized()
 {
     auto area = getLocalBounds().reduced(18, 10);
-    area.removeFromLeft(56);
+    area.removeFromLeft(82);
     auto profileArea = area.removeFromRight(268);
 
     auto topRow = area.removeFromTop(30);
     auto bottomRow = area;
 
     titleLabel.setBounds(topRow.removeFromLeft(520));
-    midiStatusLabel.setBounds(topRow.withTrimmedLeft(10));
 
     auto transportRow = bottomRow.removeFromLeft(662);
     projectButton.setBounds(bottomRow.removeFromLeft(260));

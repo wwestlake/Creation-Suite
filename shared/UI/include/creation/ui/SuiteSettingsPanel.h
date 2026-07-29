@@ -12,6 +12,7 @@ public:
     std::function<void(const juce::String& fieldId)> onBrowseRequested;
     std::function<void(const creation::suite::SuiteSettings& settings)> onApplyRequested;
     std::function<void(const creation::services::SuiteAiSettings& settings)> onApplyAiSettingsRequested;
+    std::function<void(const creation::services::SuiteAiResolvedRuntimeSettings& settings)> onTestAiAccountRequested;
     std::function<void()> onReadEulaRequested;
 
     void setSettings(const creation::suite::SuiteSettings& settings);
@@ -49,6 +50,7 @@ private:
 
     juce::Label titleLabel;
     juce::Label subTitleLabel;
+    juce::Image suiteLogo;
     juce::Label storageSectionLabel;
     PathRow suiteVfsRow;
     PathRow sharedResourcesRow;
@@ -64,6 +66,7 @@ private:
     juce::ComboBox accountSelectorCombo;
     juce::TextButton addAccountButton { "+ Account" };
     juce::TextButton removeAccountButton { "Remove" };
+    juce::TextButton testAccountButton { "Test Account" };
     juce::Label providerLabel;
     juce::ComboBox providerCombo;
     juce::Label accountLabelLabel;
