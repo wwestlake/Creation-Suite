@@ -31,13 +31,34 @@ public:
     virtual juce::Array<SuiteContextDocument> CollectDocuments() = 0;
 };
 
+// CTX-2: user-supplied steering for one retrieval request, scoped to
+// whatever process/task the user is attaching it to -- never a
+// persistent global rule. Every field defaults to "no effect," so a
+// request with a default-constructed instruction ranks identically to
+// CTX-1's original behavior.
+struct SuiteContextProcessInstruction
+{
+    juce::StringArray boostCategories;       // matches against document category or tags.
+    juce::StringArray excludeCategories;     // matches against document category or tags; excluded entirely, not just down-ranked.
+    juce::StringArray prioritizedSourceApps; // matches against document.sourceApp.
+    juce::String steeringNote;               // free text folded into ranking (not dynamics) as extra query context.
+    float boostWeight = 0.25f;
+
+    bool isEmpty() const
+    {
+        return boostCategories.isEmpty() && excludeCategories.isEmpty() && prioritizedSourceApps.isEmpty()
+               && steeringNote.isEmpty();
+    }
+};
+
 struct SuiteContextRetrievalRequest
 {
     juce::String prompt;
     juce::String systemPrompt; // for structural-separation (alpha); empty is valid, alpha reports 0.
-    juce::String processScope; // CTX-2 hook: which task/process this belongs to.
+    juce::String processScope; // which task/process this belongs to.
     juce::String appDomain;
     int maxItems = 6;
+    SuiteContextProcessInstruction processInstruction; // CTX-2; default-constructed = no effect.
 };
 
 // Adapted from Westlake, "Information Space Dynamics in Large Language

@@ -108,6 +108,18 @@ double PopulationVariance(const std::vector<double>& values)
     return variance / (double) values.size();
 }
 
+bool DocumentMatchesAnyCategory(const SuiteContextDocument& document, const juce::StringArray& categories)
+{
+    if (categories.isEmpty())
+        return false;
+    if (categories.contains(document.category, true))
+        return true;
+    for (const auto& tag : document.tags)
+        if (categories.contains(tag, true))
+            return true;
+    return false;
+}
+
 juce::String MakeExcerpt(const juce::String& sourceText, const juce::StringArray& tokens)
 {
     auto trimmed = sourceText.trim();
@@ -212,7 +224,15 @@ SuiteContextPacket SuiteContextEngine::BuildPacket(const SuiteContextRetrievalRe
             documents.addArray(provider->CollectDocuments());
     }
 
+    // CTX-2: a steering note folds into the query used for RANKING only
+    // -- it never touches ComputeDynamics above, since dynamics track
+    // the user's own conversational trajectory, not instruction text
+    // attached alongside it.
+    const auto& instruction = request.processInstruction;
     auto promptTokens = Tokenize(request.prompt);
+    auto queryTokens = promptTokens;
+    if (instruction.steeringNote.isNotEmpty())
+        queryTokens.addArray(Tokenize(instruction.steeringNote));
 
     struct RankedItem
     {
@@ -223,20 +243,31 @@ SuiteContextPacket SuiteContextEngine::BuildPacket(const SuiteContextRetrievalRe
     juce::Array<RankedItem> rankedItems;
     for (const auto& document : documents)
     {
+        // Excluded categories/tags drop the document entirely, before
+        // it can compete on score at all -- this is a hard filter, not
+        // a down-rank.
+        if (DocumentMatchesAnyCategory(document, instruction.excludeCategories))
+            continue;
+
         auto docTokens = Tokenize(document.title + " " + document.category + " " + document.body + " "
                                    + document.tags.joinIntoString(" "));
-        auto tokenScore = JaccardSimilarity(promptTokens, docTokens);
+        auto tokenScore = JaccardSimilarity(queryTokens, docTokens);
         auto freshnessHours = juce::jmax(0.0, document.updatedAt.toMilliseconds() > 0
                                                   ? (juce::Time::getCurrentTime() - document.updatedAt).inHours()
                                                   : 72.0);
         auto freshnessBoost = (float) juce::jmap(juce::jlimit(0.0, 72.0, freshnessHours), 72.0, 0.0, 0.0, 0.15);
         auto appBoost = document.sourceApp.equalsIgnoreCase(request.appDomain) ? 0.10f : 0.0f;
+        auto instructionBoost =
+            (DocumentMatchesAnyCategory(document, instruction.boostCategories) ? instruction.boostWeight : 0.0f)
+            + (instruction.prioritizedSourceApps.contains(document.sourceApp, true) ? instruction.boostWeight : 0.0f);
 
         // Same guard as the app-local scaffold this generalizes: freshness/app boosts are
         // tie-breakers, not a relevance substitute -- without this, session-scoped documents
         // re-stamped to "now" every request would win regardless of what was actually asked.
+        // An explicit user instruction is deliberately NOT gated behind this floor -- the user
+        // asked for a category to be prioritized, so it should apply even to a weak text match.
         constexpr float minimumTokenScoreForBoost = 0.05f;
-        auto score = tokenScore;
+        auto score = tokenScore + instructionBoost;
         if (tokenScore >= minimumTokenScoreForBoost)
             score += freshnessBoost + appBoost;
 

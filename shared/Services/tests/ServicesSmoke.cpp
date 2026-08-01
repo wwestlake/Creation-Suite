@@ -26,11 +26,21 @@ int main()
     {
         creation::services::SuiteAiSettingsStore aiStore;
         creation::services::SuiteLegalSettingsStore legalStore;
+        creation::services::SuiteAiHealthSnapshotStore healthStore;
+        creation::services::SuiteAiDiagnosticsStore diagnosticsStore;
+        creation::services::SuiteLogStore logStoreForCleanup;
 
         auto aiFile = aiStore.getSettingsFile();
         auto legalFile = legalStore.getSettingsFile();
         aiFile.deleteFile();
         legalFile.deleteFile();
+        // These three persist across runs and are never reset by the settings-file
+        // deletes above -- a prior direct run of this executable (e.g. manual
+        // debugging) otherwise leaves rate-limit/health state that silently breaks
+        // THIS run's "fresh state" assumptions below. Confirmed reproducible.
+        healthStore.getSettingsFile().deleteFile();
+        diagnosticsStore.getSettingsFile().deleteFile();
+        logStoreForCleanup.getSettingsFile().deleteFile();
 
         creation::services::SuiteAiSettings aiSettings;
         aiSettings.defaultAccountId = "primary";
@@ -378,6 +388,51 @@ int main()
             const auto recoveryTurn = submitAndWait("point light intensity settings again");
             if (! (recoveryTurn.dynamics.referenceDrift < pivot.dynamics.referenceDrift))
                 fail("SuiteContextEngine: returning to the anchor topic should reduce reference drift versus the pivot.");
+
+            // --- CTX-2: user-supplied process instructions -----------
+            auto findScore = [](const creation::services::SuiteContextPacket& packet, const juce::String& id) {
+                for (const auto& snippet : packet.snippets)
+                    if (snippet.documentId == id)
+                        return snippet.relevanceScore;
+                return -1.0f;
+            };
+
+            auto submitWithInstruction = [&engine](const juce::String& prompt,
+                                                    const creation::services::SuiteContextProcessInstruction& instruction) {
+                creation::services::SuiteContextRetrievalRequest request;
+                request.prompt = prompt;
+                request.appDomain = "TestApp";
+                request.processInstruction = instruction;
+                engine.SubmitRequest(request);
+
+                creation::services::SuiteContextPacket packet;
+                for (int attempt = 0; attempt < 200; ++attempt)
+                {
+                    packet = engine.GetLastPacket();
+                    if (packet.request.prompt == prompt && packet.request.processInstruction.boostCategories == instruction.boostCategories
+                        && packet.request.processInstruction.excludeCategories == instruction.excludeCategories)
+                        return packet;
+                    juce::Thread::sleep(10);
+                }
+                return packet;
+            };
+
+            const auto ambiguousPrompt = juce::String("show me the setup notes");
+            const auto baseline = submitAndWait(ambiguousPrompt);
+            const auto baselineNetScore = findScore(baseline, "net-1");
+
+            creation::services::SuiteContextProcessInstruction boostNetworking;
+            boostNetworking.boostCategories = { "networking" };
+            const auto boosted = submitWithInstruction(ambiguousPrompt, boostNetworking);
+            const auto boostedNetScore = findScore(boosted, "net-1");
+            if (boostedNetScore < 0.0f || ! (boostedNetScore > baselineNetScore))
+                fail("SuiteContextEngine: a boostCategories instruction should raise the matching document's score.");
+
+            creation::services::SuiteContextProcessInstruction excludeNetworking;
+            excludeNetworking.excludeCategories = { "networking" };
+            const auto excluded = submitWithInstruction(ambiguousPrompt, excludeNetworking);
+            if (findScore(excluded, "net-1") >= 0.0f)
+                fail("SuiteContextEngine: an excludeCategories instruction should remove the matching document entirely.");
 
             engine.UnregisterProvider(&provider);
         }
