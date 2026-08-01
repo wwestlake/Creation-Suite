@@ -5,6 +5,7 @@
 #include <creation/services/SuiteLegalSettings.h>
 #include <creation/services/SuiteLogging.h>
 #include <creation/services/SuiteProcessRegistry.h>
+#include <creation/services/SuiteContextEngine.h>
 #include <creation/assets/ProjectManifest.h>
 
 #include <iostream>
@@ -309,6 +310,76 @@ int main()
 
             if (staleFile.existsAsFile())
                 fail("SuiteProcessRegistry: stale registration's file should have been deleted during enumeration.");
+        }
+
+        // --- CTX-1: SuiteContextEngine -------------------------------
+        {
+            class FixedProvider final : public creation::services::SuiteContextProvider
+            {
+            public:
+                juce::Array<creation::services::SuiteContextDocument> CollectDocuments() override
+                {
+                    juce::Array<creation::services::SuiteContextDocument> docs;
+                    docs.add({ "light-1", "Point Light Setup Notes", "lighting",
+                              "Point lights use intensity and falloff radius to control brightness in the scene.",
+                              "TestApp", {}, {}, juce::Time::getCurrentTime() });
+                    docs.add({ "net-1", "OSC Transport Notes", "networking",
+                              "Configure the OSC transport port and pipe name for cross-process trigger delivery.",
+                              "TestApp", {}, {}, juce::Time::getCurrentTime() });
+                    return docs;
+                }
+            };
+
+            FixedProvider provider;
+            creation::services::SuiteContextEngine engine;
+            engine.RegisterProvider(&provider);
+
+            auto submitAndWait = [&engine](const juce::String& prompt) {
+                creation::services::SuiteContextRetrievalRequest request;
+                request.prompt = prompt;
+                request.appDomain = "TestApp";
+                engine.SubmitRequest(request);
+
+                creation::services::SuiteContextPacket packet;
+                for (int attempt = 0; attempt < 200; ++attempt)
+                {
+                    packet = engine.GetLastPacket();
+                    if (packet.request.prompt == prompt)
+                        return packet;
+                    juce::Thread::sleep(10);
+                }
+                return packet;
+            };
+
+            // Deliberately reuse exact vocabulary across the anchor and the
+            // on-topic follow-up (token-overlap is exact-match, so "light"
+            // vs "lights" would count as no overlap at all) and keep the
+            // pivot's vocabulary completely disjoint from both, so the drift/
+            // velocity comparison below isolates topic change, not wording.
+            const auto onTopicA = submitAndWait("point light intensity setup in the scene");
+            if (onTopicA.snippets.isEmpty() || onTopicA.snippets.getFirst().documentId != "light-1")
+                fail("SuiteContextEngine: first lighting prompt did not retrieve the lighting document.");
+
+            const auto onTopicB = submitAndWait("point light intensity falloff radius in the scene");
+
+            const auto pivot = submitAndWait("osc transport network port and pipe name configuration");
+            if (pivot.snippets.isEmpty() || pivot.snippets.getFirst().documentId != "net-1")
+                fail("SuiteContextEngine: pivot prompt did not retrieve the networking document.");
+
+            if (! (pivot.dynamics.referenceDrift > onTopicB.dynamics.referenceDrift))
+                fail("SuiteContextEngine: reference drift should be higher on a hard topic pivot than a same-topic follow-up.");
+
+            if (! (pivot.dynamics.velocity > onTopicB.dynamics.velocity))
+                fail("SuiteContextEngine: velocity should be higher on a hard topic pivot than a same-topic follow-up.");
+
+            if (pivot.dynamics.torsionalResistance <= 0)
+                fail("SuiteContextEngine: torsional resistance should accumulate once recovery is suggested on the pivot.");
+
+            const auto recoveryTurn = submitAndWait("point light intensity settings again");
+            if (! (recoveryTurn.dynamics.referenceDrift < pivot.dynamics.referenceDrift))
+                fail("SuiteContextEngine: returning to the anchor topic should reduce reference drift versus the pivot.");
+
+            engine.UnregisterProvider(&provider);
         }
 
         return 0;

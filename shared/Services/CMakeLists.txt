@@ -7,6 +7,7 @@ add_library(creation_suite_services STATIC
     src/SuiteLegalSettings.cpp
     src/SuiteAiSettings.cpp
     src/SuiteProcessRegistry.cpp
+    src/SuiteContextEngine.cpp
 )
 
 target_include_directories(creation_suite_services PUBLIC include)
