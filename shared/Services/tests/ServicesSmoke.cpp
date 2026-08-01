@@ -4,6 +4,7 @@
 #include <creation/services/SuiteAiService.h>
 #include <creation/services/SuiteLegalSettings.h>
 #include <creation/services/SuiteLogging.h>
+#include <creation/services/SuiteProcessRegistry.h>
 #include <creation/assets/ProjectManifest.h>
 
 #include <iostream>
@@ -255,6 +256,60 @@ int main()
         auto loadedLegal = legalStore.load(errorMessage);
         if (! loadedLegal.eulaAccepted || loadedLegal.acceptedEulaVersion != "2026-07-29")
             fail("Legal settings round-trip mismatch.");
+
+        // --- IPC-1: SuiteProcessRegistry -----------------------------
+        {
+            creation::services::SuiteProcessRegistration freshRegistration;
+            freshRegistration.RegisterSelf("TestAppFresh", 9000, "TestAppFresh-pipe");
+
+            creation::services::SuiteProcessRegistration staleRegistration;
+            staleRegistration.RegisterSelf("TestAppStale", 9001, "TestAppStale-pipe");
+
+            // Backdate the stale registration's own file directly on disk
+            // (bypassing the real 5s heartbeat interval, which a fast
+            // smoke test shouldn't have to wait out) so
+            // EnumerateLiveProcesses has something genuinely old to
+            // filter, deterministically, without a real sleep.
+            auto findFileFor = [](const juce::String& appId) -> juce::File {
+                juce::Array<juce::File> files;
+                creation::services::SuiteProcessRegistry::RegistryDirectory().findChildFiles(
+                    files, juce::File::findFiles, false, appId + "-*.json");
+                return files.isEmpty() ? juce::File() : files.getFirst();
+            };
+
+            auto staleFile = findFileFor("TestAppStale");
+            if (! staleFile.existsAsFile())
+                fail("SuiteProcessRegistry: stale test registration file was not written.");
+
+            auto staleJson = juce::JSON::parse(staleFile);
+            if (auto* object = staleJson.getDynamicObject())
+            {
+                const auto ancientMs = (juce::Time::getCurrentTime() - juce::RelativeTime::seconds(1000)).toMilliseconds();
+                object->setProperty("lastHeartbeatMs", ancientMs);
+                staleFile.replaceWithText(juce::JSON::toString(staleJson, true));
+            }
+            else
+            {
+                fail("SuiteProcessRegistry: could not parse stale test registration file to backdate it.");
+            }
+
+            const auto live = creation::services::SuiteProcessRegistry::EnumerateLiveProcesses(15.0);
+
+            const auto findRecord = [&live](const juce::String& appId) {
+                return std::find_if(live.begin(), live.end(),
+                                    [&appId](const auto& record) { return record.appId == appId; });
+            };
+
+            const auto freshRecord = findRecord("TestAppFresh");
+            if (freshRecord == live.end() || freshRecord->oscPort != 9000 || freshRecord->pipeName != "TestAppFresh-pipe")
+                fail("SuiteProcessRegistry: fresh registration was not enumerated correctly.");
+
+            if (findRecord("TestAppStale") != live.end())
+                fail("SuiteProcessRegistry: stale registration should have been excluded.");
+
+            if (staleFile.existsAsFile())
+                fail("SuiteProcessRegistry: stale registration's file should have been deleted during enumeration.");
+        }
 
         return 0;
     }
