@@ -71,33 +71,13 @@ add_test(
     COMMAND creation_suite_cel_frontend_smoke
 )
 
-option(CREATION_SUITE_CEL_ENABLE_JIT "Build the shared CEL LLVM JIT and celc tool" ON)
+option(CREATION_SUITE_CEL_ENABLE_JIT "Build the shared CEL LLVM JIT" ON)
 
 if(CREATION_SUITE_CEL_ENABLE_JIT)
     configure_creation_shared_llvm(CREATION_SUITE_CEL "Creation Suite CEL")
 endif()
 
-set(_creation_suite_engine_root "${CMAKE_CURRENT_LIST_DIR}/../../apps/CreationEngine")
-set(_creation_suite_entt_dir "${_creation_suite_engine_root}/third_party/entt")
-set(_creation_suite_engine_core_dir "${_creation_suite_engine_root}/EngineCore")
-
 if(CREATION_SUITE_CEL_ENABLE_JIT AND LLVM_FOUND)
-    if(NOT TARGET EnTT::EnTT)
-        if(EXISTS "${_creation_suite_entt_dir}/CMakeLists.txt")
-            add_subdirectory("${_creation_suite_entt_dir}" "${CMAKE_CURRENT_BINARY_DIR}/CreationEngineEntt")
-        else()
-            message(FATAL_ERROR "Creation Suite CEL JIT needs EnTT. Expected ${_creation_suite_entt_dir}/CMakeLists.txt.")
-        endif()
-    endif()
-
-    if(NOT TARGET engine_core)
-        if(EXISTS "${_creation_suite_engine_core_dir}/CMakeLists.txt")
-            add_subdirectory("${_creation_suite_engine_core_dir}" "${CMAKE_CURRENT_BINARY_DIR}/CreationEngineCore")
-        else()
-            message(FATAL_ERROR "Creation Suite CEL JIT needs EngineCore. Expected ${_creation_suite_engine_core_dir}/CMakeLists.txt.")
-        endif()
-    endif()
-
     llvm_map_components_to_libnames(CREATION_SUITE_CEL_LLVM_LIBS
         Support
         Core
@@ -109,11 +89,20 @@ if(CREATION_SUITE_CEL_ENABLE_JIT AND LLVM_FOUND)
         X86Info
     )
 
+    # Deliberately NO EngineCore/EnTT dependency here -- this is the
+    # generic, host-agnostic JIT layer (Core-domain intrinsics only, see
+    # intrinsics.def). A host with its own domain (e.g. Creation Engine's
+    # World access) builds its own extension on top of this (its own
+    # trampolines/runtime driver -- see
+    # apps/CreationEngine/Language's world_intrinsics.*/world_runtime.*/
+    # script_runtime.*) and links engine_core itself, not this target.
+    # See script_context.h's own comment for how a host's own
+    # ScriptContext stays layout-compatible with the Core trampolines
+    # compiled here.
     add_library(creation_suite_cel_jit STATIC
         include/lang/jit/runtime.h
-        include/lang/jit/script_runtime.h
+        include/lang/jit/script_context.h
         src/jit/runtime.cpp
-        src/jit/script_runtime.cpp
         src/jit/optimizer.h
         src/jit/optimizer.cpp
         src/jit/module_builder.h
@@ -132,7 +121,6 @@ if(CREATION_SUITE_CEL_ENABLE_JIT AND LLVM_FOUND)
     target_link_libraries(creation_suite_cel_jit
         PUBLIC
             creation_suite_cel_frontend
-            engine_core
             ${CREATION_SUITE_CEL_LLVM_LIBS}
     )
     target_compile_features(creation_suite_cel_jit PUBLIC cxx_std_20)
@@ -141,22 +129,11 @@ if(CREATION_SUITE_CEL_ENABLE_JIT AND LLVM_FOUND)
         add_library(ce_lang_jit ALIAS creation_suite_cel_jit)
     endif()
 
-    add_executable(celc
-        tools/celc/main.cpp
-        tools/celc/selftest_graph.h
-        tools/celc/selftest_graph.cpp
-        tools/celc/nodegen_fixtures.h
-        tools/celc/nodegen_fixtures.cpp
-    )
-
-    target_link_libraries(celc
-        PRIVATE
-            creation_suite_cel_frontend
-            creation_suite_cel_jit
-            creation_suite_cel_nodegen
-            creation_suite_node_system
-    )
-
-    add_test(NAME creation_suite_cel_jit_selftest COMMAND celc --selftest-jit)
-    add_test(NAME creation_suite_cel_graph_selftest COMMAND celc --selftest-graph)
+    # NOTE: this library's own tools/celc/ (a headless CLI test-driver)
+    # is not built here -- its subcommands (--run-world, --run-simulation,
+    # --graph-to-source, ...) are all World-domain/Engine-specific and
+    # belong to whichever host extends this core, not to the shared
+    # library itself. Creation Engine has its own celc, built from its
+    # own Language/tools/celc, that exercises this library plus Engine's
+    # own extension together.
 endif()

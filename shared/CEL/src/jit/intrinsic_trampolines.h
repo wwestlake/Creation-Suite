@@ -21,23 +21,28 @@ struct AbiSymbol {
     void* address = nullptr;
 };
 
-// Every real host-ABI trampoline this milestone implements (see
-// intrinsics.def's World/Entity/Transform/Debug sections, plus atan2)
-// and the watchdog tick function. The 14 "pure computation" math/vec3
-// intrinsics never appear here -- GS4 already lowers them directly to
-// LLVM IR with no external call at all.
+// Every real host-ABI trampoline this CORE library implements (see
+// intrinsics.def's Math/Vec3/Debug sections' atan2/log* entries) and the
+// watchdog tick function. The 14 "pure computation" math/vec3 intrinsics
+// never appear here -- GS4 already lowers them directly to LLVM IR with
+// no external call at all.
+//
+// A host with its own domain (World, audio, ...) supplies its own
+// additional trampolines/domain map -- see RegisterAbiTrampolines's
+// `extraSymbols`/`extraDomains` parameters (abi_registration.h) -- this
+// function only ever returns the Core-only set.
 std::vector<AbiSymbol> GetAbiTrampolines();
 
-// GS-Interop: which IntrinsicDomain each real ABI symbol belongs to,
-// keyed by cSymbol (the same key GetAbiTrampolines() uses) -- X-macro-
-// built directly off intrinsics.def, unlike GetAbiTrampolines() itself
+// GS-Interop: which IntrinsicDomain each real Core ABI symbol belongs
+// to, keyed by cSymbol (the same key GetAbiTrampolines() uses) -- X-macro
+// -built directly off intrinsics.def, unlike GetAbiTrampolines() itself
 // (a hand-written literal, kept in sync with intrinsics.def only by a
 // comment). This is what RegisterAbiTrampolines (abi_registration.cpp)
 // filters against for the JIT-symbol-resolution half of capability
-// gating (sema.cpp's CheckCall is the compile-time half). A cSymbol
-// with no entry here (only "ce_watchdog_tick") is always registered
-// regardless of the caller's allowed domain set -- it's a runtime
-// safety mechanism, not a script capability.
+// gating (sema.cpp's CheckCall is the compile-time half). A cSymbol with
+// no entry here (only "ce_watchdog_tick") is always registered
+// regardless of the caller's allowed domain set -- it's a runtime safety
+// mechanism, not a script capability.
 std::unordered_map<std::string, IntrinsicDomain> GetAbiSymbolDomains();
 
 } // namespace ce::lang::jit
