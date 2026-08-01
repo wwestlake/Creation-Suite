@@ -114,6 +114,7 @@ juce::Array<SuiteAiProviderPreset> SuiteAiProviderCatalog::createDefaultCatalog(
     providers.add({ "perplexity", "Perplexity", "https://api.perplexity.ai", true, true, false });
     providers.add({ "azure-openai", "Azure OpenAI", "", true, true, true });
     providers.add({ "ollama", "Ollama", "http://localhost:11434", false, true, true });
+    providers.add({ "lm-studio", "LM Studio", "http://localhost:1234/v1", false, true, true });
     providers.add({ "custom-openai", "Custom OpenAI-Compatible", "", true, true, true });
     return providers;
 }

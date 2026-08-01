@@ -33,10 +33,49 @@ juce::String appDomainFolderName(creation::assets::SuiteAppDomain domain)
         case creation::assets::SuiteAppDomain::engine: return "Creation Engine";
         case creation::assets::SuiteAppDomain::movie: return "Creation Movie";
         case creation::assets::SuiteAppDomain::live: return "Creation Live";
+        case creation::assets::SuiteAppDomain::texture: return "Creation Texture";
+        case creation::assets::SuiteAppDomain::modeler: return "Creation Modeler";
         case creation::assets::SuiteAppDomain::unknown: break;
     }
 
     return "Unknown";
+}
+
+juce::File getAppProjectsDirectory(const SuiteSettings& settings,
+                                   creation::assets::SuiteAppDomain domain)
+{
+    juce::String configured;
+
+    switch (domain)
+    {
+        case creation::assets::SuiteAppDomain::station:
+            configured = settings.creationStationProjectsRoot;
+            break;
+        case creation::assets::SuiteAppDomain::engine:
+            configured = settings.creationEngineProjectsRoot;
+            break;
+        case creation::assets::SuiteAppDomain::movie:
+            configured = settings.creationMovieProjectsRoot;
+            break;
+        case creation::assets::SuiteAppDomain::live:
+            configured = settings.creationLiveProjectsRoot;
+            break;
+        case creation::assets::SuiteAppDomain::texture:
+        case creation::assets::SuiteAppDomain::modeler:
+        case creation::assets::SuiteAppDomain::unknown:
+            break;
+    }
+
+    configured = configured.trim();
+    if (configured.isNotEmpty())
+        return juce::File(configured);
+
+    auto suiteRoot = fallbackIfEmpty(settings.suiteVfsRoot, juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                                                            .getChildFile("Creation Suite")
+                                                            .getFullPathName());
+    return juce::File(suiteRoot)
+        .getChildFile("Projects")
+        .getChildFile(appDomainFolderName(domain));
 }
 
 juce::File getProjectContainerDirectory(const SuiteSettings& settings)

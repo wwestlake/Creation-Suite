@@ -2,15 +2,21 @@
 
 ## Model
 
-The suite consists of four separate applications and four separate app
-repositories:
+The suite consists of six separate applications:
 
 - Creation Station
 - Creation Engine
 - Creation Movie
 - Creation Live
+- Creation Modeler
+- Creation Texture
 
+Creation Station, Creation Engine, Creation Movie, and Creation Live are
+separate app repositories, linked into the umbrella repo as git submodules.
 Those product repositories remain independent.
+
+Creation Modeler and Creation Texture currently live as plain directories
+under `apps/` and are not yet registered as git submodules.
 
 The `Creation Suite` repository is the umbrella workspace and shared-code
 home.

@@ -1,6 +1,10 @@
+if(MSVC)
+    add_compile_options("/FS")
+endif()
+
 add_subdirectory(AssetSystem)
 add_subdirectory(Services)
 add_subdirectory(UI)
-add_subdirectory(CEL)
 add_subdirectory(NodeSystem)
+add_subdirectory(CEL)
 add_subdirectory(Interop)

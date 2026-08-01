@@ -1,7 +1,9 @@
 #include <creation/services/SuiteAiSettings.h>
 #include <creation/services/SuiteAiOrchestration.h>
 #include <creation/services/SuiteAiProviderRuntime.h>
+#include <creation/services/SuiteAiService.h>
 #include <creation/services/SuiteLegalSettings.h>
+#include <creation/services/SuiteLogging.h>
 #include <creation/assets/ProjectManifest.h>
 
 #include <iostream>
@@ -146,6 +148,100 @@ int main()
             || cooledDecision.candidates.getFirst().accountId != "primary")
         {
             fail("Cooldown fallback route planning failed.");
+        }
+
+        creation::services::SuiteAiRequestDescriptor noCrossFallbackRequest = localRequest;
+        noCrossFallbackRequest.preferredProviderId = "ollama";
+        noCrossFallbackRequest.fallbackPolicy.allowCrossProviderFallback = false;
+        auto noCrossFallbackDecision = creation::services::SuiteAiOrchestrator::planRoutes(aiSettings,
+                                                                                           noCrossFallbackRequest,
+                                                                                           healthSnapshots);
+        if (noCrossFallbackDecision.isRoutable())
+            fail("Cross-provider fallback policy should have blocked fallback.");
+
+        creation::services::SuiteAiRequestDescriptor budgetRequest = cloudRequest;
+        budgetRequest.budgetPolicy.enforceBudget = true;
+        budgetRequest.budgetPolicy.maxEstimatedCostUsd = 0.04;
+        auto budgetDecision = creation::services::SuiteAiOrchestrator::planRoutes(aiSettings, budgetRequest);
+        if (budgetDecision.isRoutable())
+            fail("Budget enforcement should have blocked the premium cloud route.");
+
+        creation::services::SuiteAiSettings missingKeySettings = aiSettings;
+        missingKeySettings.accounts.clear();
+        missingKeySettings.defaultAccountId = "broken";
+        missingKeySettings.accounts.add({ "broken", "openai", "Broken OpenAI", "https://api.openai.com/v1", "gpt-test", "", true });
+        auto missingKeyDecision = creation::services::SuiteAiOrchestrator::planRoutes(missingKeySettings, cloudRequest);
+        if (missingKeyDecision.isRoutable())
+            fail("Missing API key should block a key-required provider.");
+
+        creation::services::SuiteAiService aiService;
+        auto planningResult = aiService.planRequest(cloudRequest, errorMessage);
+        if (errorMessage.isNotEmpty()
+            || ! planningResult.routingDecision.isRoutable()
+            || planningResult.routingDecision.candidates.getFirst().accountId != "primary")
+        {
+            fail("Suite AI service route planning failed.");
+        }
+
+        creation::services::SuiteAiDiagnosticsEvent event;
+        event.eventType = "route-planned";
+        event.providerId = "openai";
+        event.accountId = "primary";
+        event.modelName = "gpt-movie";
+        event.message = "Planned route for movie helper.";
+        event.retryCount = 0;
+        event.fallbackUsed = false;
+        event.queueDurationMs = 3;
+        event.latencyMs = 42;
+        if (! aiService.recordDiagnosticsEvent(event, errorMessage, 10))
+            fail("Suite AI diagnostics append failed: " + errorMessage.toStdString());
+
+        auto diagnosticsLog = aiService.loadDiagnosticsLog(errorMessage);
+        if (errorMessage.isNotEmpty()
+            || diagnosticsLog.events.isEmpty()
+            || diagnosticsLog.events.getLast().eventType != "route-planned")
+        {
+            fail("Suite AI diagnostics load failed.");
+        }
+
+        if (! aiService.recordRouteOutcome("primary", false, true, 150, "rate limited", errorMessage))
+            fail("Suite AI route outcome recording failed: " + errorMessage.toStdString());
+
+        auto healthAfterRateLimit = aiService.loadHealthSnapshots(errorMessage);
+        const auto rateLimitedSnapshot = std::find_if(healthAfterRateLimit.begin(), healthAfterRateLimit.end(),
+                                                      [](const auto& snapshot) { return snapshot.accountId == "primary"; });
+        if (errorMessage.isNotEmpty()
+            || rateLimitedSnapshot == healthAfterRateLimit.end()
+            || rateLimitedSnapshot->healthState != creation::services::SuiteAiHealthState::coolingDown)
+        {
+            fail("Suite AI health snapshot recording failed.");
+        }
+
+        auto activityLog = aiService.loadActivityLog(errorMessage, 20);
+        if (errorMessage.isNotEmpty()
+            || activityLog.isEmpty()
+            || activityLog.getLast().subsystem != "suite-ai")
+        {
+            fail("Suite activity log load failed.");
+        }
+
+        creation::services::SuiteLogEntry manualLogEntry = creation::services::SuiteLogger::makeEntry(
+            "suite-core",
+            "bootstrap",
+            "Centralized suite logging is online.",
+            creation::services::SuiteLogLevel::info,
+            creation::assets::SuiteAppDomain::modeler,
+            "manual smoke test");
+        if (! creation::services::SuiteLogger::log(manualLogEntry, errorMessage, 20))
+            fail("Suite manual log append failed: " + errorMessage.toStdString());
+
+        creation::services::SuiteLogStore logStore;
+        auto recentEntries = logStore.loadRecent(5, errorMessage);
+        if (errorMessage.isNotEmpty()
+            || recentEntries.isEmpty()
+            || recentEntries.getLast().subsystem != "suite-core")
+        {
+            fail("Suite centralized logging verification failed.");
         }
 
         creation::services::SuiteLegalSettings legalSettings;

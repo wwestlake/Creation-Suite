@@ -1,14 +1,13 @@
 # Creation Suite
 
-
-
-
-Creation Suite is the umbrella workspace for the four LagDaemon creative applications:
+Creation Suite is the umbrella workspace for the six LagDaemon creative applications:
 
 - Creation Station
 - Creation Engine
 - Creation Movie
 - Creation Live
+- Creation Modeler
+- Creation Texture
 
 This repository exists to coordinate:
 
@@ -28,6 +27,8 @@ Creation Suite/
     CreationEngine/    # git submodule
     CreationMovie/     # git submodule
     CreationLive/      # git submodule
+    CreationModeler/   # not yet registered as a submodule
+    CreationTexture/   # not yet registered as a submodule
   shared/
     AssetSystem/
     CEL/
@@ -62,3 +63,4 @@ See:
 - [Suite Asset/VFS Standard](docs/standards/Suite-Asset-VFS-Standard.md)
 - [Migration Plan](docs/migration/Migration-Plan.md)
 - [Station/Engine First Move Checklist](docs/migration/Station-Engine-First-Moves.md)
+- [Multi-Agent Workflow](docs/MULTI_AGENT_WORKFLOW.md)

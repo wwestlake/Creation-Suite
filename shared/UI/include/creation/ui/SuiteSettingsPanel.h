@@ -12,6 +12,7 @@ public:
     std::function<void(const juce::String& fieldId)> onBrowseRequested;
     std::function<void(const creation::suite::SuiteSettings& settings)> onApplyRequested;
     std::function<void(const creation::services::SuiteAiSettings& settings)> onApplyAiSettingsRequested;
+    std::function<void(const creation::services::SuiteAiResolvedRuntimeSettings& settings)> onTestAiAccountRequested;
     std::function<void()> onReadEulaRequested;
 
     void setSettings(const creation::suite::SuiteSettings& settings);
@@ -24,6 +25,13 @@ public:
     void resized() override;
 
 private:
+    enum class Tab
+    {
+        storage,
+        ai,
+        log
+    };
+
     struct AppSelectionRow
     {
         juce::Label label;
@@ -41,6 +49,14 @@ private:
 
     void configureRow(PathRow& row, const juce::String& id, const juce::String& labelText);
     void layoutRow(PathRow& row, juce::Rectangle<int>& area);
+    void configureTabButton(juce::TextButton& button, const juce::String& text, Tab tab);
+    void selectTab(Tab tab);
+    void refreshTabButtons();
+    void updateScrollContentLayout();
+    void layoutStorageTab(juce::Rectangle<int>& area);
+    void layoutAiTab(juce::Rectangle<int>& area);
+    void layoutLogTab(juce::Rectangle<int>& area);
+    void appendLogLine(const juce::String& text);
     void refreshAiAccountUi();
     void refreshAccountSelectors();
     void pushCurrentEditorToSelectedAccount();
@@ -49,6 +65,13 @@ private:
 
     juce::Label titleLabel;
     juce::Label subTitleLabel;
+    juce::Image suiteLogo;
+    juce::TextButton storageTabButton { "Storage" };
+    juce::TextButton aiTabButton { "AI & Routing" };
+    juce::TextButton suiteLogTabButton { "Suite Log" };
+    juce::Viewport scrollViewport;
+    juce::Component scrollContent;
+    juce::Label storageIntroLabel;
     juce::Label storageSectionLabel;
     PathRow suiteVfsRow;
     PathRow sharedResourcesRow;
@@ -60,10 +83,12 @@ private:
     PathRow engineProjectsRow;
     PathRow movieProjectsRow;
     PathRow liveProjectsRow;
+    juce::Label aiIntroLabel;
     juce::Label aiSectionLabel;
     juce::ComboBox accountSelectorCombo;
     juce::TextButton addAccountButton { "+ Account" };
     juce::TextButton removeAccountButton { "Remove" };
+    juce::TextButton testAccountButton { "Test Account" };
     juce::Label providerLabel;
     juce::ComboBox providerCombo;
     juce::Label accountLabelLabel;
@@ -80,10 +105,14 @@ private:
     AppSelectionRow engineSelectionRow;
     AppSelectionRow movieSelectionRow;
     AppSelectionRow liveSelectionRow;
+    juce::Label logSectionLabel;
+    juce::Label logIntroLabel;
+    juce::TextEditor suiteLogEditor;
     juce::TextButton applyButton { "Apply Suite Settings" };
     juce::TextButton eulaButton { "Read EULA" };
     juce::Label statusLabel;
     creation::services::SuiteAiSettings aiSettings;
     juce::Array<creation::services::SuiteAiProviderPreset> aiProviders;
     int selectedAccountIndex = -1;
+    Tab selectedTab = Tab::storage;
 };

@@ -8,6 +8,7 @@ Shared here:
 - BYOK provider/account definitions
 - suite-wide AI routing settings
 - shared orchestration policy for capability matching, fallback, health, and dry-run route planning
+- centralized suite activity logging for shared services and app integrations
 - shared account/session contracts
 - service discovery contracts used by multiple apps
 

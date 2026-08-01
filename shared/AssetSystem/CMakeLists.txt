@@ -3,7 +3,11 @@ add_library(creation_suite_asset_system STATIC
     src/AssetCatalog.cpp
     src/AssetMaterializer.cpp
     src/AssetResolver.cpp
+    src/ProjectAssetService.cpp
     src/ProjectContainerIO.cpp
+    src/ProjectContainerService.cpp
+    src/ProjectSession.cpp
+    src/ProjectWorkspaceService.cpp
     src/ProjectManifest.cpp
     src/SuiteSettings.cpp
     src/SuiteStoragePaths.cpp

@@ -2,6 +2,17 @@
 
 namespace
 {
+juce::File getDefaultSuiteDataRoot()
+{
+    auto roamingAppData = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
+    auto appDataRoot = roamingAppData.getParentDirectory();
+    auto localAppData = appDataRoot.getChildFile("Local");
+    if (localAppData.isDirectory())
+        return localAppData.getChildFile("Creation Suite").getChildFile("Data");
+
+    return roamingAppData.getChildFile("Creation Suite").getChildFile("Data");
+}
+
 juce::var createJsonObject(const creation::suite::SuiteSettings& settings)
 {
     auto* object = new juce::DynamicObject();
@@ -25,6 +36,13 @@ juce::String readStringProperty(const juce::var& json, const juce::Identifier& p
 
     return {};
 }
+
+void assignIfPresent(const juce::var& json, const juce::Identifier& propertyName, juce::String& target)
+{
+    auto value = readStringProperty(json, propertyName).trim();
+    if (value.isNotEmpty())
+        target = value;
+}
 }
 
 namespace creation::suite
@@ -45,16 +63,16 @@ SuiteSettings SuiteSettingsStore::load(juce::String& errorMessage) const
         return settings;
     }
 
-    settings.suiteVfsRoot = readStringProperty(parsed, "suiteVfsRoot");
-    settings.sharedResourcesRoot = readStringProperty(parsed, "sharedResourcesRoot");
-    settings.projectContainersRoot = readStringProperty(parsed, "projectContainersRoot");
-    settings.cacheRoot = readStringProperty(parsed, "cacheRoot");
-    settings.materializedFilesRoot = readStringProperty(parsed, "materializedFilesRoot");
-    settings.exportsRoot = readStringProperty(parsed, "exportsRoot");
-    settings.creationStationProjectsRoot = readStringProperty(parsed, "creationStationProjectsRoot");
-    settings.creationEngineProjectsRoot = readStringProperty(parsed, "creationEngineProjectsRoot");
-    settings.creationMovieProjectsRoot = readStringProperty(parsed, "creationMovieProjectsRoot");
-    settings.creationLiveProjectsRoot = readStringProperty(parsed, "creationLiveProjectsRoot");
+    assignIfPresent(parsed, "suiteVfsRoot", settings.suiteVfsRoot);
+    assignIfPresent(parsed, "sharedResourcesRoot", settings.sharedResourcesRoot);
+    assignIfPresent(parsed, "projectContainersRoot", settings.projectContainersRoot);
+    assignIfPresent(parsed, "cacheRoot", settings.cacheRoot);
+    assignIfPresent(parsed, "materializedFilesRoot", settings.materializedFilesRoot);
+    assignIfPresent(parsed, "exportsRoot", settings.exportsRoot);
+    assignIfPresent(parsed, "creationStationProjectsRoot", settings.creationStationProjectsRoot);
+    assignIfPresent(parsed, "creationEngineProjectsRoot", settings.creationEngineProjectsRoot);
+    assignIfPresent(parsed, "creationMovieProjectsRoot", settings.creationMovieProjectsRoot);
+    assignIfPresent(parsed, "creationLiveProjectsRoot", settings.creationLiveProjectsRoot);
     return settings;
 }
 
@@ -90,8 +108,7 @@ juce::File SuiteSettingsStore::getSuiteSettingsFile() const
 
 SuiteSettings SuiteSettingsStore::makeDefaultSettings() const
 {
-    auto suiteRoot = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-        .getChildFile("Creation Suite");
+    auto suiteRoot = getDefaultSuiteDataRoot();
     auto projectsRoot = suiteRoot.getChildFile("Projects");
     auto containersRoot = suiteRoot.getChildFile("Project Containers");
     auto cacheRoot = suiteRoot.getChildFile("Cache");

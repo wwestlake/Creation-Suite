@@ -116,6 +116,7 @@ struct SuiteAiRouteCandidate
     SuiteAiCapabilitySet capabilities;
     SuiteAiHealthState healthState = SuiteAiHealthState::unknown;
     SuiteAiCostTier costTier = SuiteAiCostTier::standard;
+    double estimatedCostUsd = 0.0;
     bool localRuntime = false;
     int priorityScore = 0;
     juce::String rationale;

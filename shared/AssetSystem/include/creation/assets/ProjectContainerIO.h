@@ -17,6 +17,11 @@ struct ProjectContainerEntry
 class ProjectContainerIO final
 {
 public:
+    static bool readContainer(const juce::File& containerFile,
+                              ProjectManifest& outManifest,
+                              juce::Array<ProjectContainerEntry>& outEntries,
+                              juce::String& errorMessage);
+
     static bool writeContainer(const juce::File& containerFile,
                                const ProjectManifest& manifest,
                                const juce::Array<ProjectContainerEntry>& entries,

@@ -1,6 +1,8 @@
 add_library(creation_suite_services STATIC
     src/SuiteAiOrchestration.cpp
     src/SuiteAiProviderRuntime.cpp
+    src/SuiteAiService.cpp
+    src/SuiteLogging.cpp
     src/SuiteEula.cpp
     src/SuiteLegalSettings.cpp
     src/SuiteAiSettings.cpp
