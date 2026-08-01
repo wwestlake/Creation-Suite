@@ -15,6 +15,7 @@ enum class AssetKind
     audio,
     render,
     patch,
+    foleyPatch,
     script,
     metadata,
     preset,
