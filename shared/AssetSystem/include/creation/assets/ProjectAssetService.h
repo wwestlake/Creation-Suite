@@ -1,0 +1,58 @@
+#pragma once
+
+#include <juce_core/juce_core.h>
+
+#include "creation/assets/ProjectSession.h"
+#include "creation/assets/AssetResolver.h"
+
+namespace creation::assets
+{
+class ProjectAssetService final
+{
+public:
+    struct ImportOptions
+    {
+        AssetKind kind = AssetKind::unknown;
+        juce::String displayName;
+        juce::String logicalPath;
+        juce::String category;
+        juce::String description;
+        juce::String mediaType;
+        juce::String sourceApp;
+        juce::String sourceTool;
+        juce::StringArray tags;
+        AssetId originalAssetId;
+        AssetVersionId derivedFromVersionId;
+        int compressionLevel = 9;
+    };
+
+    static bool importFile(ProjectSession& session,
+                           const juce::File& sourceFile,
+                           const ImportOptions& options,
+                           AssetDescriptor& outDescriptor,
+                           juce::String& errorMessage);
+
+    static bool createNewVersion(ProjectSession& session,
+                                 const AssetDescriptor& existingAsset,
+                                 const juce::File& sourceFile,
+                                 const ImportOptions& overrides,
+                                 AssetDescriptor& outDescriptor,
+                                 juce::String& errorMessage);
+
+    static const AssetDescriptor* resolveAsset(const ProjectSession& session,
+                                               const AssetRef& reference) noexcept;
+
+    static bool materializeAsset(const ProjectSession& session,
+                                 const creation::suite::SuiteSettings& settings,
+                                 const AssetRef& reference,
+                                 MaterializationAccess access,
+                                 MaterializedAssetLease& outLease,
+                                 juce::String& errorMessage);
+
+    static bool reconcileAsset(ProjectSession& session,
+                               const creation::suite::SuiteSettings& settings,
+                               MaterializedAssetLease& lease,
+                               juce::String& errorMessage,
+                               bool releaseLeaseAfterCommit = true);
+};
+}

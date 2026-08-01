@@ -97,6 +97,80 @@ juce::String costTierName(SuiteAiCostTier tier)
 
     return "standard";
 }
+
+double estimateRequestCostUsd(const SuiteAiProviderRuntimeProfile& profile,
+                              const SuiteAiRequestDescriptor& request,
+                              SuiteAiCostTier tier) noexcept
+{
+    juce::ignoreUnused(profile);
+
+    double estimate = 0.0;
+    switch (tier)
+    {
+        case SuiteAiCostTier::cheap: estimate = 0.01; break;
+        case SuiteAiCostTier::standard: estimate = 0.05; break;
+        case SuiteAiCostTier::premium: estimate = 0.20; break;
+    }
+
+    if (request.requiredCapabilities.contains(SuiteAiCapability::visionInput))
+        estimate += 0.03;
+    if (request.requiredCapabilities.contains(SuiteAiCapability::audioTranscription))
+        estimate += 0.02;
+    if (request.requiredCapabilities.contains(SuiteAiCapability::audioGeneration))
+        estimate += 0.06;
+    if (request.requiredCapabilities.contains(SuiteAiCapability::imageGeneration))
+        estimate += 0.08;
+    if (request.requiredCapabilities.contains(SuiteAiCapability::videoGeneration))
+        estimate += 0.25;
+    if (request.requiredCapabilities.contains(SuiteAiCapability::toolCalling))
+        estimate += 0.01;
+    if (request.preferLocalRuntime && (profile.isOllamaStyle() || profile.providerId == "lm-studio"))
+        estimate = 0.0;
+
+    return estimate;
+}
+
+void applyFallbackPolicy(juce::Array<SuiteAiRouteCandidate>& candidates,
+                         const creation::services::SuiteAiFallbackPolicy& policy)
+{
+    if (candidates.size() <= 1)
+        return;
+
+    if (! policy.allowFallback || (! policy.allowCrossProviderFallback && ! policy.allowSameProviderFallback))
+    {
+        candidates.removeRange(1, candidates.size() - 1);
+        return;
+    }
+
+    const auto primaryProviderId = candidates.getFirst().providerId;
+    for (int index = candidates.size(); --index > 0;)
+    {
+        const auto sameProvider = candidates.getReference(index).providerId == primaryProviderId;
+        if (sameProvider && ! policy.allowSameProviderFallback)
+            candidates.remove(index);
+        else if (! sameProvider && ! policy.allowCrossProviderFallback)
+            candidates.remove(index);
+    }
+}
+
+bool candidateMatchesPreferredFamily(const creation::services::SuiteAiRouteCandidate& candidate,
+                                     const creation::services::SuiteAiRequestDescriptor& request,
+                                     const creation::services::SuiteAiSettings& settings) noexcept
+{
+    if (request.preferredAccountId.isNotEmpty())
+        return candidate.accountId == request.preferredAccountId;
+
+    if (request.preferredProviderId.isNotEmpty())
+        return candidate.providerId == creation::services::SuiteAiProviderRuntime::normalizeProviderId(request.preferredProviderId);
+
+    if (request.preferLocalRuntime)
+        return candidate.localRuntime;
+
+    if (const auto* appSelection = creation::services::SuiteAiSettingsResolver::findAppSelection(settings, request.appDomain))
+        return appSelection->enabled && candidate.accountId == appSelection->accountId;
+
+    return false;
+}
 }
 
 namespace creation::services
@@ -270,6 +344,12 @@ SuiteAiRoutingDecision SuiteAiOrchestrator::planRoutes(const SuiteAiSettings& se
             continue;
         }
 
+        if (SuiteAiProviderRuntime::requiresApiKey(profile, account->apiKey))
+        {
+            decision.blockedReasons.add("AI account '" + account->accountLabel + "' is missing an API key.");
+            continue;
+        }
+
         const auto capabilities = capabilitySetForProfile(profile);
         if (! capabilities.containsAll(request.requiredCapabilities))
         {
@@ -310,7 +390,17 @@ SuiteAiRoutingDecision SuiteAiOrchestrator::planRoutes(const SuiteAiSettings& se
         candidate.capabilities = capabilities;
         candidate.healthState = healthState;
         candidate.costTier = costTierForProfile(profile);
+        candidate.estimatedCostUsd = estimateRequestCostUsd(profile, request, candidate.costTier);
         candidate.localRuntime = profile.isOllamaStyle() || normalizedProviderId == "custom-openai";
+
+        if (request.budgetPolicy.enforceBudget
+            && request.budgetPolicy.maxEstimatedCostUsd > 0.0
+            && candidate.estimatedCostUsd > request.budgetPolicy.maxEstimatedCostUsd)
+        {
+            decision.blockedReasons.add("AI account '" + account->accountLabel + "' exceeds the request budget (estimated $"
+                                        + juce::String(candidate.estimatedCostUsd, 2) + ").");
+            continue;
+        }
 
         if (request.preferredAccountId == account->accountId)
             candidate.priorityScore += 500;
@@ -332,7 +422,7 @@ SuiteAiRoutingDecision SuiteAiOrchestrator::planRoutes(const SuiteAiSettings& se
 
         candidate.rationale = candidate.providerDisplayName
                             + " (" + costTierName(candidate.costTier) + ", "
-                            + healthName(candidate.healthState) + ")";
+                            + healthName(candidate.healthState) + ", est $" + juce::String(candidate.estimatedCostUsd, 2) + ")";
         if (candidate.localRuntime)
             candidate.rationale << " local runtime";
         if (healthNote.isNotEmpty())
@@ -348,12 +438,19 @@ SuiteAiRoutingDecision SuiteAiOrchestrator::planRoutes(const SuiteAiSettings& se
                   return left.priorityScore > right.priorityScore;
               });
 
-    if (! request.fallbackPolicy.allowFallback && decision.candidates.size() > 1)
-        decision.candidates.removeRange(1, decision.candidates.size() - 1);
+    applyFallbackPolicy(decision.candidates, request.fallbackPolicy);
 
     if (request.fallbackPolicy.maxCandidates > 0 && decision.candidates.size() > request.fallbackPolicy.maxCandidates)
         decision.candidates.removeRange(request.fallbackPolicy.maxCandidates,
                                         decision.candidates.size() - request.fallbackPolicy.maxCandidates);
+
+    if (! decision.candidates.isEmpty()
+        && ! request.fallbackPolicy.allowCrossProviderFallback
+        && ! candidateMatchesPreferredFamily(decision.candidates.getFirst(), request, settings))
+    {
+        decision.blockedReasons.add("Preferred AI route is unavailable and cross-provider fallback is disabled.");
+        decision.candidates.clear();
+    }
 
     if (decision.candidates.isEmpty() && decision.blockedReasons.isEmpty())
         decision.blockedReasons.add("No provider route matched the current suite AI policy.");
@@ -366,6 +463,7 @@ juce::String SuiteAiOrchestrator::describeCandidate(const SuiteAiRouteCandidate&
     return candidate.providerDisplayName
          + " / " + candidate.modelName
          + " / " + candidate.capabilities.toDisplayString()
+         + " / est $" + juce::String(candidate.estimatedCostUsd, 2)
          + " / score " + juce::String(candidate.priorityScore)
          + " / " + candidate.rationale;
 }

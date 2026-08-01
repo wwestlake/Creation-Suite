@@ -1,7 +1,10 @@
 add_library(creation_suite_ui STATIC
     src/CreationSuiteLogos.cpp
     src/CreationSuiteHeaderBar.cpp
+    src/SuiteCommonSpacePanel.cpp
+    src/SuiteDesktopAuthSession.cpp
     src/SuiteEulaPanel.cpp
+    src/SuiteShellController.cpp
     src/SuiteSettingsPanel.cpp
 )
 
@@ -14,6 +17,7 @@ juce_add_binary_data(creation_suite_ui_assets
         assets/creation_live.png
         assets/creation_texture.png
         assets/creation_modeler.png
+        assets/creation_suite_banner.png
 )
 
 target_include_directories(creation_suite_ui PUBLIC include)

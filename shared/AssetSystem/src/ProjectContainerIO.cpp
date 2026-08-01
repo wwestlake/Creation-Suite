@@ -15,6 +15,69 @@ juce::String normalizeContainerPath(const juce::String& logicalPath)
 
 namespace creation::assets
 {
+bool ProjectContainerIO::readContainer(const juce::File& containerFile,
+                                       ProjectManifest& outManifest,
+                                       juce::Array<ProjectContainerEntry>& outEntries,
+                                       juce::String& errorMessage)
+{
+    if (! containerFile.existsAsFile())
+    {
+        errorMessage = "The suite project container does not exist.";
+        return false;
+    }
+
+    juce::ZipFile zip(containerFile);
+    if (zip.getNumEntries() <= 0)
+    {
+        errorMessage = "Could not open the suite project container zip.";
+        return false;
+    }
+
+    outEntries.clearQuick();
+    bool foundManifest = false;
+
+    const auto numEntries = zip.getNumEntries();
+    for (int index = 0; index < numEntries; ++index)
+    {
+        const auto* zipEntry = zip.getEntry(index);
+        if (zipEntry == nullptr)
+            continue;
+
+        std::unique_ptr<juce::InputStream> stream(zip.createStreamForEntry(index));
+        if (stream == nullptr)
+            continue;
+
+        juce::MemoryBlock data;
+        stream->readIntoMemoryBlock(data);
+
+        const auto logicalPath = normalizeContainerPath(zipEntry->filename);
+        if (logicalPath == ProjectContainerPaths::manifestPath)
+        {
+            const auto manifestText = juce::String::fromUTF8(static_cast<const char*>(data.getData()),
+                                                             static_cast<int>(data.getSize()));
+            if (! deserializeManifest(manifestText, outManifest, errorMessage))
+                return false;
+
+            foundManifest = true;
+            continue;
+        }
+
+        ProjectContainerEntry entry;
+        entry.logicalPath = logicalPath;
+        entry.data = std::move(data);
+        entry.modifiedAt = zipEntry->fileTime;
+        outEntries.add(std::move(entry));
+    }
+
+    if (! foundManifest)
+    {
+        errorMessage = "The suite project container does not contain a project manifest.";
+        return false;
+    }
+
+    return true;
+}
+
 bool ProjectContainerIO::writeContainer(const juce::File& containerFile,
                                         const ProjectManifest& manifest,
                                         const juce::Array<ProjectContainerEntry>& entries,

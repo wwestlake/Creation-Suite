@@ -1,7 +1,6 @@
 #include "creation/interop/ProjectRegistry.h"
 
-#include "creation/assets/ProjectContainerIO.h"
-#include "creation/suite/SuiteStoragePaths.h"
+#include "creation/assets/ProjectContainerService.h"
 
 namespace
 {
@@ -21,26 +20,6 @@ bool matchesQuery(const creation::interop::ProjectRecord& project, const creatio
 
     return true;
 }
-
-void scanDomainDirectory(const juce::File& domainDirectory,
-                         juce::Array<creation::interop::ProjectRecord>& results)
-{
-    if (! domainDirectory.isDirectory())
-        return;
-
-    juce::Array<juce::File> children;
-    domainDirectory.findChildFiles(children, juce::File::findFiles, false, "*.csproj");
-
-    for (const auto& file : children)
-    {
-        creation::assets::ProjectManifest manifest;
-        juce::String errorMessage;
-        if (! creation::assets::ProjectContainerIO::readManifest(file, manifest, errorMessage))
-            continue;
-
-        results.add({ file, std::move(manifest) });
-    }
-}
 }
 
 namespace creation::interop
@@ -48,15 +27,11 @@ namespace creation::interop
 juce::Array<ProjectRecord> ProjectRegistry::discoverProjects(const creation::suite::SuiteSettings& settings,
                                                              juce::String& errorMessage)
 {
-    juce::ignoreUnused(errorMessage);
-
     juce::Array<ProjectRecord> projects;
-    const auto root = creation::suite::getProjectContainerDirectory(settings);
+    const auto summaries = creation::assets::ProjectContainerService::listAllProjects(settings, errorMessage);
 
-    scanDomainDirectory(root.getChildFile("Creation Station"), projects);
-    scanDomainDirectory(root.getChildFile("Creation Engine"), projects);
-    scanDomainDirectory(root.getChildFile("Creation Movie"), projects);
-    scanDomainDirectory(root.getChildFile("Creation Live"), projects);
+    for (const auto& summary : summaries)
+        projects.add({ summary.containerFile, summary.manifest });
 
     std::sort(projects.begin(), projects.end(), [](const ProjectRecord& left, const ProjectRecord& right)
     {

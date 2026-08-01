@@ -1,5 +1,6 @@
 #pragma once
 
+#include <creation/ui/CreationSuiteLogos.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 
 class CreationSuiteHeaderBar final : public juce::Component
@@ -44,6 +45,8 @@ public:
     std::function<void(const juce::String& targetId, const juce::String& displayLabel)> onLearnMidiRequested;
 
     void setAppTitle(const juce::String& title);
+    void setAppLogo(creation::ui::SuiteLogoId logoId);
+    void setSelectedLogoId(creation::ui::SuiteLogoId logoId);
     void setLogoImage(const juce::Image& image);
     void setProfile(const ProfileData& profile);
     void clearProfile();
@@ -53,6 +56,7 @@ public:
     void setMidiStatusText(const juce::String& text);
     void setPlaybackVisualState(bool playing, bool recording);
     void setScrubModeEnabled(bool enabled);
+    void setTransportControlsVisible(bool shouldBeVisible);
     void setTransportButtonVisible(TransportButtonSlot slot, bool shouldBeVisible);
     void setTransportButtonEnabled(TransportButtonSlot slot, bool shouldBeEnabled);
 
@@ -100,10 +104,13 @@ private:
     juce::String profileInitials;
     juce::String projectText;
     juce::Rectangle<int> profileChipBounds;
+    juce::Rectangle<int> logoRailBounds;
+    creation::ui::SuiteLogoId selectedLogoId = creation::ui::SuiteLogoId::suite;
     bool profileVisible = false;
     bool scrubModeEnabled = false;
     bool playbackIsPlaying = false;
     bool playbackIsRecording = false;
+    bool transportControlsVisible = true;
     TransportButtonConfig rewindButtonConfig;
     TransportButtonConfig fastForwardButtonConfig;
     TransportButtonConfig stopButtonConfig;

@@ -4,10 +4,13 @@
 
 namespace
 {
-juce::Colour panelFill() { return juce::Colour(0xff121822); }
+juce::Colour panelFill() { return juce::Colour(0xff0f141c); }
 juce::Colour panelOutline() { return juce::Colour(0xff2a3a50); }
-juce::Colour labelColour() { return juce::Colour(0xffdce6f5); }
+juce::Colour cardFill() { return juce::Colour(0xff121822); }
+juce::Colour contentFill() { return juce::Colour(0xff141c27); }
+juce::Colour textColour() { return juce::Colour(0xffdce6f5); }
 juce::Colour hintColour() { return juce::Colour(0xff97a9c1); }
+juce::Colour accentColour() { return juce::Colour(0xff59dfff); }
 
 int comboItemIdForIndex(int index)
 {
@@ -23,7 +26,20 @@ void configureEditor(juce::TextEditor& editor)
 
 void configureLabel(juce::Label& label)
 {
-    label.setColour(juce::Label::textColourId, labelColour());
+    label.setColour(juce::Label::textColourId, textColour());
+}
+
+void configureSectionTitle(juce::Label& label, const juce::String& text)
+{
+    label.setText(text, juce::dontSendNotification);
+    label.setFont(juce::Font(20.0f).boldened());
+    label.setColour(juce::Label::textColourId, juce::Colours::white);
+}
+
+void configureHintLabel(juce::Label& label, const juce::String& text)
+{
+    label.setText(text, juce::dontSendNotification);
+    label.setColour(juce::Label::textColourId, hintColour());
 }
 
 void configureCombo(juce::ComboBox& comboBox)
@@ -32,27 +48,37 @@ void configureCombo(juce::ComboBox& comboBox)
     comboBox.setColour(juce::ComboBox::outlineColourId, panelOutline());
     comboBox.setColour(juce::ComboBox::textColourId, juce::Colours::white);
 }
-
 }
 
 SuiteSettingsPanel::SuiteSettingsPanel()
     : aiProviders(creation::services::SuiteAiProviderCatalog::createDefaultCatalog())
 {
     suiteLogo = creation::ui::getSuiteLogoImage(creation::ui::SuiteLogoId::suite);
-    titleLabel.setText("Creation Suite Control", juce::dontSendNotification);
-    titleLabel.setFont(juce::Font(24.0f).boldened());
+
+    titleLabel.setText("Creation Suite", juce::dontSendNotification);
+    titleLabel.setFont(juce::Font(28.0f).boldened());
     titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(titleLabel);
 
-    subTitleLabel.setText("Manage the suite-wide VFS, app locations, shared AI accounts, and app-level AI routing.",
+    subTitleLabel.setText("Suite-wide storage, routing, accounts, and platform controls live here.",
                           juce::dontSendNotification);
     subTitleLabel.setColour(juce::Label::textColourId, hintColour());
     addAndMakeVisible(subTitleLabel);
 
-    storageSectionLabel.setText("Storage And VFS", juce::dontSendNotification);
-    storageSectionLabel.setFont(juce::Font(18.0f).boldened());
-    storageSectionLabel.setColour(juce::Label::textColourId, juce::Colours::white);
-    addAndMakeVisible(storageSectionLabel);
+    configureTabButton(storageTabButton, "Storage", Tab::storage);
+    configureTabButton(aiTabButton, "AI & Routing", Tab::ai);
+    configureTabButton(suiteLogTabButton, "Suite Log", Tab::log);
+
+    scrollViewport.setViewedComponent(&scrollContent, false);
+    scrollViewport.setScrollBarsShown(true, false);
+    addAndMakeVisible(scrollViewport);
+
+    configureHintLabel(storageIntroLabel,
+                       "This is the suite-level storage surface. Every Creation app should be able to start here, find the suite roots, and share the same VFS story.");
+    scrollContent.addAndMakeVisible(storageIntroLabel);
+
+    configureSectionTitle(storageSectionLabel, "Storage And VFS");
+    scrollContent.addAndMakeVisible(storageSectionLabel);
 
     configureRow(suiteVfsRow, "suite_vfs_root", "Suite VFS Root");
     configureRow(sharedResourcesRow, "shared_resources_root", "Shared Resources");
@@ -65,10 +91,12 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     configureRow(movieProjectsRow, "creation_movie_projects_root", "Creation Movie Projects");
     configureRow(liveProjectsRow, "creation_live_projects_root", "Creation Live Projects");
 
-    aiSectionLabel.setText("Suite AI Accounts And Routing", juce::dontSendNotification);
-    aiSectionLabel.setFont(juce::Font(18.0f).boldened());
-    aiSectionLabel.setColour(juce::Label::textColourId, juce::Colours::white);
-    addAndMakeVisible(aiSectionLabel);
+    configureHintLabel(aiIntroLabel,
+                       "Shared accounts and per-app routing live here so every app in the suite can resolve AI behavior from one place.");
+    scrollContent.addAndMakeVisible(aiIntroLabel);
+
+    configureSectionTitle(aiSectionLabel, "Suite AI Accounts And Routing");
+    scrollContent.addAndMakeVisible(aiSectionLabel);
 
     configureCombo(accountSelectorCombo);
     accountSelectorCombo.onChange = [this]
@@ -78,7 +106,7 @@ SuiteSettingsPanel::SuiteSettingsPanel()
         pullSelectedAccountIntoEditor();
         refreshAiAccountUi();
     };
-    addAndMakeVisible(accountSelectorCombo);
+    scrollContent.addAndMakeVisible(accountSelectorCombo);
 
     addAccountButton.onClick = [this]
     {
@@ -96,8 +124,9 @@ SuiteSettingsPanel::SuiteSettingsPanel()
         selectedAccountIndex = aiSettings.accounts.size() - 1;
         refreshAiAccountUi();
         pullSelectedAccountIntoEditor();
+        appendLogLine("Added a new suite AI account slot.");
     };
-    addAndMakeVisible(addAccountButton);
+    scrollContent.addAndMakeVisible(addAccountButton);
 
     removeAccountButton.onClick = [this]
     {
@@ -120,8 +149,9 @@ SuiteSettingsPanel::SuiteSettingsPanel()
 
         refreshAiAccountUi();
         pullSelectedAccountIntoEditor();
+        appendLogLine("Removed a suite AI account slot.");
     };
-    addAndMakeVisible(removeAccountButton);
+    scrollContent.addAndMakeVisible(removeAccountButton);
 
     testAccountButton.onClick = [this]
     {
@@ -145,11 +175,11 @@ SuiteSettingsPanel::SuiteSettingsPanel()
         if (onTestAiAccountRequested)
             onTestAiAccountRequested(runtimeSettings);
     };
-    addAndMakeVisible(testAccountButton);
+    scrollContent.addAndMakeVisible(testAccountButton);
 
     providerLabel.setText("Provider", juce::dontSendNotification);
     configureLabel(providerLabel);
-    addAndMakeVisible(providerLabel);
+    scrollContent.addAndMakeVisible(providerLabel);
 
     configureCombo(providerCombo);
     for (int index = 0; index < aiProviders.size(); ++index)
@@ -172,38 +202,38 @@ SuiteSettingsPanel::SuiteSettingsPanel()
             account.modelName = account.providerId == "ollama" ? "llama3.1" : "local-model";
         pullSelectedAccountIntoEditor();
     };
-    addAndMakeVisible(providerCombo);
+    scrollContent.addAndMakeVisible(providerCombo);
 
     accountLabelLabel.setText("Account Label", juce::dontSendNotification);
     configureLabel(accountLabelLabel);
-    addAndMakeVisible(accountLabelLabel);
+    scrollContent.addAndMakeVisible(accountLabelLabel);
     configureEditor(accountLabelEditor);
-    addAndMakeVisible(accountLabelEditor);
+    scrollContent.addAndMakeVisible(accountLabelEditor);
 
     endpointLabel.setText("Endpoint", juce::dontSendNotification);
     configureLabel(endpointLabel);
-    addAndMakeVisible(endpointLabel);
+    scrollContent.addAndMakeVisible(endpointLabel);
     configureEditor(endpointEditor);
-    addAndMakeVisible(endpointEditor);
+    scrollContent.addAndMakeVisible(endpointEditor);
 
     modelLabel.setText("Default Model", juce::dontSendNotification);
     configureLabel(modelLabel);
-    addAndMakeVisible(modelLabel);
+    scrollContent.addAndMakeVisible(modelLabel);
     configureEditor(modelEditor);
-    addAndMakeVisible(modelEditor);
+    scrollContent.addAndMakeVisible(modelEditor);
 
     apiKeyLabel.setText("API Key / Token", juce::dontSendNotification);
     configureLabel(apiKeyLabel);
-    addAndMakeVisible(apiKeyLabel);
+    scrollContent.addAndMakeVisible(apiKeyLabel);
     configureEditor(apiKeyEditor);
     apiKeyEditor.setPasswordCharacter(0x2022);
-    addAndMakeVisible(apiKeyEditor);
+    scrollContent.addAndMakeVisible(apiKeyEditor);
 
     defaultAccountLabel.setText("Suite Default Account", juce::dontSendNotification);
     configureLabel(defaultAccountLabel);
-    addAndMakeVisible(defaultAccountLabel);
+    scrollContent.addAndMakeVisible(defaultAccountLabel);
     configureCombo(defaultAccountCombo);
-    addAndMakeVisible(defaultAccountCombo);
+    scrollContent.addAndMakeVisible(defaultAccountCombo);
 
     auto configureSelectionRow = [](AppSelectionRow& row, const juce::String& labelText)
     {
@@ -218,18 +248,34 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     configureSelectionRow(movieSelectionRow, "Creation Movie");
     configureSelectionRow(liveSelectionRow, "Creation Live");
 
-    addAndMakeVisible(stationSelectionRow.label);
-    addAndMakeVisible(stationSelectionRow.accountCombo);
-    addAndMakeVisible(stationSelectionRow.modelOverrideEditor);
-    addAndMakeVisible(engineSelectionRow.label);
-    addAndMakeVisible(engineSelectionRow.accountCombo);
-    addAndMakeVisible(engineSelectionRow.modelOverrideEditor);
-    addAndMakeVisible(movieSelectionRow.label);
-    addAndMakeVisible(movieSelectionRow.accountCombo);
-    addAndMakeVisible(movieSelectionRow.modelOverrideEditor);
-    addAndMakeVisible(liveSelectionRow.label);
-    addAndMakeVisible(liveSelectionRow.accountCombo);
-    addAndMakeVisible(liveSelectionRow.modelOverrideEditor);
+    scrollContent.addAndMakeVisible(stationSelectionRow.label);
+    scrollContent.addAndMakeVisible(stationSelectionRow.accountCombo);
+    scrollContent.addAndMakeVisible(stationSelectionRow.modelOverrideEditor);
+    scrollContent.addAndMakeVisible(engineSelectionRow.label);
+    scrollContent.addAndMakeVisible(engineSelectionRow.accountCombo);
+    scrollContent.addAndMakeVisible(engineSelectionRow.modelOverrideEditor);
+    scrollContent.addAndMakeVisible(movieSelectionRow.label);
+    scrollContent.addAndMakeVisible(movieSelectionRow.accountCombo);
+    scrollContent.addAndMakeVisible(movieSelectionRow.modelOverrideEditor);
+    scrollContent.addAndMakeVisible(liveSelectionRow.label);
+    scrollContent.addAndMakeVisible(liveSelectionRow.accountCombo);
+    scrollContent.addAndMakeVisible(liveSelectionRow.modelOverrideEditor);
+
+    configureSectionTitle(logSectionLabel, "Suite Log");
+    scrollContent.addAndMakeVisible(logSectionLabel);
+
+    configureHintLabel(logIntroLabel,
+                       "This is the shared suite control log. As the suite grows, this is where setup status, shared warnings, migrations, and platform-level actions can accumulate.");
+    scrollContent.addAndMakeVisible(logIntroLabel);
+
+    suiteLogEditor.setMultiLine(true);
+    suiteLogEditor.setReadOnly(true);
+    suiteLogEditor.setScrollbarsShown(true);
+    suiteLogEditor.setCaretVisible(false);
+    suiteLogEditor.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff1a2230));
+    suiteLogEditor.setColour(juce::TextEditor::outlineColourId, panelOutline());
+    suiteLogEditor.setColour(juce::TextEditor::textColourId, juce::Colours::white);
+    scrollContent.addAndMakeVisible(suiteLogEditor);
 
     applyButton.onClick = [this]
     {
@@ -249,11 +295,11 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     addAndMakeVisible(eulaButton);
 
     statusLabel.setColour(juce::Label::textColourId, hintColour());
-    statusLabel.setText("Suite storage, AI accounts, and app routing are controlled here for every Creation app.",
-                        juce::dontSendNotification);
     addAndMakeVisible(statusLabel);
 
     setAiSettings({});
+    selectTab(Tab::storage);
+    setStatusText("Suite storage, AI accounts, and app routing are controlled here for every Creation app.");
 }
 
 void SuiteSettingsPanel::setSettings(const creation::suite::SuiteSettings& settings)
@@ -345,6 +391,7 @@ creation::services::SuiteAiSettings SuiteSettingsPanel::getAiSettings() const
 void SuiteSettingsPanel::setStatusText(const juce::String& text)
 {
     statusLabel.setText(text, juce::dontSendNotification);
+    appendLogLine(text);
 }
 
 void SuiteSettingsPanel::paint(juce::Graphics& g)
@@ -353,20 +400,208 @@ void SuiteSettingsPanel::paint(juce::Graphics& g)
     g.setColour(panelOutline());
     g.drawRect(getLocalBounds(), 1);
 
+    auto area = getLocalBounds().reduced(14);
+    auto headerArea = area.removeFromTop(94).toFloat();
+    auto tabArea = area.removeFromTop(38).toFloat();
+    auto footerArea = area.removeFromBottom(78).toFloat();
+
+    g.setColour(cardFill());
+    g.fillRoundedRectangle(headerArea, 18.0f);
+    g.setColour(panelOutline());
+    g.drawRoundedRectangle(headerArea, 18.0f, 1.0f);
+
+    g.setColour(juce::Colour(0xff151b23));
+    g.fillRoundedRectangle(tabArea, 14.0f);
+    g.setColour(panelOutline());
+    g.drawRoundedRectangle(tabArea, 14.0f, 1.0f);
+
+    g.setColour(cardFill());
+    g.fillRoundedRectangle(footerArea, 18.0f);
+    g.setColour(panelOutline());
+    g.drawRoundedRectangle(footerArea, 18.0f, 1.0f);
+
     if (suiteLogo.isValid())
-        g.drawImageWithin(suiteLogo, 18, 16, 58, 58, juce::RectanglePlacement::centred, false);
+        g.drawImageWithin(suiteLogo, 28, 24, 56, 56, juce::RectanglePlacement::centred, false);
 }
 
 void SuiteSettingsPanel::resized()
 {
     auto area = getLocalBounds().reduced(18);
-    auto titleRow = area.removeFromTop(58);
-    titleLabel.setBounds(titleRow.removeFromLeft(300).withTrimmedLeft(72).withTrimmedTop(4));
-    subTitleLabel.setBounds(area.removeFromTop(42));
-    area.removeFromTop(10);
 
-    storageSectionLabel.setBounds(area.removeFromTop(24));
+    auto headerArea = area.removeFromTop(86);
+    titleLabel.setBounds(headerArea.removeFromLeft(420).withTrimmedLeft(72).withTrimmedTop(6));
+    subTitleLabel.setBounds(headerArea.withTrimmedLeft(72).withTrimmedTop(36));
+
     area.removeFromTop(8);
+    auto tabArea = area.removeFromTop(34);
+    auto tabButtonWidth = 136;
+    storageTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth));
+    tabArea.removeFromLeft(8);
+    aiTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth + 20));
+    tabArea.removeFromLeft(8);
+    suiteLogTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth));
+
+    area.removeFromTop(10);
+    auto footerArea = area.removeFromBottom(74);
+    scrollViewport.setBounds(area);
+
+    auto footerButtons = footerArea.removeFromLeft(338);
+    applyButton.setBounds(footerButtons.removeFromLeft(180));
+    footerButtons.removeFromLeft(10);
+    eulaButton.setBounds(footerButtons.removeFromLeft(140));
+    statusLabel.setBounds(footerArea.withTrimmedLeft(16));
+
+    updateScrollContentLayout();
+}
+
+void SuiteSettingsPanel::configureRow(PathRow& row, const juce::String& id, const juce::String& labelText)
+{
+    row.id = id;
+    row.label.setText(labelText, juce::dontSendNotification);
+    configureLabel(row.label);
+    scrollContent.addAndMakeVisible(row.label);
+
+    configureEditor(row.editor);
+    scrollContent.addAndMakeVisible(row.editor);
+
+    row.browseButton.onClick = [this, id]
+    {
+        if (onBrowseRequested)
+            onBrowseRequested(id);
+    };
+    scrollContent.addAndMakeVisible(row.browseButton);
+}
+
+void SuiteSettingsPanel::layoutRow(PathRow& row, juce::Rectangle<int>& area)
+{
+    row.label.setBounds(area.removeFromTop(20));
+    auto rowArea = area.removeFromTop(32);
+    row.browseButton.setBounds(rowArea.removeFromRight(96));
+    rowArea.removeFromRight(8);
+    row.editor.setBounds(rowArea);
+    area.removeFromTop(12);
+}
+
+void SuiteSettingsPanel::configureTabButton(juce::TextButton& button, const juce::String& text, Tab tab)
+{
+    button.setButtonText(text);
+    button.onClick = [this, tab] { selectTab(tab); };
+    addAndMakeVisible(button);
+}
+
+void SuiteSettingsPanel::selectTab(Tab tab)
+{
+    selectedTab = tab;
+    refreshTabButtons();
+    updateScrollContentLayout();
+    scrollViewport.setViewPosition(0, 0);
+}
+
+void SuiteSettingsPanel::refreshTabButtons()
+{
+    auto styleTab = [&](juce::TextButton& button, bool active)
+    {
+        button.setColour(juce::TextButton::buttonColourId, active ? accentColour().withAlpha(0.18f) : juce::Colour(0xff151b23));
+        button.setColour(juce::TextButton::buttonOnColourId, accentColour().withAlpha(0.18f));
+        button.setColour(juce::TextButton::textColourOffId, active ? juce::Colours::white : juce::Colour(0xffb8c4d5));
+        button.setColour(juce::TextButton::textColourOnId, juce::Colours::white);
+    };
+
+    styleTab(storageTabButton, selectedTab == Tab::storage);
+    styleTab(aiTabButton, selectedTab == Tab::ai);
+    styleTab(suiteLogTabButton, selectedTab == Tab::log);
+}
+
+void SuiteSettingsPanel::updateScrollContentLayout()
+{
+    const auto contentWidth = juce::jmax(640, scrollViewport.getWidth() - 12);
+    juce::Rectangle<int> area(22, 20, juce::jmax(400, contentWidth - 44), 20000);
+
+    auto setPathRowsVisible = [&](bool visible)
+    {
+        auto setRowVisible = [visible](PathRow& row)
+        {
+            row.label.setVisible(visible);
+            row.editor.setVisible(visible);
+            row.browseButton.setVisible(visible);
+        };
+
+        storageIntroLabel.setVisible(visible);
+        storageSectionLabel.setVisible(visible);
+        setRowVisible(suiteVfsRow);
+        setRowVisible(sharedResourcesRow);
+        setRowVisible(projectContainersRow);
+        setRowVisible(cacheRootRow);
+        setRowVisible(materializedFilesRow);
+        setRowVisible(exportsRootRow);
+        setRowVisible(stationProjectsRow);
+        setRowVisible(engineProjectsRow);
+        setRowVisible(movieProjectsRow);
+        setRowVisible(liveProjectsRow);
+    };
+
+    auto setAiVisible = [&](bool visible)
+    {
+        aiIntroLabel.setVisible(visible);
+        aiSectionLabel.setVisible(visible);
+        accountSelectorCombo.setVisible(visible);
+        addAccountButton.setVisible(visible);
+        removeAccountButton.setVisible(visible);
+        testAccountButton.setVisible(visible);
+        providerLabel.setVisible(visible);
+        providerCombo.setVisible(visible);
+        accountLabelLabel.setVisible(visible);
+        accountLabelEditor.setVisible(visible);
+        endpointLabel.setVisible(visible);
+        endpointEditor.setVisible(visible);
+        modelLabel.setVisible(visible);
+        modelEditor.setVisible(visible);
+        apiKeyLabel.setVisible(visible);
+        apiKeyEditor.setVisible(visible);
+        defaultAccountLabel.setVisible(visible);
+        defaultAccountCombo.setVisible(visible);
+        stationSelectionRow.label.setVisible(visible);
+        stationSelectionRow.accountCombo.setVisible(visible);
+        stationSelectionRow.modelOverrideEditor.setVisible(visible);
+        engineSelectionRow.label.setVisible(visible);
+        engineSelectionRow.accountCombo.setVisible(visible);
+        engineSelectionRow.modelOverrideEditor.setVisible(visible);
+        movieSelectionRow.label.setVisible(visible);
+        movieSelectionRow.accountCombo.setVisible(visible);
+        movieSelectionRow.modelOverrideEditor.setVisible(visible);
+        liveSelectionRow.label.setVisible(visible);
+        liveSelectionRow.accountCombo.setVisible(visible);
+        liveSelectionRow.modelOverrideEditor.setVisible(visible);
+    };
+
+    auto setLogVisible = [&](bool visible)
+    {
+        logSectionLabel.setVisible(visible);
+        logIntroLabel.setVisible(visible);
+        suiteLogEditor.setVisible(visible);
+    };
+
+    setPathRowsVisible(selectedTab == Tab::storage);
+    setAiVisible(selectedTab == Tab::ai);
+    setLogVisible(selectedTab == Tab::log);
+
+    switch (selectedTab)
+    {
+        case Tab::storage: layoutStorageTab(area); break;
+        case Tab::ai: layoutAiTab(area); break;
+        case Tab::log: layoutLogTab(area); break;
+    }
+
+    const auto usedHeight = 20000 - area.getHeight() + 18;
+    scrollContent.setSize(contentWidth, usedHeight);
+}
+
+void SuiteSettingsPanel::layoutStorageTab(juce::Rectangle<int>& area)
+{
+    storageIntroLabel.setBounds(area.removeFromTop(48));
+    area.removeFromTop(10);
+    storageSectionLabel.setBounds(area.removeFromTop(28));
+    area.removeFromTop(12);
 
     layoutRow(suiteVfsRow, area);
     layoutRow(sharedResourcesRow, area);
@@ -378,95 +613,91 @@ void SuiteSettingsPanel::resized()
     layoutRow(engineProjectsRow, area);
     layoutRow(movieProjectsRow, area);
     layoutRow(liveProjectsRow, area);
+}
 
-    area.removeFromTop(6);
-    aiSectionLabel.setBounds(area.removeFromTop(24));
-    area.removeFromTop(8);
-
-    auto accountHeaderRow = area.removeFromTop(30);
-    accountSelectorCombo.setBounds(accountHeaderRow.removeFromLeft(260));
-    accountHeaderRow.removeFromLeft(8);
-    addAccountButton.setBounds(accountHeaderRow.removeFromLeft(110));
-    accountHeaderRow.removeFromLeft(8);
-    removeAccountButton.setBounds(accountHeaderRow.removeFromLeft(90));
-    accountHeaderRow.removeFromLeft(8);
-    testAccountButton.setBounds(accountHeaderRow.removeFromLeft(120));
+void SuiteSettingsPanel::layoutAiTab(juce::Rectangle<int>& area)
+{
+    aiIntroLabel.setBounds(area.removeFromTop(48));
     area.removeFromTop(10);
+    aiSectionLabel.setBounds(area.removeFromTop(28));
+    area.removeFromTop(12);
+
+    auto accountHeaderRow = area.removeFromTop(34);
+    accountSelectorCombo.setBounds(accountHeaderRow.removeFromLeft(280));
+    accountHeaderRow.removeFromLeft(8);
+    addAccountButton.setBounds(accountHeaderRow.removeFromLeft(118));
+    accountHeaderRow.removeFromLeft(8);
+    removeAccountButton.setBounds(accountHeaderRow.removeFromLeft(96));
+    accountHeaderRow.removeFromLeft(8);
+    testAccountButton.setBounds(accountHeaderRow.removeFromLeft(128));
+    area.removeFromTop(12);
 
     providerLabel.setBounds(area.removeFromTop(20));
-    providerCombo.setBounds(area.removeFromTop(30));
+    providerCombo.setBounds(area.removeFromTop(32));
     area.removeFromTop(10);
 
     accountLabelLabel.setBounds(area.removeFromTop(20));
-    accountLabelEditor.setBounds(area.removeFromTop(30));
+    accountLabelEditor.setBounds(area.removeFromTop(32));
     area.removeFromTop(10);
 
     endpointLabel.setBounds(area.removeFromTop(20));
-    endpointEditor.setBounds(area.removeFromTop(30));
+    endpointEditor.setBounds(area.removeFromTop(32));
     area.removeFromTop(10);
 
     modelLabel.setBounds(area.removeFromTop(20));
-    modelEditor.setBounds(area.removeFromTop(30));
+    modelEditor.setBounds(area.removeFromTop(32));
     area.removeFromTop(10);
 
     apiKeyLabel.setBounds(area.removeFromTop(20));
-    apiKeyEditor.setBounds(area.removeFromTop(30));
+    apiKeyEditor.setBounds(area.removeFromTop(32));
     area.removeFromTop(14);
 
     defaultAccountLabel.setBounds(area.removeFromTop(20));
-    defaultAccountCombo.setBounds(area.removeFromTop(30));
+    defaultAccountCombo.setBounds(area.removeFromTop(32));
     area.removeFromTop(10);
 
     auto layoutSelectionRow = [&](AppSelectionRow& row)
     {
         row.label.setBounds(area.removeFromTop(20));
-        auto rowArea = area.removeFromTop(30);
-        row.accountCombo.setBounds(rowArea.removeFromLeft(260));
+        auto rowArea = area.removeFromTop(32);
+        row.accountCombo.setBounds(rowArea.removeFromLeft(280));
         rowArea.removeFromLeft(8);
         row.modelOverrideEditor.setBounds(rowArea);
-        area.removeFromTop(10);
+        area.removeFromTop(12);
     };
 
     layoutSelectionRow(stationSelectionRow);
     layoutSelectionRow(engineSelectionRow);
     layoutSelectionRow(movieSelectionRow);
     layoutSelectionRow(liveSelectionRow);
+}
 
-    area.removeFromTop(10);
-    auto buttonRow = area.removeFromTop(34);
-    applyButton.setBounds(buttonRow.removeFromLeft(180));
-    buttonRow.removeFromLeft(10);
-    eulaButton.setBounds(buttonRow.removeFromLeft(140));
+void SuiteSettingsPanel::layoutLogTab(juce::Rectangle<int>& area)
+{
+    logSectionLabel.setBounds(area.removeFromTop(28));
     area.removeFromTop(8);
-    statusLabel.setBounds(area.removeFromTop(44));
+    logIntroLabel.setBounds(area.removeFromTop(48));
+    area.removeFromTop(12);
+    suiteLogEditor.setBounds(area.removeFromTop(520));
 }
 
-void SuiteSettingsPanel::configureRow(PathRow& row, const juce::String& id, const juce::String& labelText)
+void SuiteSettingsPanel::appendLogLine(const juce::String& text)
 {
-    row.id = id;
-    row.label.setText(labelText, juce::dontSendNotification);
-    configureLabel(row.label);
-    addAndMakeVisible(row.label);
+    const auto trimmed = text.trim();
+    if (trimmed.isEmpty())
+        return;
 
-    configureEditor(row.editor);
-    addAndMakeVisible(row.editor);
+    const auto timestamp = juce::Time::getCurrentTime().formatted("%H:%M:%S");
+    const auto entry = "[" + timestamp + "] " + trimmed;
+    const auto existing = suiteLogEditor.getText().trimEnd();
+    if (existing.endsWith(entry))
+        return;
 
-    row.browseButton.onClick = [this, id]
-    {
-        if (onBrowseRequested)
-            onBrowseRequested(id);
-    };
-    addAndMakeVisible(row.browseButton);
-}
-
-void SuiteSettingsPanel::layoutRow(PathRow& row, juce::Rectangle<int>& area)
-{
-    row.label.setBounds(area.removeFromTop(20));
-    auto rowArea = area.removeFromTop(30);
-    row.browseButton.setBounds(rowArea.removeFromRight(88));
-    rowArea.removeFromRight(8);
-    row.editor.setBounds(rowArea);
-    area.removeFromTop(10);
+    suiteLogEditor.moveCaretToEnd();
+    if (existing.isNotEmpty())
+        suiteLogEditor.insertTextAtCaret("\n");
+    suiteLogEditor.insertTextAtCaret(entry);
+    suiteLogEditor.moveCaretToEnd();
 }
 
 void SuiteSettingsPanel::refreshAiAccountUi()

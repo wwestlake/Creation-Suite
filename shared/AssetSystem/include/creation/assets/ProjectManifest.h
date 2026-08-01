@@ -12,7 +12,9 @@ enum class SuiteAppDomain
     station,
     engine,
     movie,
-    live
+    live,
+    texture,
+    modeler
 };
 
 struct ProjectManifest

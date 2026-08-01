@@ -153,6 +153,41 @@ private:
             g.fillPath(path);
             return;
         }
+
+        if (iconName == "gear" || iconName == "\xe2\x9a\x99")
+        {
+            const auto radius = size * 0.28f;
+            juce::Path gearPath;
+            const int numTeeth = 8;
+            for (int i = 0; i < numTeeth; ++i)
+            {
+                float angle = i * juce::MathConstants<float>::twoPi / numTeeth;
+                float outerR = radius * 1.25f;
+                float innerR = radius * 0.85f;
+
+                float a1 = angle - 0.18f;
+                float a2 = angle - 0.09f;
+                float a3 = angle + 0.09f;
+                float a4 = angle + 0.18f;
+
+                if (i == 0)
+                    gearPath.startNewSubPath(centre.x + innerR * std::cos(a1), centre.y + innerR * std::sin(a1));
+                else
+                    gearPath.lineTo(centre.x + innerR * std::cos(a1), centre.y + innerR * std::sin(a1));
+
+                gearPath.lineTo(centre.x + outerR * std::cos(a2), centre.y + outerR * std::sin(a2));
+                gearPath.lineTo(centre.x + outerR * std::cos(a3), centre.y + outerR * std::sin(a3));
+                gearPath.lineTo(centre.x + innerR * std::cos(a4), centre.y + innerR * std::sin(a4));
+            }
+            gearPath.closeSubPath();
+            g.fillPath(gearPath);
+
+            juce::Path holePath;
+            holePath.addEllipse(centre.x - radius * 0.45f, centre.y - radius * 0.45f, radius * 0.90f, radius * 0.90f);
+            g.setColour(juce::Colour(0xff17222c));
+            g.fillPath(holePath);
+            return;
+        }
     }
 };
 
@@ -165,8 +200,8 @@ TransportButtonLookAndFeel& getTransportButtonLookAndFeel()
 
 CreationSuiteHeaderBar::CreationSuiteHeaderBar()
 {
-    setName("Transport");
-    logoImage = creation::ui::getSuiteLogoImage(creation::ui::SuiteLogoId::suite);
+    setName("CreationSuiteHeaderBar");
+    setAppLogo(creation::ui::SuiteLogoId::suite);
 
     titleLabel.setText("Creation Suite", juce::dontSendNotification);
     titleLabel.setJustificationType(juce::Justification::centredLeft);
@@ -189,6 +224,7 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
     clickButton.setLookAndFeel(&getTransportButtonLookAndFeel());
     rewindButton.setLookAndFeel(&getTransportButtonLookAndFeel());
     fastForwardButton.setLookAndFeel(&getTransportButtonLookAndFeel());
+    suiteButton.setLookAndFeel(&getTransportButtonLookAndFeel());
 
     recordButton.setName("recordButton");
     playButton.setButtonText("play");
@@ -199,6 +235,7 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
     clickButton.setButtonText("click");
     rewindButton.setButtonText("prev");
     fastForwardButton.setButtonText("next");
+    suiteButton.setButtonText("gear");
 
     playButton.setTooltip("Play");
     pauseButton.setTooltip("Pause");
@@ -341,6 +378,19 @@ void CreationSuiteHeaderBar::setAppTitle(const juce::String& title)
     titleLabel.setText(title, juce::dontSendNotification);
 }
 
+void CreationSuiteHeaderBar::setAppLogo(creation::ui::SuiteLogoId logoId)
+{
+    selectedLogoId = logoId;
+    logoImage = creation::ui::getSuiteLogoImage(logoId);
+    repaint();
+}
+
+void CreationSuiteHeaderBar::setSelectedLogoId(creation::ui::SuiteLogoId logoId)
+{
+    selectedLogoId = logoId;
+    repaint();
+}
+
 void CreationSuiteHeaderBar::setLogoImage(const juce::Image& image)
 {
     logoImage = image;
@@ -408,6 +458,13 @@ void CreationSuiteHeaderBar::setScrubModeEnabled(bool enabled)
     repaint();
 }
 
+void CreationSuiteHeaderBar::setTransportControlsVisible(bool shouldBeVisible)
+{
+    transportControlsVisible = shouldBeVisible;
+    refreshTransportButtonPresentation();
+    resized();
+}
+
 void CreationSuiteHeaderBar::setTransportButtonVisible(TransportButtonSlot slot, bool shouldBeVisible)
 {
     auto& config = getTransportButtonConfig(slot);
@@ -428,6 +485,45 @@ void CreationSuiteHeaderBar::paint(juce::Graphics& g)
     g.fillAll(juce::Colour(0xff0f1115));
     if (logoImage.isValid())
         g.drawImageWithin(logoImage, 10, 4, 72, 72, juce::RectanglePlacement::centred, false);
+
+    if (! logoRailBounds.isEmpty())
+    {
+        auto rail = logoRailBounds.toFloat();
+        g.setColour(juce::Colour(0xff151b23));
+        g.fillRoundedRectangle(rail, 12.0f);
+        g.setColour(juce::Colour(0xff2b384a));
+        g.drawRoundedRectangle(rail, 12.0f, 1.0f);
+
+        auto ids = creation::ui::getSuiteLogoIds();
+        auto tileWidth = rail.getWidth() / (float) ids.size();
+        for (size_t index = 0; index < ids.size(); ++index)
+        {
+            auto id = ids[index];
+            auto tile = juce::Rectangle<float>(rail.getX() + tileWidth * (float) index,
+                                               rail.getY(),
+                                               tileWidth,
+                                               rail.getHeight()).reduced(4.0f, 4.0f);
+            auto accent = creation::ui::getSuiteLogoAccentColour(id);
+
+            if (id == selectedLogoId)
+            {
+                g.setColour(accent.withAlpha(0.18f));
+                g.fillRoundedRectangle(tile, 10.0f);
+                g.setColour(accent.withAlpha(0.92f));
+                g.drawRoundedRectangle(tile, 10.0f, 1.8f);
+            }
+
+            auto icon = creation::ui::getSuiteLogoImage(id);
+            if (icon.isValid())
+                g.drawImageWithin(icon,
+                                  (int) tile.getX(),
+                                  (int) tile.getY(),
+                                  (int) tile.getWidth(),
+                                  (int) tile.getHeight(),
+                                  juce::RectanglePlacement::centred,
+                                  false);
+        }
+    }
 
     g.setColour(juce::Colour(0xff242a36));
     g.drawLine(0.0f, static_cast<float>(getHeight()) - 1.0f, static_cast<float>(getWidth()), static_cast<float>(getHeight()) - 1.0f, 1.0f);
@@ -522,12 +618,16 @@ void CreationSuiteHeaderBar::resized()
     auto topRow = area.removeFromTop(30);
     auto bottomRow = area;
 
-    titleLabel.setBounds(topRow.removeFromLeft(520));
+    titleLabel.setBounds(topRow.removeFromLeft(290));
+    topRow.removeFromLeft(10);
+    logoRailBounds = topRow.removeFromLeft(248);
 
-    auto transportRow = bottomRow.removeFromLeft(662);
-    projectButton.setBounds(bottomRow.removeFromLeft(260));
+    auto transportRow = transportControlsVisible ? bottomRow.removeFromLeft(662) : juce::Rectangle<int>();
+    projectButton.setBounds(bottomRow.removeFromLeft(220));
+    bottomRow.removeFromLeft(6);
+    suiteButton.setBounds(bottomRow.removeFromLeft(44));
+    bottomRow.removeFromLeft(10);
     audioButton.setBounds(bottomRow.removeFromLeft(82));
-    suiteButton.setBounds(bottomRow.removeFromLeft(54));
     tourButton.setBounds(bottomRow.removeFromLeft(78));
     statusLabel.setBounds(bottomRow.removeFromRight(220));
 
@@ -545,15 +645,15 @@ void CreationSuiteHeaderBar::resized()
         button.setVisible(true);
     };
 
-    placeTransportButton(rewindButton, 62, rewindButtonConfig.visible);
-    placeTransportButton(fastForwardButton, 62, fastForwardButtonConfig.visible);
-    placeTransportButton(stopButton, 66, stopButtonConfig.visible);
-    placeTransportButton(playButton, 82, playPauseButtonConfig.visible);
-    pauseButton.setBounds(playPauseButtonConfig.visible ? playButton.getBounds() : juce::Rectangle<int>());
-    pauseButton.setVisible(playPauseButtonConfig.visible && playbackIsPlaying);
-    placeTransportButton(loopButton, 64, loopButtonConfig.visible);
-    placeTransportButton(clickButton, 64, clickButtonConfig.visible);
-    placeTransportButton(recordButton, 82, recordButtonConfig.visible);
+    placeTransportButton(rewindButton, 62, transportControlsVisible && rewindButtonConfig.visible);
+    placeTransportButton(fastForwardButton, 62, transportControlsVisible && fastForwardButtonConfig.visible);
+    placeTransportButton(stopButton, 66, transportControlsVisible && stopButtonConfig.visible);
+    placeTransportButton(playButton, 82, transportControlsVisible && playPauseButtonConfig.visible);
+    pauseButton.setBounds((transportControlsVisible && playPauseButtonConfig.visible) ? playButton.getBounds() : juce::Rectangle<int>());
+    pauseButton.setVisible(transportControlsVisible && playPauseButtonConfig.visible && playbackIsPlaying);
+    placeTransportButton(loopButton, 64, transportControlsVisible && loopButtonConfig.visible);
+    placeTransportButton(clickButton, 64, transportControlsVisible && clickButtonConfig.visible);
+    placeTransportButton(recordButton, 82, transportControlsVisible && recordButtonConfig.visible);
 
     auto combineBounds = [](juce::Rectangle<int> left, juce::Rectangle<int> right, bool useRight)
     {
@@ -564,13 +664,13 @@ void CreationSuiteHeaderBar::resized()
     };
 
     transportControlBounds = {};
-    transportControlBounds = combineBounds(transportControlBounds, rewindButton.getBounds(), rewindButtonConfig.visible);
-    transportControlBounds = combineBounds(transportControlBounds, fastForwardButton.getBounds(), fastForwardButtonConfig.visible);
-    transportControlBounds = combineBounds(transportControlBounds, stopButton.getBounds(), stopButtonConfig.visible);
-    transportControlBounds = combineBounds(transportControlBounds, playButton.getBounds(), playPauseButtonConfig.visible);
-    transportControlBounds = combineBounds(transportControlBounds, loopButton.getBounds(), loopButtonConfig.visible);
-    transportControlBounds = combineBounds(transportControlBounds, clickButton.getBounds(), clickButtonConfig.visible);
-    transportControlBounds = combineBounds(transportControlBounds, recordButton.getBounds(), recordButtonConfig.visible);
+    transportControlBounds = combineBounds(transportControlBounds, rewindButton.getBounds(), transportControlsVisible && rewindButtonConfig.visible);
+    transportControlBounds = combineBounds(transportControlBounds, fastForwardButton.getBounds(), transportControlsVisible && fastForwardButtonConfig.visible);
+    transportControlBounds = combineBounds(transportControlBounds, stopButton.getBounds(), transportControlsVisible && stopButtonConfig.visible);
+    transportControlBounds = combineBounds(transportControlBounds, playButton.getBounds(), transportControlsVisible && playPauseButtonConfig.visible);
+    transportControlBounds = combineBounds(transportControlBounds, loopButton.getBounds(), transportControlsVisible && loopButtonConfig.visible);
+    transportControlBounds = combineBounds(transportControlBounds, clickButton.getBounds(), transportControlsVisible && clickButtonConfig.visible);
+    transportControlBounds = combineBounds(transportControlBounds, recordButton.getBounds(), transportControlsVisible && recordButtonConfig.visible);
 
     auto profileContent = profileArea.reduced(12, 6);
     signInButton.setBounds(profileContent);
@@ -650,14 +750,14 @@ void CreationSuiteHeaderBar::refreshTransportButtonPresentation()
     clickButton.setEnabled(clickButtonConfig.enabled);
     recordButton.setEnabled(recordButtonConfig.enabled);
 
-    playButton.setVisible(playPauseButtonConfig.visible && ! playbackIsPlaying);
-    pauseButton.setVisible(playPauseButtonConfig.visible && playbackIsPlaying);
-    stopButton.setVisible(stopButtonConfig.visible);
-    rewindButton.setVisible(rewindButtonConfig.visible);
-    fastForwardButton.setVisible(fastForwardButtonConfig.visible);
-    loopButton.setVisible(loopButtonConfig.visible);
-    clickButton.setVisible(clickButtonConfig.visible);
-    recordButton.setVisible(recordButtonConfig.visible);
+    playButton.setVisible(transportControlsVisible && playPauseButtonConfig.visible && ! playbackIsPlaying);
+    pauseButton.setVisible(transportControlsVisible && playPauseButtonConfig.visible && playbackIsPlaying);
+    stopButton.setVisible(transportControlsVisible && stopButtonConfig.visible);
+    rewindButton.setVisible(transportControlsVisible && rewindButtonConfig.visible);
+    fastForwardButton.setVisible(transportControlsVisible && fastForwardButtonConfig.visible);
+    loopButton.setVisible(transportControlsVisible && loopButtonConfig.visible);
+    clickButton.setVisible(transportControlsVisible && clickButtonConfig.visible);
+    recordButton.setVisible(transportControlsVisible && recordButtonConfig.visible);
 
     playButton.setToggleState(playbackIsPlaying && ! playbackIsRecording, juce::dontSendNotification);
     pauseButton.setToggleState(false, juce::dontSendNotification);

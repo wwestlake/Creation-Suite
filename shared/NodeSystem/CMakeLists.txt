@@ -1,3 +1,6 @@
+cmake_minimum_required(VERSION 3.22)
+project(CreationSuiteNodeSystem LANGUAGES CXX)
+
 add_library(creation_suite_node_system STATIC
     src/node.cpp
     src/graph.cpp
@@ -5,6 +8,10 @@ add_library(creation_suite_node_system STATIC
     src/graph_analysis.cpp
     src/celg_serialization.cpp
 )
+
+if(NOT TARGET node_system)
+    add_library(node_system ALIAS creation_suite_node_system)
+endif()
 
 target_include_directories(creation_suite_node_system PUBLIC include)
 target_compile_features(creation_suite_node_system PUBLIC cxx_std_20)
