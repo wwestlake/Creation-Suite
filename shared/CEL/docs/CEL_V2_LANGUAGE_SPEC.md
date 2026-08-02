@@ -247,7 +247,66 @@ block-based (N samples/pixels per call). `vec4` (§1) is a natural fit
 for SIMD-lane-width DSP — worth designing the buffer intrinsics with
 that in mind.
 
-## 6. Modules — saved, reused, referenced (not yet a tracked issue)
+## 6. Generic app state: `set_state` / `get_state` (not yet a tracked issue)
+
+A single Core-domain pair of intrinsics for occasional, configuration-
+style app control — the default, low-ceremony way an app exposes
+controllable state to CEL without needing a new bespoke intrinsic (and
+a compiler change) every time it grows one more setting:
+
+```
+set_state(name: string, value: T)
+get_state(name: string) -> T
+```
+
+**Not actually dynamically typed, despite the signature above.** CEL
+strings are already literal-only (existing rule, `type.h`), so the
+`name` argument at any call site is always a compile-time-known
+constant. Sema resolves it against a suite-level registry —
+`(appId, varName) -> { requiredType, onSet: handler }`, living alongside
+`ProjectRegistry` (`shared/Interop`/`shared/Services`) — at *compile*
+time, and generates an ordinary, fully statically-typed host-ABI call
+for that exact concrete type. `set_state("tempo", 110.0)` and
+`set_state("armed", true)` are each fully typed, unambiguous calls at
+codegen time; there is no runtime type tag, no boxing, no dynamic
+dispatch anywhere in the generated code. An app registers its own vars
+(name, required type, and a handler invoked on set) at startup or
+dynamically; whatever process compiles the script (a live app instance,
+or an editor panel talking to one) already has that registry in memory
+to query.
+
+Naming: app-implicit by default (a script running inside Station targets
+Station's own registry), with an explicit cross-app form only when a
+script needs to reach into another app's registered state — matching
+the "local unless you say otherwise" default used everywhere else in
+this spec.
+
+### 6.1 Scope boundary, confirmed directly: state vs. action, general vs. real-time
+
+Two splits, not one:
+
+- **State vs. action.** `set_state`/`get_state` is for things that are
+  genuinely "a named variable with a value" (tempo, time signature, an
+  armed flag, a monitor flag). It is NOT for actions that create or
+  destroy something or need a richer multi-argument signature —
+  `create_track(...)`, `add_plugin(...)` stay real, purpose-built
+  intrinsics (or a future `invoke_command`-style dispatch, not decided
+  here) because "create a track" isn't setting a value, it's producing
+  a new handle with side effects.
+- **General vs. real-time/performance-critical.** `set_state`/
+  `get_state` is exclusively for the general-purpose profile. **Real-
+  time-safe code (§5) never uses it, full stop** — even though the
+  registry lookup itself is compile-time-resolved and technically
+  zero-cost, the registry's `onSet` handler is still a layer of
+  indirection whose cost isn't individually audited the way a
+  hand-written trampoline is, which is exactly what the real-time-safe
+  profile exists to rule out. Anything performance-sensitive or running
+  in a real-time callback gets a purpose-built intrinsic that calls
+  directly into the app's real API — the same "no unnecessary
+  indirection" discipline the existing host-ABI rules already require
+  of every trampoline.
+
+## 7. Modules — saved, reused, referenced (not yet a tracked issue)
 
 CEL stays single-compilation-unit (§0's "why not separate compilation"
 reasoning: the whole point of the language is a sub-second full rebuild,

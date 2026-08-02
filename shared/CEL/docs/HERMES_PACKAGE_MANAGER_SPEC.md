@@ -8,7 +8,7 @@ Greek god of trade, travelers, and roads — the "get things reliably from
 one place to another" god.
 
 Tracking: not yet filed as GitHub issues — see `CEL_V2_LANGUAGE_SPEC.md`
-section 6's side note on Suite #59 for the earlier, lighter mention of
+section 7's side note on Suite #59 for the earlier, lighter mention of
 this. File real issues once this spec is reviewed, rather than before.
 
 ## 1. Shape: Cargo's feature set, a GUI instead of a CLI
@@ -36,9 +36,9 @@ arrange that"). Needs, at minimum:
   compiler milestone; it's its own project with its own issues once
   scoped.
 
-## 3. Versioning and resolution — this is where §6's deferred question gets answered
+## 3. Versioning and resolution — this is where §7's deferred question gets answered
 
-`CEL_V2_LANGUAGE_SPEC.md` section 6 explicitly deferred module
+`CEL_V2_LANGUAGE_SPEC.md` section 7 explicitly deferred module
 versioning ("always resolves to the asset's current state, no
 versioning" as the v1 answer for same-project/local imports). Hermes is
 where real versioning lives: a project references a module by name and
@@ -47,7 +47,7 @@ versioning: exact pin, `^1.2`-style range, etc.), Hermes resolves the
 full dependency graph, and a **lockfile** records the exact resolved
 versions actually used — so a project builds identically every time
 until someone deliberately updates it. Local (non-store) module imports
-from `CEL_V2_LANGUAGE_SPEC.md` section 6 keep their own simpler,
+from `CEL_V2_LANGUAGE_SPEC.md` section 7 keep their own simpler,
 unversioned behavior; Hermes-sourced dependencies are the versioned
 case.
 
