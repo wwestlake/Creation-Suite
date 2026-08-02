@@ -8,6 +8,7 @@ add_library(creation_suite_services STATIC
     src/SuiteAiSettings.cpp
     src/SuiteProcessRegistry.cpp
     src/SuiteContextEngine.cpp
+    src/SuiteAiChatClient.cpp
 )
 
 target_include_directories(creation_suite_services PUBLIC include)
