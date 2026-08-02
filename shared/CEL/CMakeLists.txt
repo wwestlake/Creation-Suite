@@ -71,7 +71,7 @@ add_test(
     COMMAND creation_suite_cel_frontend_smoke
 )
 
-option(CREATION_SUITE_CEL_ENABLE_JIT "Build the shared CEL LLVM JIT" ON)
+option(CREATION_SUITE_CEL_ENABLE_JIT "Build the shared CEL LLVM JIT and celc tool" ON)
 
 if(CREATION_SUITE_CEL_ENABLE_JIT)
     configure_creation_shared_llvm(CREATION_SUITE_CEL "Creation Suite CEL")
@@ -89,16 +89,13 @@ if(CREATION_SUITE_CEL_ENABLE_JIT AND LLVM_FOUND)
         X86Info
     )
 
-    # Deliberately NO EngineCore/EnTT dependency here -- this is the
-    # generic, host-agnostic JIT layer (Core-domain intrinsics only, see
-    # intrinsics.def). A host with its own domain (e.g. Creation Engine's
-    # World access) builds its own extension on top of this (its own
-    # trampolines/runtime driver -- see
-    # apps/CreationEngine/Language's world_intrinsics.*/world_runtime.*/
-    # script_runtime.*) and links engine_core itself, not this target.
-    # See script_context.h's own comment for how a host's own
-    # ScriptContext stays layout-compatible with the Core trampolines
-    # compiled here.
+    # Deliberately app-agnostic: no EnTT, no EngineCore, no World/Entity
+    # knowledge anywhere in this target. `script_context.h` is the ONLY
+    # context type this library knows about. A consuming app (Creation
+    # Engine) builds its own execution/trampoline layer on top of this
+    # (see apps/CreationEngine/Language's world_intrinsics/world_runtime),
+    # linking against creation_suite_cel_jit rather than this target
+    # growing app-specific code.
     add_library(creation_suite_cel_jit STATIC
         include/lang/jit/runtime.h
         include/lang/jit/script_context.h
@@ -128,12 +125,4 @@ if(CREATION_SUITE_CEL_ENABLE_JIT AND LLVM_FOUND)
     if(NOT TARGET ce_lang_jit)
         add_library(ce_lang_jit ALIAS creation_suite_cel_jit)
     endif()
-
-    # NOTE: this library's own tools/celc/ (a headless CLI test-driver)
-    # is not built here -- its subcommands (--run-world, --run-simulation,
-    # --graph-to-source, ...) are all World-domain/Engine-specific and
-    # belong to whichever host extends this core, not to the shared
-    # library itself. Creation Engine has its own celc, built from its
-    # own Language/tools/celc, that exercises this library plus Engine's
-    # own extension together.
 endif()

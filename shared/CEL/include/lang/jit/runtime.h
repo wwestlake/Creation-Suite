@@ -68,16 +68,16 @@ public:
     // verification failure, ...).
     // GS5: every compiled CEL function now takes an implicit leading
     // ScriptContext* (see module_builder.cpp's DeclareFunctions) -- this
-    // still calls `entryPoint` exactly once, through a real, internally
-    // constructed generic ce::lang::jit::ScriptContext. That's safe for
-    // any GS4-style pure-computation program (including ones with
-    // loops, since the watchdog check only touches
-    // ctx->faulted/loopBudget), but a script that calls a host-specific
-    // intrinsic outside the Core domain here is undefined behavior --
-    // hosts with their own domain (e.g. Creation Engine's World access)
-    // build their own driver on top of this library's frontend/JIT
-    // primitives instead (BuildModule/RunOptimizationPasses/
-    // RegisterAbiTrampolines), using their own concrete ScriptContext.
+    // calls `entryPoint` exactly once, through a real,
+    // internally-constructed generic ce::lang::jit::ScriptContext. Safe
+    // for any GS4-style pure-computation program (including ones with
+    // loops, since GS5's watchdog check touches only
+    // ctx->faulted/loopBudget), but a script that calls a World-domain
+    // intrinsic here has nothing to dereference -- a host that needs a
+    // real per-tick World (Creation Engine) builds its own equivalent of
+    // this on top of a derived ScriptContext; see
+    // apps/CreationEngine/Language/include/lang/jit/world_runtime.h's
+    // free-function RunWorldProgram.
     ExecResult CompileAndRun(Program& program, const std::string& entryPoint, int optLevel);
 
     // GS4: compiles `program` to LLVM IR (no optimization, no JIT) and

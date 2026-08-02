@@ -38,15 +38,22 @@ This workspace is a development/evaluation environment by default.
 
 ## Multi-Agent Rule
 
-Do not use the same writable checkout as another agent.
+Each LLM has its own fully independent `git clone` of the Creation Suite umbrella repo, with its own independently-cloned submodules underneath (`apps/CreationEngine`, `apps/CreationLive`, `apps/CreationMovie`, `apps/CreationStation`) — not a git worktree, not a shared checkout. Each one has its own separate `.git` object database, so nothing done in one is visible in another until it is pushed to and fetched from GitHub.
 
-If multiple agents need to work in parallel, each agent MUST use their designated workspace directory or git worktree:
-
-- **Gemini Workspace**: `D:\000 Creation Suite` (Branch prefix: `gemini/...`)
 - **Claude Workspace**: `D:\CreationSuite-Workspaces\CreationSuite-Claude` (Branch prefix: `claude/...`)
 - **Codex Workspace**: `D:\CreationSuite-Workspaces\CreationSuite-Codex` (Branch prefix: `codex/...`)
+- **Gemini Workspace**: `D:\CreationSuite-Workspaces\CreationSuite-Gemini` (Branch prefix: `gemini/...`)
 
-Never assume that untracked files, half-finished edits, or local build outputs in a shared checkout are safe to build on.
+**`D:\000 Creation Suite` is the user's own personal clone. No LLM may read, explore, build in, or otherwise touch it, for any reason** — with exactly one narrow, explicit exception: reading (never writing to) `D:\000 Creation Suite\apps\CreationEngine\vcpkg_installed` as the source for the one-time LLVM bootstrap copy described below. Nothing else in that directory is fair game. Do not extend this exception to any other file or purpose without the user saying so again, in that conversation.
+
+### Getting LLVM working in your own workspace
+
+Creation Engine needs a real, already-built LLVM install at `apps/CreationEngine/vcpkg_installed/x64-windows/` to compile `Language/`. Building it from source takes hours — never do that without an explicit, in-the-moment yes from the user (see the LLVM / vcpkg Build Rule below). Instead:
+
+1. Copy `D:\000 Creation Suite\apps\CreationEngine\vcpkg_installed` (a real, already-extracted install — ~11GB, contains `LLVMCore.lib` etc.) into your own workspace's `apps\CreationEngine\vcpkg_installed`. Plain file copy, no vcpkg command, no build — this is the one exception noted above.
+2. If that source ever goes stale or missing, the fallback is `vcpkg install` with `VCPKG_DEFAULT_BINARY_CACHE` pointed at `D:\vcpkg-cache` (see Engine's own README, per the Documentation Index below) — still needs an explicit yes first, since it can silently fall back to a real from-source build if the cache doesn't match.
+
+Do not use the same writable checkout as another agent. Never assume that untracked files, half-finished edits, or local build outputs in another agent's checkout are safe to build on — each agent's checkout is independent and may be ahead, behind, or diverged from any other at any time. To get current shared code, `git pull`/`git fetch` your own clone against `origin` — never by reading another agent's directory.
 
 ## Secrets Directory Rule
 
@@ -137,8 +144,34 @@ Always use GitHub Issues and the official GitHub Project Board (**Creation Suite
 - **Status Sync Rule**: Every time an agent completes a task, fixes an issue, or changes work status, the agent MUST immediately update the corresponding GitHub Issue and Project Board item on **Creation Suite Road Map** (Project #19), adding completion comments (`gh issue comment`) and explicitly setting the project board item Status field to **Ready for Testing** (`gh project item-edit --id <item-id> --project-id PVT_kwHOADBc_84Bet07 --field-id PVTSSF_lAHOADBc_84Bet07zhZF9co --single-select-option-id a822205a`).
 - Do not use temporary local `.md` task files as the primary task tracker.
 
-## Required Reference
+## LLVM / vcpkg Build Rule
 
-For the full concurrency and handoff process, read:
+Before running any command that touches `vcpkg`, `Language/`, or CEL/LLVM build setup in Creation Engine, read `apps/CreationEngine/README.md`'s **"Scripting language build (LLVM via vcpkg)"** section first, in full, every time — see the Documentation Index below. LLVM must never be rebuilt from source without an explicit, in-the-moment yes from the user in that exact conversation, no matter how the task is framed or how urgent it seems — same standard as the Push Authorization Rule above. Starting a build in the background and treating a same-turn status update as having asked does not satisfy this.
 
-- [docs/MULTI_AGENT_WORKFLOW.md](docs/MULTI_AGENT_WORKFLOW.md)
+## Documentation Index
+
+This file is a MAP, not a manual — it tells you which document governs a given topic; it does not restate that document's content. Before starting work in an area below, open the linked file(s) and read them, live, every session — do not rely on a memory of having read them before, and do not let anything here substitute for actually opening the file.
+
+**Suite-wide:**
+- Multi-agent concurrency/handoff process → [docs/MULTI_AGENT_WORKFLOW.md](docs/MULTI_AGENT_WORKFLOW.md)
+- Suite platform architecture → [docs/SUITE_PLATFORM_ARCHITECTURE.md](docs/SUITE_PLATFORM_ARCHITECTURE.md), [docs/architecture/Suite-Architecture.md](docs/architecture/Suite-Architecture.md)
+- Suite authored-control / trigger boundary → [docs/architecture/Suite-Control-Boundary-Plan.md](docs/architecture/Suite-Control-Boundary-Plan.md)
+- Real-time collaboration (DCC-over-the-internet, LagDaemon.com broker/P2P) → [docs/architecture/Suite-Realtime-Collaboration-Plan.md](docs/architecture/Suite-Realtime-Collaboration-Plan.md) — quick-capture spec, not yet filed as issues; larger/harder to scope than most docs here, review before breaking into milestones.
+- Suite Agent Loop (Virtual Engineer orchestration: perceive/reason/act/observe/verify, built on SuiteContextEngine + set_state) → [docs/architecture/Suite-Agent-Loop-Plan.md](docs/architecture/Suite-Agent-Loop-Plan.md) — quick-capture spec, not yet filed as issues.
+- Shared-library extraction plan/status → [docs/SHARED_EXTRACTION_PLAN.md](docs/SHARED_EXTRACTION_PLAN.md), [docs/SHARED_INFRASTRUCTURE_AUDIT_2026-07-28.md](docs/SHARED_INFRASTRUCTURE_AUDIT_2026-07-28.md)
+- Asset/VFS storage standard → [docs/standards/Suite-Asset-VFS-Standard.md](docs/standards/Suite-Asset-VFS-Standard.md)
+- Project template scaffolding → [docs/Project-Template-Generator.md](docs/Project-Template-Generator.md), [docs/Suite-Project-Template-LLM-Instructions.md](docs/Suite-Project-Template-LLM-Instructions.md)
+- Cross-app migration history/plans → [docs/migration/Migration-Plan.md](docs/migration/Migration-Plan.md), [docs/migration/Station-Engine-First-Moves.md](docs/migration/Station-Engine-First-Moves.md)
+- LLM/agent infrastructure guide → [docs/LLM-INFRASTRUCTURE-GUIDE.md](docs/LLM-INFRASTRUCTURE-GUIDE.md)
+- Each `shared/*` library has its own `README.md` (`shared/README.md` for the overview, then `shared/AssetSystem`, `shared/CEL`, `shared/CMake`, `shared/Interop`, `shared/NodeSystem`, `shared/Services`, `shared/UI`) — read the specific one before changing that library.
+- CEL language design (types, memory model, functional-paradigm features, the real-time-safe execution profile, modules) → [shared/CEL/docs/CEL_V2_LANGUAGE_SPEC.md](shared/CEL/docs/CEL_V2_LANGUAGE_SPEC.md) — read before touching CEL's grammar, sema, or intrinsic surface; tracked as GitHub issues #49–#59 on Creation-Suite.
+- Hermes (CEL package manager/distribution, LagDaemon.com store) → [shared/CEL/docs/HERMES_PACKAGE_MANAGER_SPEC.md](shared/CEL/docs/HERMES_PACKAGE_MANAGER_SPEC.md) — quick-capture spec, not yet filed as issues; read before scoping any package-management work.
+
+**Per app** (`apps/CreationEngine`, `apps/CreationMovie`, `apps/CreationStation`, `apps/CreationLive`): each has its own `AGENTS.md` (app-local policy, binding alongside this file per Scope above), `README.md` (build/setup instructions — e.g. Engine's LLVM/vcpkg section), and `docs/` folder. Always check for and read an app's own `README.md`/`AGENTS.md`/`docs/` before working in it; do not assume this index is exhaustive of what's there. Known app-specific docs as of this writing:
+- Creation Engine: [docs/CAPABILITIES.md](apps/CreationEngine/docs/CAPABILITIES.md) (scope/non-goals), [docs/GS_SCRIPTING_PLAN.md](apps/CreationEngine/docs/GS_SCRIPTING_PLAN.md) (CEL milestone plan), [docs/SCRIPTING_ABI.md](apps/CreationEngine/docs/SCRIPTING_ABI.md) (host ABI spec), [docs/CROSS_APP_LANGUAGE_DOMAINS.md](apps/CreationEngine/docs/CROSS_APP_LANGUAGE_DOMAINS.md) (intrinsic domain gating), [docs/CROSS_APP_ASSET_INTEROP.md](apps/CreationEngine/docs/CROSS_APP_ASSET_INTEROP.md)
+- Creation Movie: [docs/CAPABILITIES.md](apps/CreationMovie/docs/CAPABILITIES.md), [docs/LANGUAGE_ROLLOUT.md](apps/CreationMovie/docs/LANGUAGE_ROLLOUT.md)
+- Creation Station: [docs/Creation-Shared-Language-Rollout.md](apps/CreationStation/docs/Creation-Shared-Language-Rollout.md), [docs/Creation-Suite-AssetSystem-Standard.md](apps/CreationStation/docs/Creation-Suite-AssetSystem-Standard.md), [docs/Creation-Suite-Interop-Spec.md](apps/CreationStation/docs/Creation-Suite-Interop-Spec.md), [docs/Studio-Grade-Audio-Routing-Checklist.md](apps/CreationStation/docs/Studio-Grade-Audio-Routing-Checklist.md), [docs/Creation-Station-0.5.0-Beta-Checklist.md](apps/CreationStation/docs/Creation-Station-0.5.0-Beta-Checklist.md), [docs/STATION_CONTROL_REGISTRY_SEED.md](apps/CreationStation/docs/STATION_CONTROL_REGISTRY_SEED.md) — concrete set_state/get_state entries for the CEL control registry, seeded from a real codebase investigation
+
+**Task/status tracking:** GitHub Issues + the **Creation Suite Road Map** project board (Project #19) — see the GitHub Project Board Rule above, not a doc file.
+
+**Keeping this index honest:** if you find a document that governs a topic covered by a task you're doing, and it isn't listed here, add it here as part of that task — this index is only useful if it stays current. Conversely, if a linked file no longer exists or has been superseded, fix or remove the entry rather than leaving a dead pointer.

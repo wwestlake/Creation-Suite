@@ -235,7 +235,7 @@ ExecResult Runtime::CompileAndRun(Program& program, const std::string& entryPoin
     // generic one is safe here since CompileAndRun is only ever used for
     // pure-computation programs (see runtime.h's own comment); the
     // watchdog trampoline (the only one any GS4-style looping program
-    // can reach) only ever touches faulted/loopBudget.
+    // can reach) never dereferences anything beyond it.
     ce::lang::jit::ScriptContext ctx;
     switch (returnType) {
         case Type::Int: {

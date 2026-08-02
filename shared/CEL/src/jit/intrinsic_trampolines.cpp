@@ -6,26 +6,20 @@
 
 #include "lang/jit/script_context.h"
 
-// Every function here is the real implementation behind an
-// intrinsics.def cSymbol entry in the CORE domain (Math/Debug), plus the
-// watchdog -- extern "C", noexcept, called with whatever mutex discipline
-// the host driving the JIT'd code establishes (per the ABI's rule 6:
-// none of these lock anything themselves).
-// `ce::lang::jit::ScriptContext*` is always the first parameter, matching
-// every CEL function/intrinsic call's implicit leading argument
-// (module_builder.cpp). A host's own derived ScriptContext (e.g.
-// ce::engine::ScriptContext) is always safe to pass here -- see
-// script_context.h's own comment on why real inheritance keeps this
-// well-defined.
+// Every function here is the real implementation behind a Core-domain
+// intrinsics.def cSymbol entry (Debug, plus atan2) and the watchdog
+// tick function -- extern "C", noexcept, per the ABI's rules.
+// `ce::lang::jit::ScriptContext*` is always the first parameter,
+// matching every CEL function/intrinsic call's implicit leading
+// argument (module_builder.cpp). This file has zero World/Entity/EnTT
+// knowledge -- see apps/CreationEngine/Language/src/jit/world_intrinsics.cpp
+// for the World-domain trampolines Engine registers on top of these.
 //
 // vec3 arguments/returns cross this boundary as `float*` (3 packed
-// floats, x/y/z) rather than by value, per the ABI's rule 1 -- MSVC
-// x64's hidden-sret-pointer struct-return convention for a
-// call-by-value aggregate isn't something a hand-built LLVM `call`
-// instruction can reliably replicate, so the convention is sidestepped
-// entirely instead. String arguments cross as an explicit
-// (const char*, int64_t length) pair -- CEL strings are literal-only
-// (see type.h), so this never needs to represent an owned/heap string.
+// floats, x/y/z) rather than by value, per the ABI's rule 1. String
+// arguments cross as an explicit (const char*, int64_t length) pair --
+// CEL strings are literal-only (see type.h), so this never needs to
+// represent an owned/heap string.
 
 using ce::lang::jit::ScriptContext;
 
@@ -97,24 +91,26 @@ std::unordered_map<std::string, IntrinsicDomain> GetAbiSymbolDomains() {
     std::unordered_map<std::string, IntrinsicDomain> domains;
 // Keyed by cSymbol (not `name`) to match GetAbiTrampolines()'s own key
 // space -- RegisterAbiTrampolines looks up each AbiSymbol::name (which
-// IS the cSymbol) against this map. The pure-IR math/vec3 intrinsics'
-// cSymbol is an inert placeholder (their own name, per intrinsics.def's
-// own comment) and never appears in GetAbiTrampolines()'s real list, so
-// those entries here are simply never queried -- harmless, not a bug.
-// NOTE: this X-macro sees whichever intrinsics.def is on the include
-// path for the app currently compiling this file -- a host with its own
-// domain (e.g. Engine's World) that overrides intrinsics.def via
-// target_include_directories(... BEFORE ...) gets those extra domain
-// entries here for free, with no code change in this file.
+// IS the cSymbol) against this map. When this translation unit is
+// compiled as part of Creation Engine's build, the quoted include below
+// resolves to Engine's OWN full (Core + World) intrinsics.def via
+// include-path precedence, so this map naturally covers World-domain
+// symbols too in that context -- no code here changes based on which
+// intrinsics.def wins. The pure-IR math/vec3 intrinsics' cSymbol is an
+// inert placeholder (their own name, per intrinsics.def's own comment)
+// and never appears in GetAbiTrampolines()'s real list, so those
+// entries here are simply never queried -- harmless, not a bug.
 #define CEL_INTRINSIC0(name, cSymbol, purity, domain, ret) domains[#cSymbol] = IntrinsicDomain::domain;
 #define CEL_INTRINSIC1(name, cSymbol, purity, domain, ret, p1) domains[#cSymbol] = IntrinsicDomain::domain;
 #define CEL_INTRINSIC2(name, cSymbol, purity, domain, ret, p1, p2) domains[#cSymbol] = IntrinsicDomain::domain;
 #define CEL_INTRINSIC3(name, cSymbol, purity, domain, ret, p1, p2, p3) domains[#cSymbol] = IntrinsicDomain::domain;
+#define CEL_INTRINSIC4(name, cSymbol, purity, domain, ret, p1, p2, p3, p4) domains[#cSymbol] = IntrinsicDomain::domain;
 #include "lang/intrinsics.def"
 #undef CEL_INTRINSIC0
 #undef CEL_INTRINSIC1
 #undef CEL_INTRINSIC2
 #undef CEL_INTRINSIC3
+#undef CEL_INTRINSIC4
     return domains;
 }
 
