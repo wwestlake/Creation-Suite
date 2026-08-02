@@ -10,3 +10,9 @@
 [submodule "apps/CreationLive"]
 	path = apps/CreationLive
 	url = https://github.com/wwestlake/Creation-Live.git
+[submodule "apps/CreationTexture"]
+	path = apps/CreationTexture
+	url = https://github.com/wwestlake/Creation-Texture.git
+[submodule "apps/CreationModeler"]
+	path = apps/CreationModeler
+	url = https://github.com/wwestlake/Creation-Modeler.git
