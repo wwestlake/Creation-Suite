@@ -156,6 +156,7 @@ This file is a MAP, not a manual — it tells you which document governs a given
 - Multi-agent concurrency/handoff process → [docs/MULTI_AGENT_WORKFLOW.md](docs/MULTI_AGENT_WORKFLOW.md)
 - Suite platform architecture → [docs/SUITE_PLATFORM_ARCHITECTURE.md](docs/SUITE_PLATFORM_ARCHITECTURE.md), [docs/architecture/Suite-Architecture.md](docs/architecture/Suite-Architecture.md)
 - Suite authored-control / trigger boundary → [docs/architecture/Suite-Control-Boundary-Plan.md](docs/architecture/Suite-Control-Boundary-Plan.md)
+- Real-time collaboration (DCC-over-the-internet, LagDaemon.com broker/P2P) → [docs/architecture/Suite-Realtime-Collaboration-Plan.md](docs/architecture/Suite-Realtime-Collaboration-Plan.md) — quick-capture spec, not yet filed as issues; larger/harder to scope than most docs here, review before breaking into milestones.
 - Shared-library extraction plan/status → [docs/SHARED_EXTRACTION_PLAN.md](docs/SHARED_EXTRACTION_PLAN.md), [docs/SHARED_INFRASTRUCTURE_AUDIT_2026-07-28.md](docs/SHARED_INFRASTRUCTURE_AUDIT_2026-07-28.md)
 - Asset/VFS storage standard → [docs/standards/Suite-Asset-VFS-Standard.md](docs/standards/Suite-Asset-VFS-Standard.md)
 - Project template scaffolding → [docs/Project-Template-Generator.md](docs/Project-Template-Generator.md), [docs/Suite-Project-Template-LLM-Instructions.md](docs/Suite-Project-Template-LLM-Instructions.md)
