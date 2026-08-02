@@ -61,27 +61,14 @@ CEL_INTRINSIC2(cross, cross, Pure, Core, Vec3, Vec3, Vec3)
 CEL_INTRINSIC1(length, length, Pure, Core, Float, Vec3)
 CEL_INTRINSIC1(normalize, normalize, Pure, Core, Vec3, Vec3)
 
-// World -- real ABI, read-only. Domain World: only a host whose
-// capability profile includes World (Creation Engine's own gameplay
-// use, today) may call these.
-CEL_INTRINSIC0(world_tick, ce_world_tick, ReadsWorld, World, Int)
-CEL_INTRINSIC0(world_time, ce_world_time, ReadsWorld, World, Float)
-
-// Entity -- real ABI. Domain World.
-CEL_INTRINSIC0(spawn, ce_spawn, Mutates, World, Entity)
-CEL_INTRINSIC1(spawn_at, ce_spawn_at, Mutates, World, Entity, Vec3)
-CEL_INTRINSIC1(destroy, ce_destroy, Mutates, World, Void, Entity)
-CEL_INTRINSIC1(is_valid, ce_is_valid, ReadsWorld, World, Bool, Entity)
-CEL_INTRINSIC0(entity_count, ce_entity_count, ReadsWorld, World, Int)
-CEL_INTRINSIC1(find_by_name, ce_find_by_name, ReadsWorld, World, Entity, String)
-
-// Transform -- real ABI. Domain World.
-CEL_INTRINSIC1(get_position, ce_get_position, ReadsWorld, World, Vec3, Entity)
-CEL_INTRINSIC2(set_position, ce_set_position, Mutates, World, Void, Entity, Vec3)
-CEL_INTRINSIC1(get_rotation, ce_get_rotation, ReadsWorld, World, Vec3, Entity)
-CEL_INTRINSIC2(set_rotation, ce_set_rotation, Mutates, World, Void, Entity, Vec3)
-CEL_INTRINSIC1(get_scale, ce_get_scale, ReadsWorld, World, Vec3, Entity)
-CEL_INTRINSIC2(set_scale, ce_set_scale, Mutates, World, Void, Entity, Vec3)
+// World/Entity/Transform intrinsics are NOT part of the shared, app-
+// agnostic surface -- they are Creation Engine's own extension, defined
+// in apps/CreationEngine/Language/include/lang/intrinsics.def, which is
+// the FULL list (Core + World) and takes include-path precedence over
+// this file when compiling as part of Engine's own build (see Engine's
+// CMakeLists.txt `target_include_directories(... BEFORE PRIVATE ...)`).
+// A consuming app that has no World-like concept simply never sees this
+// file grow those sections.
 
 // Debug -- real ABI; writes to stdout, so Mutates even though it never
 // touches the World itself (purity here is about the JIT-visible memory

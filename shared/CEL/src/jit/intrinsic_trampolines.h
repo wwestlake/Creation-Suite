@@ -21,9 +21,12 @@ struct AbiSymbol {
     void* address = nullptr;
 };
 
-// Every real host-ABI trampoline this milestone implements (see
-// intrinsics.def's World/Entity/Transform/Debug sections, plus atan2)
-// and the watchdog tick function. The 14 "pure computation" math/vec3
+// Every Core-domain real host-ABI trampoline (see intrinsics.def's Debug
+// section, plus atan2) and the watchdog tick function. World-domain
+// trampolines (World/Entity/Transform) are Creation Engine's own
+// extension -- see apps/CreationEngine/Language/include/lang/jit/world_intrinsics.h's
+// GetWorldAbiTrampolines(), passed to RegisterAbiTrampolines as
+// `extraSymbols` when Engine builds. The 14 "pure computation" math/vec3
 // intrinsics never appear here -- GS4 already lowers them directly to
 // LLVM IR with no external call at all.
 std::vector<AbiSymbol> GetAbiTrampolines();

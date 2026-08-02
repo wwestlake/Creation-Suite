@@ -1,7 +1,12 @@
 #pragma once
 
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 #include <llvm/ExecutionEngine/Orc/Core.h>
 
+#include "intrinsic_trampolines.h"
 #include "lang/type.h"
 
 namespace llvm::orc {
@@ -31,6 +36,14 @@ namespace ce::lang::jit {
 // plan for why both layers still matter). ce_watchdog_tick (absent
 // from GetAbiSymbolDomains()) is always registered regardless of
 // `allowed` -- it's a runtime safety mechanism, not a script capability.
-llvm::Error RegisterAbiTrampolines(llvm::orc::LLJIT& lljit, const IntrinsicDomainSet& allowed = IntrinsicDomainSet::All());
+//
+// `extraSymbols`/`extraDomains`: a consuming app's own trampolines (e.g.
+// Creation Engine's World-domain ones, GetWorldAbiTrampolines()) merged
+// in alongside shared/CEL's own Core-domain set, filtered through the
+// exact same `allowed` check -- so an app extends the callable surface
+// without shared/CEL knowing anything about what it added.
+llvm::Error RegisterAbiTrampolines(llvm::orc::LLJIT& lljit, const IntrinsicDomainSet& allowed = IntrinsicDomainSet::All(),
+                                    const std::vector<AbiSymbol>& extraSymbols = {},
+                                    const std::unordered_map<std::string, IntrinsicDomain>& extraDomains = {});
 
 } // namespace ce::lang::jit

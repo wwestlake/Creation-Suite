@@ -68,28 +68,17 @@ public:
     // verification failure, ...).
     // GS5: every compiled CEL function now takes an implicit leading
     // ScriptContext* (see module_builder.cpp's DeclareFunctions) -- this
-    // still calls `entryPoint` exactly once, but through a real,
-    // internally-constructed ScriptContext whose `world` pointer is
-    // null. That's safe for any GS4-style pure-computation program
-    // (including ones with loops, since GS5's watchdog check touches
-    // only ctx->faulted/loopBudget, never ctx->world), but a script that
-    // calls a World-touching intrinsic (get_position, spawn, ...) here
-    // dereferences a null World and is undefined behavior -- use
-    // RunWorldProgram for anything that needs a real World.
+    // calls `entryPoint` exactly once, through a real,
+    // internally-constructed generic ce::lang::jit::ScriptContext. Safe
+    // for any GS4-style pure-computation program (including ones with
+    // loops, since GS5's watchdog check touches only
+    // ctx->faulted/loopBudget), but a script that calls a World-domain
+    // intrinsic here has nothing to dereference -- a host that needs a
+    // real per-tick World (Creation Engine) builds its own equivalent of
+    // this on top of a derived ScriptContext; see
+    // apps/CreationEngine/Language/include/lang/jit/world_runtime.h's
+    // free-function RunWorldProgram.
     ExecResult CompileAndRun(Program& program, const std::string& entryPoint, int optLevel);
-
-    // GS5: like CompileAndRun, but backed by a real, internally
-    // constructed ce::engine::World and ce::engine::ScriptContext that
-    // persist across every tick -- so spawned entities, set_position
-    // calls, and accumulated globals carry over from one call to the
-    // next exactly like a real running script would see. `entryPoint`
-    // (zero-argument, same restriction as CompileAndRun) is called once
-    // per tick, `ticks` times total; each tick, the World's tick counter
-    // is advanced and the context's elapsed-time accumulator increases
-    // by `dt` before the call. Stops early if the watchdog trips.
-    // Returns the LAST tick's result; ExecResult::faulted/faultMessage
-    // report whether the context ended up faulted.
-    ExecResult RunWorldProgram(Program& program, const std::string& entryPoint, int ticks, float dt, int optLevel);
 
     // GS4: compiles `program` to LLVM IR (no optimization, no JIT) and
     // returns its textual form, or an "error: ..." string on failure.
