@@ -137,6 +137,18 @@ Always use GitHub Issues and the official GitHub Project Board (**Creation Suite
 - **Status Sync Rule**: Every time an agent completes a task, fixes an issue, or changes work status, the agent MUST immediately update the corresponding GitHub Issue and Project Board item on **Creation Suite Road Map** (Project #19), adding completion comments (`gh issue comment`) and explicitly setting the project board item Status field to **Ready for Testing** (`gh project item-edit --id <item-id> --project-id PVT_kwHOADBc_84Bet07 --field-id PVTSSF_lAHOADBc_84Bet07zhZF9co --single-select-option-id a822205a`).
 - Do not use temporary local `.md` task files as the primary task tracker.
 
+## LLVM / vcpkg Build Rule
+
+Before running ANY command that touches `vcpkg`, `Language/`, or CEL/LLVM build setup in Creation Engine — including `vcpkg install`, a clean/fresh configure, or anything that might trigger vcpkg to (re)build a port — read `apps/CreationEngine/README.md`'s **"Scripting language build (LLVM via vcpkg)"** section first, in full, every time. Do not rely on memory of it from a prior session; re-read the live file.
+
+That section documents the machine-specific setup, most importantly:
+
+- A vcpkg binary cache already exists at **`D:\vcpkg-cache`** (set via `$env:VCPKG_DEFAULT_BINARY_CACHE`). A correctly-configured `vcpkg install` **restores LLVM from this cache in minutes** — it does NOT need to rebuild LLVM from source, which otherwise takes hours. If a build looks like it's compiling LLVM from scratch, STOP — the cache env var is almost certainly not set, not that a rebuild is actually needed.
+- LLVM must never be rebuilt from source without an explicit, in-the-moment yes from the user in that exact conversation, no matter how the task is framed — see the Push Authorization Rule above for the same standard applied here. Do not start any build in the background and treat a same-turn status update as having asked.
+- Machine-specific paths (`D:\vcpkg`, `D:\vcpkg-cache`, `D:\vcpkg-buildtrees`, the VS2022/MSVC toolset requirement) are recorded in that README section, not here — go read it rather than re-deriving or guessing them.
+
+If a doc like this exists for another app (Movie, Station, Live) and isn't referenced from here, treat that as a gap in this file worth fixing, not a reason to skip reading the app's own README.
+
 ## Required Reference
 
 For the full concurrency and handoff process, read:
