@@ -255,9 +255,27 @@ controllable state to CEL without needing a new bespoke intrinsic (and
 a compiler change) every time it grows one more setting:
 
 ```
-set_state(name: string, value: T)
+set_state(name: string, value: T)                  // global/app-level property
 get_state(name: string) -> T
+
+set_state(target: entity, name: string, value: T)   // per-object property
+get_state(target: entity, name: string) -> T
 ```
+
+**Two forms, not one — discovered while seeding Station's real registry
+entries (see `apps/CreationStation/docs/STATION_CONTROL_REGISTRY_SEED.md`).**
+A global property (`"tempo"`, `"master_gain"`) has a name that's the
+whole story — the two-argument form applies. A per-object property
+(a specific track's gain, mute, pan) is addressed by a *runtime* handle
+(the `entity`/track handle returned by `create_track` or resolved via
+LiteSemRAG grounding) plus a property name — the name (`"gain"`) is
+still a compile-time literal resolved against the registry exactly as
+before, but the target is an ordinary runtime argument, the same way
+Engine's existing `set_position(entity, vec3)` already takes a runtime
+entity handle for a compile-time-fixed operation. This doesn't reopen
+the "not actually dynamically typed" property below — the property
+*name* is still always known at compile time either way; only the
+*target* varies by form.
 
 **Not actually dynamically typed, despite the signature above.** CEL
 strings are already literal-only (existing rule, `type.h`), so the
