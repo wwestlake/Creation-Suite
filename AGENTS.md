@@ -48,6 +48,16 @@ If multiple agents need to work in parallel, each agent MUST use their designate
 
 Never assume that untracked files, half-finished edits, or local build outputs in a shared checkout are safe to build on.
 
+### Personal Development Branch Rule
+
+Each agent maintains exactly one standing, personally-named development branch per repo — `claude/development`, `codex/development`, `gemini/development` — in every repo that agent touches (the umbrella repo and any app repo). This branch is that agent's own integration point for ALL of that agent's work in that repo, across sessions:
+
+- Do not create a fresh one-off branch off `master`/`main` for every task and leave it stranded there. Branch task work off your own `<agent>/development` (creating it first if it doesn't exist yet in a given repo), and merge each finished, verified piece of work back into it as you go.
+- `<agent>/development` should always build and pass its test/smoke checks. Do not merge broken or unverified work into it.
+- Only once `<agent>/development` builds and passes testing does it become eligible for a PR to `master`/`main` on the server — opening that PR still requires the same explicit push/merge authorization as any other push to a shared branch (see Push Authorization Rule below); reaching "buildable and tested" is a precondition for asking, not authorization by itself.
+- Short-lived task branches are still fine for isolating one piece of in-progress work, but they should merge into `<agent>/development` when done, not sit alongside it indefinitely as siblings nobody reconciles.
+- Before starting new work in any repo, check whether your own `<agent>/development` branch already exists there and what's on it — real, completed work can be sitting there from an earlier session.
+
 ## Secrets Directory Rule
 
 The `Secrets/` directory contains critical credentials and private keys.
