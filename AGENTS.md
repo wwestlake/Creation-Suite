@@ -83,15 +83,23 @@ If you are not explicitly the integrator, stop at a clean branch and report:
 
 ### Push Authorization Rule
 
-`git push` is never inferred. It requires an explicit, in-the-moment instruction to push, from the user, in that exact conversation — not:
+**Pushing your own dedicated branch to `origin` is routine, not gated.** A local-only branch is volatile — it exists on one machine, in one clone, invisible to every other agent and to the user until it's on GitHub. After every commit on a branch you created for your own work (`claude/...`), push it to `origin` in the same turn, no permission needed. This is git hygiene, the same category as creating the branch in the first place — do it, don't ask.
 
-- a request that would merely be *satisfied* by something existing on the remote (e.g. "give me a link to that file" does not mean "push it")
-- a prior approval to push something else, earlier or elsewhere
+**What still requires an explicit, in-the-moment instruction from the user, in that exact conversation:**
+
+- Pushing to `main`/`master`, or to any branch you don't own (another agent's `codex/...`/`gemini/...` branch, a shared integration branch).
+- Merging a branch into `main`/`master`, opening a PR that requests merge, or otherwise advancing work past "parked on my own branch, visible on GitHub."
+- Force-pushing anything, ever — including your own branch, if it means discarding commits that exist elsewhere.
+
+None of the following count as authorization for the gated actions above:
+
+- a request that would merely be *satisfied* by something existing on the remote (e.g. "give me a link to that file" does not mean "merge it")
+- a prior approval to merge/force-push something else, earlier or elsewhere
 - the fact that a task feels finished or ready
 
-If completing a request seems to require a push and you are not the designated integrator for that repo, **stop and say so explicitly** before doing it: name the repo/branch, say a push is needed to accomplish the request, and ask. Do not act first and explain afterward. This applies even to low-risk-looking pushes (a single new doc file, a wiki page) — risk level does not change the authorization requirement.
+If completing a request seems to require one of the gated actions and you are not the designated integrator for that repo, **stop and say so explicitly** before doing it: name the repo/branch, say what's needed, and ask. Do not act first and explain afterward.
 
-This rule exists because it was already violated: a request for "a link I can paste into a ticket" was read as implicit permission to commit and push, which it was not, and the resulting push also carried unrelated staged submodule-pointer changes along with it (see Commit Scope Rule below).
+This rule was rewritten after repeated real-world friction: agents were treating "never push" as blanket policy and leaving work stranded in local-only branches indefinitely — the opposite of the original intent, which was only ever to gate *merging into main* and *force-pushing*. The original violation this rule was built to prevent (a request for "a link I can paste into a ticket" read as implicit permission to commit and push, which also carried unrelated staged submodule-pointer changes along with it) is still fully covered — that was a push to a shared/integration context, not a routine push of your own branch. See Commit Scope Rule below.
 
 ## Commit Scope Rule
 
