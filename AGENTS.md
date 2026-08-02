@@ -38,15 +38,15 @@ This workspace is a development/evaluation environment by default.
 
 ## Multi-Agent Rule
 
-Do not use the same writable checkout as another agent.
+Each LLM has its own fully independent `git clone` of the Creation Suite umbrella repo, with its own independently-cloned submodules underneath (`apps/CreationEngine`, `apps/CreationLive`, `apps/CreationMovie`, `apps/CreationStation`) — not a git worktree, not a shared checkout. Each one has its own separate `.git` object database, so nothing done in one is visible in another until it is pushed to and fetched from GitHub.
 
-If multiple agents need to work in parallel, each agent MUST use their designated workspace directory or git worktree:
-
-- **Gemini Workspace**: `D:\000 Creation Suite` (Branch prefix: `gemini/...`)
 - **Claude Workspace**: `D:\CreationSuite-Workspaces\CreationSuite-Claude` (Branch prefix: `claude/...`)
 - **Codex Workspace**: `D:\CreationSuite-Workspaces\CreationSuite-Codex` (Branch prefix: `codex/...`)
+- **Gemini Workspace**: `D:\CreationSuite-Workspaces\CreationSuite-Gemini` (Branch prefix: `gemini/...`)
 
-Never assume that untracked files, half-finished edits, or local build outputs in a shared checkout are safe to build on.
+**`D:\000 Creation Suite` is the user's own personal clone. No LLM may read, explore, build in, or otherwise touch it, for any reason.** It is not a fallback, not a reference copy, not a shared workspace — treat it as off-limits, full stop.
+
+Do not use the same writable checkout as another agent. Never assume that untracked files, half-finished edits, or local build outputs in another agent's checkout are safe to build on — each agent's checkout is independent and may be ahead, behind, or diverged from any other at any time. To get current shared code, `git pull`/`git fetch` your own clone against `origin` — never by reading another agent's directory.
 
 ## Secrets Directory Rule
 
