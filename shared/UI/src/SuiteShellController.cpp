@@ -343,15 +343,16 @@ private:
         juce::String openError;
         if (creation::assets::ProjectSession::open(selected->containerFile, session, openError))
         {
-            text << "Asset Catalog (" << session.getEntries().size() << " entries total):\n";
+            const auto entryPaths = session.listEntryPaths();
+            text << "Asset Catalog (" << entryPaths.size() << " entries total):\n";
             int audioCount = 0, videoCount = 0, stateCount = 0;
-            for (const auto& entry : session.getEntries())
+            for (const auto& logicalPath : entryPaths)
             {
-                if (entry.logicalPath.endsWithIgnoreCase(".wav") || entry.logicalPath.endsWithIgnoreCase(".mp3") || entry.logicalPath.endsWithIgnoreCase(".flac"))
+                if (logicalPath.endsWithIgnoreCase(".wav") || logicalPath.endsWithIgnoreCase(".mp3") || logicalPath.endsWithIgnoreCase(".flac"))
                     ++audioCount;
-                else if (entry.logicalPath.endsWithIgnoreCase(".mp4") || entry.logicalPath.endsWithIgnoreCase(".mov"))
+                else if (logicalPath.endsWithIgnoreCase(".mp4") || logicalPath.endsWithIgnoreCase(".mov"))
                     ++videoCount;
-                else if (entry.logicalPath.endsWithIgnoreCase(".xml") || entry.logicalPath.endsWithIgnoreCase(".json"))
+                else if (logicalPath.endsWithIgnoreCase(".xml") || logicalPath.endsWithIgnoreCase(".json"))
                     ++stateCount;
             }
             text << "  - Audio Files: " << audioCount << "\n";

@@ -4,7 +4,6 @@ add_library(creation_suite_asset_system STATIC
     src/AssetMaterializer.cpp
     src/AssetResolver.cpp
     src/ProjectAssetService.cpp
-    src/ProjectContainerIO.cpp
     src/ProjectContainerService.cpp
     src/ProjectSession.cpp
     src/ProjectWorkspaceService.cpp
@@ -15,7 +14,7 @@ add_library(creation_suite_asset_system STATIC
 )
 
 target_include_directories(creation_suite_asset_system PUBLIC include)
-target_link_libraries(creation_suite_asset_system PUBLIC juce::juce_core)
+target_link_libraries(creation_suite_asset_system PUBLIC juce::juce_core creation_suite_vfs)
 target_compile_features(creation_suite_asset_system PUBLIC cxx_std_20)
 
 add_executable(creation_suite_asset_system_smoke

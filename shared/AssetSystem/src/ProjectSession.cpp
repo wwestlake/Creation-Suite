@@ -1,5 +1,15 @@
 #include "creation/assets/ProjectSession.h"
 
+namespace
+{
+// Reserved logical size for a freshly created container. The backing file
+// is an NTFS sparse file, so this costs no real disk space up front --
+// FatFs just needs a fixed volume size to format against. FAT32 caps a
+// single file at 4GB regardless of volume size; exFAT support (VFS-M3)
+// is what actually lifts that per-file ceiling.
+constexpr juce::int64 kDefaultContainerSizeBytes = 4LL * 1024 * 1024 * 1024;
+}
+
 namespace creation::assets
 {
 juce::String ProjectSession::normalizeLogicalPath(const juce::String& logicalPath)
@@ -18,12 +28,25 @@ bool ProjectSession::createNew(const creation::suite::SuiteSettings& settings,
                                ProjectSession& outSession,
                                juce::String& errorMessage)
 {
-    juce::ignoreUnused(errorMessage);
+    if (outSession.volume.isOpen())
+    {
+        errorMessage = "This ProjectSession is already open.";
+        return false;
+    }
 
-    outSession.containerFile = creation::suite::getProjectContainerPath(settings, appDomain, projectName);
+    const auto containerPath = creation::suite::getProjectContainerPath(settings, appDomain, projectName);
+    const auto parentDirectory = containerPath.getParentDirectory();
+    if (! parentDirectory.exists() && ! parentDirectory.createDirectory())
+    {
+        errorMessage = "Could not create the target project container directory.";
+        return false;
+    }
+
+    if (! outSession.volume.createAndFormat(containerPath, kDefaultContainerSizeBytes, errorMessage))
+        return false;
+
+    outSession.containerFile = containerPath;
     outSession.manifest = creation::suite::createDefaultManifest(projectName, appDomain, suiteVersion, appVersion);
-    outSession.entries.clearQuick();
-    outSession.baselineRevision = -1;
     return true;
 }
 
@@ -31,21 +54,65 @@ bool ProjectSession::open(const juce::File& containerFileToOpen,
                           ProjectSession& outSession,
                           juce::String& errorMessage)
 {
-    ProjectManifest loadedManifest;
-    juce::Array<ProjectContainerEntry> loadedEntries;
-    if (! ProjectContainerIO::readContainer(containerFileToOpen, loadedManifest, loadedEntries, errorMessage))
+    if (outSession.volume.isOpen())
+    {
+        errorMessage = "This ProjectSession is already open.";
         return false;
+    }
+
+    if (! outSession.volume.open(containerFileToOpen, errorMessage))
+        return false;
+
+    juce::MemoryBlock manifestData;
+    if (! outSession.volume.readFile(ProjectContainerPaths::manifestPath, manifestData, errorMessage))
+    {
+        errorMessage = "The suite project container does not contain a project manifest.";
+        outSession.volume.close();
+        return false;
+    }
+
+    const auto manifestText = juce::String::fromUTF8(static_cast<const char*>(manifestData.getData()),
+                                                      static_cast<int>(manifestData.getSize()));
+    ProjectManifest loadedManifest;
+    if (! deserializeManifest(manifestText, loadedManifest, errorMessage))
+    {
+        outSession.volume.close();
+        return false;
+    }
 
     outSession.containerFile = containerFileToOpen;
     outSession.manifest = std::move(loadedManifest);
-    outSession.entries = std::move(loadedEntries);
-    outSession.baselineRevision = outSession.manifest.revision;
     return true;
+}
+
+bool ProjectSession::peekManifest(const juce::File& containerFile,
+                                  ProjectManifest& outManifest,
+                                  juce::String& errorMessage)
+{
+    creation::vfs::SuiteVolume volume;
+    if (! volume.open(containerFile, errorMessage))
+        return false;
+
+    juce::MemoryBlock manifestData;
+    if (! volume.readFile(ProjectContainerPaths::manifestPath, manifestData, errorMessage))
+    {
+        errorMessage = "The suite project container does not contain a project manifest.";
+        return false;
+    }
+
+    const auto manifestText = juce::String::fromUTF8(static_cast<const char*>(manifestData.getData()),
+                                                      static_cast<int>(manifestData.getSize()));
+    return deserializeManifest(manifestText, outManifest, errorMessage);
+}
+
+void ProjectSession::close()
+{
+    volume.close();
 }
 
 bool ProjectSession::isValid() const noexcept
 {
-    return containerFile != juce::File() && manifest.projectId.isNotEmpty();
+    return volume.isOpen() && manifest.projectId.isNotEmpty();
 }
 
 const juce::File& ProjectSession::getContainerFile() const noexcept
@@ -63,34 +130,22 @@ ProjectManifest& ProjectSession::getManifest() noexcept
     return manifest;
 }
 
-const juce::Array<ProjectContainerEntry>& ProjectSession::getEntries() const noexcept
+juce::StringArray ProjectSession::listEntryPaths() const
 {
-    return entries;
+    auto paths = volume.listFiles();
+    paths.removeString(ProjectContainerPaths::manifestPath);
+    return paths;
 }
 
-int ProjectSession::findEntryIndex(const juce::String& logicalPath) const noexcept
+bool ProjectSession::containsEntry(const juce::String& logicalPath) const
 {
-    const auto normalized = normalizeLogicalPath(logicalPath);
-    for (int index = 0; index < entries.size(); ++index)
-        if (entries.getReference(index).logicalPath == normalized)
-            return index;
-
-    return -1;
-}
-
-bool ProjectSession::containsEntry(const juce::String& logicalPath) const noexcept
-{
-    return findEntryIndex(logicalPath) >= 0;
+    return volume.fileExists(normalizeLogicalPath(logicalPath));
 }
 
 bool ProjectSession::readEntry(const juce::String& logicalPath, juce::MemoryBlock& outData) const
 {
-    const auto index = findEntryIndex(logicalPath);
-    if (index < 0)
-        return false;
-
-    outData = entries.getReference(index).data;
-    return true;
+    juce::String errorMessage;
+    return volume.readFile(normalizeLogicalPath(logicalPath), outData, errorMessage);
 }
 
 bool ProjectSession::writeEntry(const juce::String& logicalPath,
@@ -98,21 +153,15 @@ bool ProjectSession::writeEntry(const juce::String& logicalPath,
                                 juce::Time modifiedAt,
                                 int compressionLevel)
 {
+    juce::ignoreUnused(modifiedAt, compressionLevel);
+
     const auto normalized = normalizeLogicalPath(logicalPath);
     if (normalized.isEmpty() || normalized == ProjectContainerPaths::manifestPath)
         return false;
 
-    ProjectContainerEntry entry;
-    entry.logicalPath = normalized;
-    entry.data = data;
-    entry.modifiedAt = modifiedAt;
-    entry.compressionLevel = juce::jlimit(0, 9, compressionLevel);
-
-    const auto existingIndex = findEntryIndex(normalized);
-    if (existingIndex >= 0)
-        entries.getReference(existingIndex) = std::move(entry);
-    else
-        entries.add(std::move(entry));
+    juce::String errorMessage;
+    if (! volume.writeFile(normalized, data, errorMessage))
+        return false;
 
     manifest.modifiedAt = juce::Time::getCurrentTime();
     ++manifest.revision;
@@ -139,7 +188,7 @@ bool ProjectSession::writeEntryFromFile(const juce::String& logicalPath,
 
     if (! writeEntry(logicalPath, data, sourceFile.getLastModificationTime(), compressionLevel))
     {
-        errorMessage = "Could not stage the entry into the project session.";
+        errorMessage = "Could not write the entry into the project container.";
         return false;
     }
 
@@ -148,11 +197,14 @@ bool ProjectSession::writeEntryFromFile(const juce::String& logicalPath,
 
 bool ProjectSession::removeEntry(const juce::String& logicalPath)
 {
-    const auto existingIndex = findEntryIndex(logicalPath);
-    if (existingIndex < 0)
+    const auto normalized = normalizeLogicalPath(logicalPath);
+    if (! volume.fileExists(normalized))
         return false;
 
-    entries.remove(existingIndex);
+    juce::String errorMessage;
+    if (! volume.deleteFile(normalized, errorMessage))
+        return false;
+
     manifest.modifiedAt = juce::Time::getCurrentTime();
     ++manifest.revision;
     return true;
@@ -202,7 +254,7 @@ bool ProjectSession::materializeEntry(const creation::suite::SuiteSettings& sett
     }
 
     return AssetMaterializer::materializeEntry(settings,
-                                               containerFile,
+                                               volume,
                                                manifest.projectId,
                                                logicalPath,
                                                access,
@@ -267,48 +319,6 @@ bool ProjectSession::reconcileMaterializedEntry(const creation::suite::SuiteSett
     return true;
 }
 
-bool ProjectSession::hasExternalChanges(juce::String& errorMessage) const
-{
-    errorMessage.clear();
-
-    if (! isValid())
-    {
-        errorMessage = "The project session is not valid.";
-        return false;
-    }
-
-    if (! containerFile.existsAsFile())
-        return baselineRevision >= 0;
-
-    ProjectManifest currentManifest;
-    if (! ProjectContainerIO::readManifest(containerFile, currentManifest, errorMessage))
-        return false;
-
-    if (currentManifest.projectId != manifest.projectId)
-    {
-        errorMessage = "The target container path now points at a different project.";
-        return true;
-    }
-
-    return baselineRevision >= 0 && currentManifest.revision != baselineRevision;
-}
-
-bool ProjectSession::reloadFromDisk(juce::String& errorMessage)
-{
-    if (! containerFile.existsAsFile())
-    {
-        errorMessage = "The suite project container no longer exists on disk.";
-        return false;
-    }
-
-    ProjectSession reloaded;
-    if (! open(containerFile, reloaded, errorMessage))
-        return false;
-
-    *this = std::move(reloaded);
-    return true;
-}
-
 bool ProjectSession::commit(juce::String& errorMessage)
 {
     if (! isValid())
@@ -317,33 +327,10 @@ bool ProjectSession::commit(juce::String& errorMessage)
         return false;
     }
 
-    juce::String externalStateError;
-    const auto hasConflicts = hasExternalChanges(externalStateError);
-    if (externalStateError.isNotEmpty() && ! hasConflicts)
-    {
-        errorMessage = externalStateError;
-        return false;
-    }
-
-    if (hasConflicts)
-    {
-        errorMessage = externalStateError.isNotEmpty()
-                           ? externalStateError
-                           : "The suite project container changed on disk after this session was opened.";
-        if (errorMessage == "The target container path now points at a different project.")
-            return false;
-        if (errorMessage.isEmpty())
-            errorMessage = "The suite project container changed on disk after this session was opened.";
-        else if (! errorMessage.containsIgnoreCase("different project"))
-            errorMessage = "The suite project container changed on disk after this session was opened.";
-        return false;
-    }
-
     manifest.modifiedAt = juce::Time::getCurrentTime();
-    if (! ProjectContainerIO::writeContainer(containerFile, manifest, entries, errorMessage))
-        return false;
+    const auto manifestText = serializeManifest(manifest, true);
+    const juce::MemoryBlock manifestData(manifestText.toRawUTF8(), manifestText.getNumBytesAsUTF8());
 
-    baselineRevision = manifest.revision;
-    return true;
+    return volume.writeFile(ProjectContainerPaths::manifestPath, manifestData, errorMessage);
 }
 }

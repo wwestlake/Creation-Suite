@@ -27,6 +27,11 @@ public:
     SuiteVolume(const SuiteVolume&) = delete;
     SuiteVolume& operator=(const SuiteVolume&) = delete;
 
+    // Movable so owning types (ProjectSession) can be returned/relocated
+    // without needing a second mount of the same container file.
+    SuiteVolume(SuiteVolume&& other) noexcept;
+    SuiteVolume& operator=(SuiteVolume&& other) noexcept;
+
     // Creates a brand-new container file at containerFile (must not already
     // exist) as an NTFS sparse file reporting sizeBytes logically, formats
     // the whole logical size as one fresh FAT volume, then leaves it mounted
@@ -52,6 +57,10 @@ public:
     bool readFile(const juce::String& logicalPath, juce::MemoryBlock& outData, juce::String& errorMessage) const;
     bool deleteFile(const juce::String& logicalPath, juce::String& errorMessage);
     bool fileExists(const juce::String& logicalPath) const;
+
+    // Recursively lists every file's logical path in the volume (directories
+    // are not included). Order is not guaranteed.
+    juce::StringArray listFiles() const;
 
 private:
     bool acquireDriveSlot(juce::String& errorMessage);

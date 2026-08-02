@@ -2,7 +2,6 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 
-#include <creation/assets/ProjectContainerIO.h>
 #include <creation/assets/ProjectContainerService.h>
 #include <creation/suite/SuiteSettings.h>
 #include <creation/ui/CreationSuiteHeaderBar.h>

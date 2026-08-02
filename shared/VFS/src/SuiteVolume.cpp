@@ -16,6 +16,25 @@ namespace {
 
 constexpr juce::int64 kSectorSize = 512;
 
+void CollectFiles(const juce::String& drivePrefix, const juce::String& relativePath, juce::StringArray& outPaths) {
+    const auto path = relativePath.isEmpty() ? drivePrefix : drivePrefix + relativePath;
+
+    DIR dir{};
+    if (f_opendir(&dir, path.toRawUTF8()) != FR_OK)
+        return;
+
+    FILINFO info{};
+    while (f_readdir(&dir, &info) == FR_OK && info.fname[0] != 0) {
+        const juce::String name(info.fname);
+        const auto childPath = relativePath.isEmpty() ? name : relativePath + "/" + name;
+        if (info.fattrib & AM_DIR)
+            CollectFiles(drivePrefix, childPath, outPaths);
+        else
+            outPaths.add(childPath);
+    }
+    f_closedir(&dir);
+}
+
 juce::CriticalSection& DriveSlotLock() {
     static juce::CriticalSection lock;
     return lock;
@@ -32,6 +51,28 @@ SuiteVolume::SuiteVolume() : mountState(std::make_unique<MountState>()) {}
 
 SuiteVolume::~SuiteVolume() {
     close();
+}
+
+SuiteVolume::SuiteVolume(SuiteVolume&& other) noexcept
+    : driveIndex(other.driveIndex),
+      mounted(other.mounted),
+      openContainerFile(std::move(other.openContainerFile)),
+      mountState(std::move(other.mountState)) {
+    other.driveIndex = -1;
+    other.mounted = false;
+}
+
+SuiteVolume& SuiteVolume::operator=(SuiteVolume&& other) noexcept {
+    if (this != &other) {
+        close();
+        driveIndex = other.driveIndex;
+        mounted = other.mounted;
+        openContainerFile = std::move(other.openContainerFile);
+        mountState = std::move(other.mountState);
+        other.driveIndex = -1;
+        other.mounted = false;
+    }
+    return *this;
 }
 
 bool SuiteVolume::acquireDriveSlot(juce::String& errorMessage) {
@@ -268,6 +309,15 @@ bool SuiteVolume::fileExists(const juce::String& logicalPath) const {
         return false;
     FILINFO info{};
     return f_stat(drivePrefixedPath(logicalPath).toRawUTF8(), &info) == FR_OK;
+}
+
+juce::StringArray SuiteVolume::listFiles() const {
+    juce::StringArray results;
+    if (! mounted)
+        return results;
+
+    CollectFiles(juce::String(driveIndex) + ":/", {}, results);
+    return results;
 }
 
 } // namespace creation::vfs

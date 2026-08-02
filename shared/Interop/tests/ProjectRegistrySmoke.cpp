@@ -1,4 +1,4 @@
-#include <creation/assets/ProjectContainerIO.h>
+#include <creation/assets/ProjectSession.h>
 #include <creation/interop/ProjectRegistry.h>
 #include <creation/suite/SuiteStoragePaths.h>
 
@@ -27,29 +27,33 @@ int main()
         settings.suiteVfsRoot = tempRoot.getChildFile("SuiteRoot").getFullPathName();
         settings.projectContainersRoot = tempRoot.getChildFile("Containers").getFullPathName();
 
-        const auto stationManifest = creation::suite::createDefaultManifest("Station Project",
-                                                                            creation::assets::SuiteAppDomain::station,
-                                                                            "0.1.0",
-                                                                            "0.1.0");
-        const auto movieManifest = creation::suite::createDefaultManifest("Movie Project",
-                                                                          creation::assets::SuiteAppDomain::movie,
-                                                                          "0.1.0",
-                                                                          "0.1.0");
-
         juce::String errorMessage;
-        if (! creation::assets::ProjectContainerIO::writeContainer(
-                creation::suite::getProjectContainerPath(settings, creation::assets::SuiteAppDomain::station, stationManifest.projectName),
-                stationManifest,
-                {},
-                errorMessage))
-            fail("Failed writing station container: " + errorMessage.toStdString());
 
-        if (! creation::assets::ProjectContainerIO::writeContainer(
-                creation::suite::getProjectContainerPath(settings, creation::assets::SuiteAppDomain::movie, movieManifest.projectName),
-                movieManifest,
-                {},
-                errorMessage))
-            fail("Failed writing movie container: " + errorMessage.toStdString());
+        creation::assets::ProjectSession stationSession;
+        if (! creation::assets::ProjectSession::createNew(settings,
+                                                          creation::assets::SuiteAppDomain::station,
+                                                          "Station Project",
+                                                          "0.1.0",
+                                                          "0.1.0",
+                                                          stationSession,
+                                                          errorMessage))
+            fail("Failed creating station container: " + errorMessage.toStdString());
+        if (! stationSession.commit(errorMessage))
+            fail("Failed committing station container: " + errorMessage.toStdString());
+        stationSession.close();
+
+        creation::assets::ProjectSession movieSession;
+        if (! creation::assets::ProjectSession::createNew(settings,
+                                                          creation::assets::SuiteAppDomain::movie,
+                                                          "Movie Project",
+                                                          "0.1.0",
+                                                          "0.1.0",
+                                                          movieSession,
+                                                          errorMessage))
+            fail("Failed creating movie container: " + errorMessage.toStdString());
+        if (! movieSession.commit(errorMessage))
+            fail("Failed committing movie container: " + errorMessage.toStdString());
+        movieSession.close();
 
         auto projects = creation::interop::ProjectRegistry::discoverProjects(settings, errorMessage);
         if (projects.size() != 2)

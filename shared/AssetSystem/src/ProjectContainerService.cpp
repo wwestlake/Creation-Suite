@@ -53,7 +53,7 @@ juce::Array<ProjectContainerService::ProjectSummary> ProjectContainerService::li
     {
         ProjectManifest manifest;
         juce::String manifestError;
-        if (! ProjectContainerIO::readManifest(containerFile, manifest, manifestError))
+        if (! ProjectSession::peekManifest(containerFile, manifest, manifestError))
         {
             if (errorMessage.isEmpty())
                 errorMessage = "Some project containers could not be read.";

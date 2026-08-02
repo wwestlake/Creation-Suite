@@ -1,6 +1,5 @@
 #include "creation/assets/AssetMaterializer.h"
 
-#include "creation/assets/VirtualFileSystem.h"
 #include "creation/suite/SuiteStoragePaths.h"
 
 namespace creation::assets
@@ -17,19 +16,18 @@ juce::String normalizeLogicalPath(const juce::String& logicalPath)
 }
 
 bool AssetMaterializer::materializeEntry(const creation::suite::SuiteSettings& settings,
-                                         const juce::File& containerFile,
+                                         const creation::vfs::SuiteVolume& volume,
                                          const juce::String& projectId,
                                          const juce::String& logicalPath,
                                          MaterializationAccess access,
                                          MaterializedAssetLease& outLease,
                                          juce::String& errorMessage)
 {
-    VirtualFileSystem vfs;
-    if (! vfs.mount(containerFile))
-    {
-        errorMessage = "Could not mount the suite project container for materialization.";
+    const auto normalized = normalizeLogicalPath(logicalPath);
+
+    juce::MemoryBlock data;
+    if (! volume.readFile(normalized, data, errorMessage))
         return false;
-    }
 
     const auto materializedRoot = creation::suite::getMaterializedFilesDirectory(settings, projectId);
     if (! materializedRoot.exists() && ! materializedRoot.createDirectory())
@@ -38,18 +36,26 @@ bool AssetMaterializer::materializeEntry(const creation::suite::SuiteSettings& s
         return false;
     }
 
-    auto normalized = normalizeLogicalPath(logicalPath);
-    auto leaseId = juce::Uuid().toString();
-    auto leaseRoot = materializedRoot.getChildFile("leases").getChildFile(leaseId);
-
+    const auto leaseId = juce::Uuid().toString();
+    const auto leaseRoot = materializedRoot.getChildFile("leases").getChildFile(leaseId);
     if (! leaseRoot.createDirectory())
     {
         errorMessage = "Could not create the isolated materialization lease directory.";
         return false;
     }
 
-    if (! vfs.materializeEntry(normalized, leaseRoot, errorMessage, true))
+    const auto materializedFile = leaseRoot.getChildFile(normalized.replaceCharacter('/', juce::File::getSeparatorChar()));
+    if (! materializedFile.getParentDirectory().createDirectory())
+    {
+        errorMessage = "Could not create the materialization lease's asset directory.";
         return false;
+    }
+
+    if (! materializedFile.replaceWithData(data.getData(), data.getSize()))
+    {
+        errorMessage = "Could not write the materialized asset file.";
+        return false;
+    }
 
     outLease.logicalPath = normalized;
     outLease.projectId = projectId;
@@ -57,22 +63,12 @@ bool AssetMaterializer::materializeEntry(const creation::suite::SuiteSettings& s
     outLease.materializedAt = juce::Time::getCurrentTime();
     outLease.materializedRoot = materializedRoot;
     outLease.leaseRoot = leaseRoot;
-    outLease.materializedFile = leaseRoot.getChildFile(normalized.replaceCharacter('/', juce::File::getSeparatorChar()));
+    outLease.materializedFile = materializedFile;
     outLease.access = access;
+    outLease.sourceModifiedAt = materializedFile.getLastModificationTime();
+    outLease.sourceSizeBytes = materializedFile.getSize();
 
-    if (! outLease.materializedFile.existsAsFile())
-    {
-        errorMessage = "The materialized lease file was not created.";
-        return false;
-    }
-
-    outLease.sourceModifiedAt = outLease.materializedFile.getLastModificationTime();
-    outLease.sourceSizeBytes = outLease.materializedFile.getSize();
-
-    if (access == MaterializationAccess::readOnly)
-        outLease.materializedFile.setReadOnly(true);
-    else
-        outLease.materializedFile.setReadOnly(false);
+    materializedFile.setReadOnly(access == MaterializationAccess::readOnly);
 
     return true;
 }
