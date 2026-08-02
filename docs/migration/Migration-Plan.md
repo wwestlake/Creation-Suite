@@ -50,10 +50,10 @@ Move common CMake/LLVM/dependency helpers into `shared/CMake/`.
 
 Add `shared/Interop/` for:
 
-- project registry
-- cross-app asset references
+- project registry (discovery: which projects exist, which domain they originated in — not an ownership boundary)
+- cross-app asset references (kind-based capability: any app opens any project; an app uses what it understands)
 - compatibility/version rules
-- import/export contracts
+- multi-process write coordination for one project open in more than one app at once — see `docs/architecture/Suite-Shared-Project-Model.md`
 
 ## Phase 7: App Refactors
 

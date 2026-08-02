@@ -91,10 +91,10 @@ Build target now scaffolded:
 
 Will own:
 
-- cross-app project registry
-- shared asset reference rules
+- cross-app project registry (discovery, not ownership -- any app can open any project)
+- shared asset reference rules (kind-based capability: an app uses what it understands in a project it has open)
 - compatibility and versioning rules
-- cross-app import/export contracts
+- multi-process write coordination for one project open in more than one app at once -- see docs/architecture/Suite-Shared-Project-Model.md
 
 Build target now scaffolded:
 

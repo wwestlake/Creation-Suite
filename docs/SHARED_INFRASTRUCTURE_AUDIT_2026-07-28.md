@@ -307,10 +307,10 @@ Not implemented yet.
 
 Needed:
 
-- suite-level registry of app roots and projects
-- cross-app asset reference rules
+- suite-level registry of app roots and projects (discovery, not ownership -- any app can open any project)
+- cross-app asset reference rules (kind-based capability, not import/export -- see docs/architecture/Suite-Shared-Project-Model.md)
 - compatibility/version policies
-- shared import/export contracts
+- multi-process write coordination for one project open in more than one app at once
 - durable IDs and version resolution rules
 
 ### 6. Shared AI/BYOK Runtime

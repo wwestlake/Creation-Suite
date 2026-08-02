@@ -272,24 +272,28 @@ Needed:
 
 This is what protects the artist's originals and makes cross-app reuse trustworthy.
 
-### 7. Cross-App Interop Layer
+### 7. Shared Project Model
 
 Purpose:
 
 - let apps share work without ambiguity
 
+A project is a VFS container, not an app-owned silo. Any app can open any project — opening is opening, not importing. Any app can store its own assets into a project it has open; any other app with that same project open, and that understands the asset's kind, can see and use it. There is no import/export step between suite apps for this — see `docs/architecture/Suite-Shared-Project-Model.md` for the full model and the real open problem it creates (multiple app processes with the same project open at once, and how writes get coordinated).
+
+("Import/export" still applies to interchange with tools *outside* the suite — glTF, third-party DCC formats — see section 8. It does not apply between Creation Suite apps.)
+
 Needed:
 
-- shared project registry
-- cross-app asset reference rules
+- shared project registry (discovery: which projects exist, which domain they originated in)
+- cross-app asset reference rules (kind-based capability: an app uses what it understands)
 - compatibility rules
-- import/export contract definitions
 - domain capability descriptors
+- multi-process write coordination for one project open in more than one app at once (open problem, see the shared project model doc)
 
 Examples:
 
-- Creation Station render to shared asset, then Creation Movie consumes it
-- Creation Engine renders a movie or image sequence, then Creation Movie references it
+- Creation Station and Creation Movie have the same project open at once; a sound recorded in Station appears in Movie's view of that project without any export/import action
+- Creation Engine renders into a project; any other app with that project open that understands the render's asset kind can use it directly
 - CEL code shared as a Suite-level artifact that multiple apps can compile under their own domain policies
 
 ### 8. Shared Declarative 3D Scene Asset System
