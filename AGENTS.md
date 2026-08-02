@@ -44,7 +44,14 @@ Each LLM has its own fully independent `git clone` of the Creation Suite umbrell
 - **Codex Workspace**: `D:\CreationSuite-Workspaces\CreationSuite-Codex` (Branch prefix: `codex/...`)
 - **Gemini Workspace**: `D:\CreationSuite-Workspaces\CreationSuite-Gemini` (Branch prefix: `gemini/...`)
 
-**`D:\000 Creation Suite` is the user's own personal clone. No LLM may read, explore, build in, or otherwise touch it, for any reason.** It is not a fallback, not a reference copy, not a shared workspace — treat it as off-limits, full stop.
+**`D:\000 Creation Suite` is the user's own personal clone. No LLM may read, explore, build in, or otherwise touch it, for any reason** — with exactly one narrow, explicit exception: reading (never writing to) `D:\000 Creation Suite\apps\CreationEngine\vcpkg_installed` as the source for the one-time LLVM bootstrap copy described below. Nothing else in that directory is fair game. Do not extend this exception to any other file or purpose without the user saying so again, in that conversation.
+
+### Getting LLVM working in your own workspace
+
+Creation Engine needs a real, already-built LLVM install at `apps/CreationEngine/vcpkg_installed/x64-windows/` to compile `Language/`. Building it from source takes hours — never do that without an explicit, in-the-moment yes from the user (see the LLVM / vcpkg Build Rule below). Instead:
+
+1. Copy `D:\000 Creation Suite\apps\CreationEngine\vcpkg_installed` (a real, already-extracted install — ~11GB, contains `LLVMCore.lib` etc.) into your own workspace's `apps\CreationEngine\vcpkg_installed`. Plain file copy, no vcpkg command, no build — this is the one exception noted above.
+2. If that source ever goes stale or missing, the fallback is `vcpkg install` with `VCPKG_DEFAULT_BINARY_CACHE` pointed at `D:\vcpkg-cache` (see Engine's own README, per the Documentation Index below) — still needs an explicit yes first, since it can silently fall back to a real from-source build if the cache doesn't match.
 
 Do not use the same writable checkout as another agent. Never assume that untracked files, half-finished edits, or local build outputs in another agent's checkout are safe to build on — each agent's checkout is independent and may be ahead, behind, or diverged from any other at any time. To get current shared code, `git pull`/`git fetch` your own clone against `origin` — never by reading another agent's directory.
 
