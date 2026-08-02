@@ -32,6 +32,29 @@ const char* BinaryOpSpelling(BinaryOp op) {
     return "?";
 }
 
+// Vec2/Vec3/Vec4 share identical operator eligibility (componentwise
+// +/-, scalar */÷, equality) -- this collects them so CheckBinary/
+// CheckUnary don't repeat a three-way OR at every call site. Deliberately
+// NOT "any aggregate type" -- if a non-vector aggregate is ever added,
+// it should get its own explicit eligibility, not silently inherit this.
+bool IsVecType(Type t) {
+    return t == Type::Vec2 || t == Type::Vec3 || t == Type::Vec4;
+}
+
+// Component count for a vector type -- the one piece of size-specific
+// knowledge sema needs (to validate a member-access field letter);
+// codegen has its own copy of this same mapping (module_builder.cpp)
+// since the two are compiled from different translation units with no
+// shared header for it -- see VecComponentCount there.
+int VecComponentCount(Type t) {
+    switch (t) {
+        case Type::Vec2: return 2;
+        case Type::Vec3: return 3;
+        case Type::Vec4: return 4;
+        default: return 0;
+    }
+}
+
 const char* AssignOpSpelling(AssignOp op) {
     switch (op) {
         case AssignOp::Assign: return "=";
@@ -114,11 +137,15 @@ private:
 #define CEL_INTRINSIC3(name, cSymbol, purity, domain, ret, p1, p2, p3) \
     functions_[#name] = FunctionSignature{ { Type::p1, Type::p2, Type::p3 }, Type::ret }; \
     intrinsicDomains_[#name] = IntrinsicDomain::domain;
+#define CEL_INTRINSIC4(name, cSymbol, purity, domain, ret, p1, p2, p3, p4) \
+    functions_[#name] = FunctionSignature{ { Type::p1, Type::p2, Type::p3, Type::p4 }, Type::ret }; \
+    intrinsicDomains_[#name] = IntrinsicDomain::domain;
 #include "lang/intrinsics.def"
 #undef CEL_INTRINSIC0
 #undef CEL_INTRINSIC1
 #undef CEL_INTRINSIC2
 #undef CEL_INTRINSIC3
+#undef CEL_INTRINSIC4
         for (const auto& entry : functions_) {
             intrinsicNames_.insert(entry.first);
         }
@@ -508,20 +535,20 @@ private:
             case BinaryOp::Sub:
                 if (lhs == Type::Int && rhs == Type::Int) { ok = true; result = Type::Int; }
                 else if (lhs == Type::Float && rhs == Type::Float) { ok = true; result = Type::Float; }
-                else if (lhs == Type::Vec3 && rhs == Type::Vec3) { ok = true; result = Type::Vec3; }
+                else if (lhs == rhs && IsVecType(lhs)) { ok = true; result = lhs; }
                 break;
             case BinaryOp::Mul:
                 if (lhs == Type::Int && rhs == Type::Int) { ok = true; result = Type::Int; }
                 else if (lhs == Type::Float && rhs == Type::Float) { ok = true; result = Type::Float; }
-                else if (lhs == Type::Vec3 && rhs == Type::Float) { ok = true; result = Type::Vec3; }
-                else if (lhs == Type::Float && rhs == Type::Vec3) { ok = true; result = Type::Vec3; }
+                else if (IsVecType(lhs) && rhs == Type::Float) { ok = true; result = lhs; }
+                else if (lhs == Type::Float && IsVecType(rhs)) { ok = true; result = rhs; }
                 break;
             case BinaryOp::Div:
                 if (lhs == Type::Int && rhs == Type::Int) {
                     CheckDivisionByZero(diagnostics_, *e.rhs);
                     ok = true; result = Type::Int;
                 } else if (lhs == Type::Float && rhs == Type::Float) { ok = true; result = Type::Float; }
-                else if (lhs == Type::Vec3 && rhs == Type::Float) { ok = true; result = Type::Vec3; }
+                else if (IsVecType(lhs) && rhs == Type::Float) { ok = true; result = lhs; }
                 break;
             case BinaryOp::Mod:
                 if (lhs == Type::Int && rhs == Type::Int) {
@@ -532,7 +559,7 @@ private:
             case BinaryOp::Eq:
             case BinaryOp::Neq:
                 if (lhs == rhs &&
-                    (lhs == Type::Int || lhs == Type::Float || lhs == Type::Bool || lhs == Type::Vec3 || lhs == Type::Entity)) {
+                    (lhs == Type::Int || lhs == Type::Float || lhs == Type::Bool || IsVecType(lhs) || lhs == Type::Entity)) {
                     ok = true; result = Type::Bool;
                 }
                 break;
@@ -567,7 +594,7 @@ private:
             e.type = Type::Unknown;
             return e.type;
         }
-        if (e.unaryOp == UnaryOp::Neg && (operand == Type::Int || operand == Type::Float || operand == Type::Vec3)) {
+        if (e.unaryOp == UnaryOp::Neg && (operand == Type::Int || operand == Type::Float || IsVecType(operand))) {
             e.type = operand;
             return e.type;
         }
@@ -662,13 +689,26 @@ private:
             e.type = Type::Unknown;
             return e.type;
         }
-        if (base != Type::Vec3) {
+        if (!IsVecType(base)) {
             Report(DiagCode::NoMemberAccess, e.loc, std::string(ToString(base)) + " has no member '." + e.text + "'");
             e.type = Type::Unknown;
             return e.type;
         }
-        if (e.text != "x" && e.text != "y" && e.text != "z") {
-            Report(DiagCode::UnknownMember, e.loc, "vec3 has no member '." + e.text + "' (expected .x, .y, or .z)");
+        static const char* const kFieldLetters = "xyzw";
+        const int componentCount = VecComponentCount(base);
+        const bool validField = e.text.size() == 1 &&
+                                 std::string(kFieldLetters, static_cast<std::size_t>(componentCount)).find(e.text) !=
+                                     std::string::npos;
+        if (!validField) {
+            const std::string expected(kFieldLetters, static_cast<std::size_t>(componentCount));
+            std::string expectedList;
+            for (std::size_t i = 0; i < expected.size(); ++i) {
+                if (i != 0) expectedList += ", ";
+                expectedList += ".";
+                expectedList += expected[i];
+            }
+            Report(DiagCode::UnknownMember, e.loc,
+                   std::string(ToString(base)) + " has no member '." + e.text + "' (expected " + expectedList + ")");
             e.type = Type::Unknown;
             return e.type;
         }

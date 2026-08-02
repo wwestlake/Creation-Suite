@@ -68,11 +68,14 @@ std::unordered_map<std::string, AbiIntrinsicInfo> BuildAbiIntrinsicTable() {
     table[#name] = AbiIntrinsicInfo{ #cSymbol, Purity::purity, Type::ret, { Type::p1, Type::p2 } };
 #define CEL_INTRINSIC3(name, cSymbol, purity, domain, ret, p1, p2, p3) \
     table[#name] = AbiIntrinsicInfo{ #cSymbol, Purity::purity, Type::ret, { Type::p1, Type::p2, Type::p3 } };
+#define CEL_INTRINSIC4(name, cSymbol, purity, domain, ret, p1, p2, p3, p4) \
+    table[#name] = AbiIntrinsicInfo{ #cSymbol, Purity::purity, Type::ret, { Type::p1, Type::p2, Type::p3, Type::p4 } };
 #include "lang/intrinsics.def"
 #undef CEL_INTRINSIC0
 #undef CEL_INTRINSIC1
 #undef CEL_INTRINSIC2
 #undef CEL_INTRINSIC3
+#undef CEL_INTRINSIC4
     return table;
 }
 
@@ -83,8 +86,12 @@ std::unordered_map<std::string, AbiIntrinsicInfo> BuildAbiIntrinsicTable() {
 bool IsPureIrIntrinsic(const std::string& name) {
     static const std::unordered_map<std::string, bool> pureNames = {
         { "sqrt", true },  { "abs", true },     { "min", true },       { "max", true },  { "floor", true },
-        { "sin", true },   { "cos", true },     { "clamp", true },     { "lerp", true }, { "vec3", true },
-        { "dot", true },   { "cross", true },   { "length", true },    { "normalize", true },
+        { "sin", true },   { "cos", true },     { "clamp", true },     { "lerp", true },
+        { "vec2", true },  { "vec3", true },    { "vec4", true },
+        { "dot", true },   { "dot2", true },    { "dot4", true },
+        { "cross", true },
+        { "length", true }, { "length2", true }, { "length4", true },
+        { "normalize", true }, { "normalize2", true }, { "normalize4", true },
     };
     return pureNames.count(name) != 0;
 }
@@ -93,8 +100,13 @@ class CodeGenerator {
 public:
     CodeGenerator(llvm::LLVMContext& context, llvm::Module& module)
         : context_(context), module_(module), builder_(context), abiIntrinsics_(BuildAbiIntrinsicTable()) {
+        vec2Type_ = llvm::StructType::get(context_, { builder_.getFloatTy(), builder_.getFloatTy() },
+                                           /*isPacked=*/false);
         vec3Type_ = llvm::StructType::get(context_, { builder_.getFloatTy(), builder_.getFloatTy(), builder_.getFloatTy() },
                                            /*isPacked=*/false);
+        vec4Type_ = llvm::StructType::get(
+            context_, { builder_.getFloatTy(), builder_.getFloatTy(), builder_.getFloatTy(), builder_.getFloatTy() },
+            /*isPacked=*/false);
         scriptContextPtrTy_ = builder_.getPtrTy();
     }
 
@@ -122,7 +134,9 @@ private:
             case Type::Int: return builder_.getInt64Ty();
             case Type::Float: return builder_.getFloatTy();
             case Type::Bool: return builder_.getInt1Ty();
+            case Type::Vec2: return vec2Type_;
             case Type::Vec3: return vec3Type_;
+            case Type::Vec4: return vec4Type_;
             case Type::Entity: return builder_.getInt64Ty();
             case Type::Void: return builder_.getVoidTy();
             case Type::String:
@@ -130,6 +144,19 @@ private:
                 break;
         }
         throw CodegenError("internal error: cannot map type '" + std::string(ToString(t)) + "' to an LLVM type");
+    }
+
+    // Component count for a vector CEL type -- sema.cpp has its own copy
+    // of this same mapping (VecComponentCount there) since the two are
+    // compiled from different translation units with no shared header
+    // for it.
+    static unsigned VecComponentCount(Type t) {
+        switch (t) {
+            case Type::Vec2: return 2;
+            case Type::Vec3: return 3;
+            case Type::Vec4: return 4;
+            default: return 0;
+        }
     }
 
     // --- Declarations ------------------------------------------------------
@@ -450,13 +477,18 @@ private:
             builder_.CreateStore(value, ResolveVariablePointer(target.text));
             return;
         }
-        // Member assignment (`p.x = ...`): rebuild the vec3 with one
-        // component replaced, then store the whole struct back --
-        // vec3 is a value type here (an LLVM struct value, not a
+        // Member assignment (`p.x = ...`): rebuild the vecN with one
+        // component replaced, then store the whole struct back -- a
+        // vecN is a value type here (an LLVM struct value, not a
         // pointer), so "assigning to a field" means "load, insertvalue,
-        // store" rather than a pointer-to-field GEP.
+        // store" rather than a pointer-to-field GEP. The base's own
+        // declared type (Vec2/Vec3/Vec4, resolved by sema) picks which
+        // struct type to load as -- this used to hardcode vec3Type_,
+        // which was fine when Vec3 was the only vector type but would
+        // silently misread a Vec2/Vec4 alloca as the wrong struct shape.
         llvm::Value* basePtr = ResolveVariablePointer(target.lhs->text);
-        llvm::Value* current = builder_.CreateLoad(vec3Type_, basePtr);
+        llvm::Type* baseType = MapType(target.lhs->type);
+        llvm::Value* current = builder_.CreateLoad(baseType, basePtr);
         const unsigned index = FieldIndex(target.text);
         llvm::Value* updated = builder_.CreateInsertValue(current, value, index);
         builder_.CreateStore(updated, basePtr);
@@ -465,7 +497,8 @@ private:
     static unsigned FieldIndex(const std::string& field) {
         if (field == "x") return 0;
         if (field == "y") return 1;
-        return 2; // sema already validated this is x/y/z; "z" is the only remaining case.
+        if (field == "z") return 2;
+        return 3; // sema already validated this is x/y/z/w; "w" is the only remaining case.
     }
 
     llvm::Value* ResolveVariablePointer(const std::string& name) {
@@ -523,10 +556,15 @@ private:
         throw CodegenError("internal error: unhandled expression kind reached codegen");
     }
 
-    llvm::Value* Vec3ComponentWise(llvm::Value* a, llvm::Value* b,
-                                    const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& op) {
-        llvm::Value* result = llvm::UndefValue::get(vec3Type_);
-        for (unsigned i = 0; i < 3; ++i) {
+    // Generalized over vector size (Vec2/Vec3/Vec4) -- was three separate
+    // hardcoded-to-3-components functions before vec2/vec4 existed; kept
+    // as one function taking the CEL vector Type rather than duplicating
+    // this loop per size, since the only thing that varies is the
+    // component count and which struct type the result is built as.
+    llvm::Value* VecComponentWise(llvm::Value* a, llvm::Value* b, Type vecType,
+                                   const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& op) {
+        llvm::Value* result = llvm::UndefValue::get(MapType(vecType));
+        for (unsigned i = 0; i < VecComponentCount(vecType); ++i) {
             llvm::Value* ai = builder_.CreateExtractValue(a, i);
             llvm::Value* bi = builder_.CreateExtractValue(b, i);
             result = builder_.CreateInsertValue(result, op(ai, bi), i);
@@ -534,10 +572,10 @@ private:
         return result;
     }
 
-    llvm::Value* Vec3ScalarOp(llvm::Value* v, llvm::Value* scalar,
-                               const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& op) {
-        llvm::Value* result = llvm::UndefValue::get(vec3Type_);
-        for (unsigned i = 0; i < 3; ++i) {
+    llvm::Value* VecScalarOp(llvm::Value* v, llvm::Value* scalar, Type vecType,
+                              const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& op) {
+        llvm::Value* result = llvm::UndefValue::get(MapType(vecType));
+        for (unsigned i = 0; i < VecComponentCount(vecType); ++i) {
             llvm::Value* vi = builder_.CreateExtractValue(v, i);
             result = builder_.CreateInsertValue(result, op(vi, scalar), i);
         }
@@ -547,23 +585,23 @@ private:
     llvm::Value* ArithAdd(llvm::Value* lhs, llvm::Value* rhs, Type t) {
         if (t == Type::Int) return builder_.CreateAdd(lhs, rhs, "addtmp");
         if (t == Type::Float) return builder_.CreateFAdd(lhs, rhs, "faddtmp");
-        return Vec3ComponentWise(lhs, rhs, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFAdd(a, b); });
+        return VecComponentWise(lhs, rhs, t, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFAdd(a, b); });
     }
     llvm::Value* ArithSub(llvm::Value* lhs, llvm::Value* rhs, Type t) {
         if (t == Type::Int) return builder_.CreateSub(lhs, rhs, "subtmp");
         if (t == Type::Float) return builder_.CreateFSub(lhs, rhs, "fsubtmp");
-        return Vec3ComponentWise(lhs, rhs, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFSub(a, b); });
+        return VecComponentWise(lhs, rhs, t, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFSub(a, b); });
     }
     llvm::Value* ArithMul(llvm::Value* lhs, llvm::Value* rhs, Type t) {
         if (t == Type::Int) return builder_.CreateMul(lhs, rhs, "multmp");
         if (t == Type::Float) return builder_.CreateFMul(lhs, rhs, "fmultmp");
-        // vec3 *= float is the only compound-mul combination sema allows.
-        return Vec3ScalarOp(lhs, rhs, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFMul(a, b); });
+        // vecN *= float is the only compound-mul combination sema allows.
+        return VecScalarOp(lhs, rhs, t, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFMul(a, b); });
     }
     llvm::Value* ArithDiv(llvm::Value* lhs, llvm::Value* rhs, Type t) {
         if (t == Type::Int) return builder_.CreateSDiv(lhs, rhs, "divtmp");
         if (t == Type::Float) return builder_.CreateFDiv(lhs, rhs, "fdivtmp");
-        return Vec3ScalarOp(lhs, rhs, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFDiv(a, b); });
+        return VecScalarOp(lhs, rhs, t, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFDiv(a, b); });
     }
 
     llvm::Value* CodegenBinary(Expr& e) {
@@ -609,11 +647,15 @@ private:
             case Type::Float:
                 eq = builder_.CreateFCmpOEQ(lhs, rhs);
                 break;
-            case Type::Vec3: {
-                llvm::Value* eqX = builder_.CreateFCmpOEQ(builder_.CreateExtractValue(lhs, 0), builder_.CreateExtractValue(rhs, 0));
-                llvm::Value* eqY = builder_.CreateFCmpOEQ(builder_.CreateExtractValue(lhs, 1), builder_.CreateExtractValue(rhs, 1));
-                llvm::Value* eqZ = builder_.CreateFCmpOEQ(builder_.CreateExtractValue(lhs, 2), builder_.CreateExtractValue(rhs, 2));
-                eq = builder_.CreateAnd(builder_.CreateAnd(eqX, eqY), eqZ);
+            case Type::Vec2:
+            case Type::Vec3:
+            case Type::Vec4: {
+                const unsigned count = VecComponentCount(t);
+                for (unsigned i = 0; i < count; ++i) {
+                    llvm::Value* eqI =
+                        builder_.CreateFCmpOEQ(builder_.CreateExtractValue(lhs, i), builder_.CreateExtractValue(rhs, i));
+                    eq = (i == 0) ? eqI : builder_.CreateAnd(eq, eqI);
+                }
                 break;
             }
             default:
@@ -630,7 +672,8 @@ private:
         // Neg
         if (e.lhs->type == Type::Int) return builder_.CreateNeg(operand, "negtmp");
         if (e.lhs->type == Type::Float) return builder_.CreateFNeg(operand, "fnegtmp");
-        return Vec3ComponentWise(operand, operand, [&](llvm::Value* a, llvm::Value*) { return builder_.CreateFNeg(a); });
+        return VecComponentWise(operand, operand, e.lhs->type,
+                                 [&](llvm::Value* a, llvm::Value*) { return builder_.CreateFNeg(a); });
     }
 
     llvm::Function* GetLLVMIntrinsic(llvm::Intrinsic::ID id, llvm::Type* type) {
@@ -670,6 +713,12 @@ private:
             llvm::Value* scaled = builder_.CreateFMul(diff, args[2]);
             return builder_.CreateFAdd(args[0], scaled);
         }
+        if (name == "vec2") {
+            llvm::Value* result = llvm::UndefValue::get(vec2Type_);
+            result = builder_.CreateInsertValue(result, args[0], 0);
+            result = builder_.CreateInsertValue(result, args[1], 1);
+            return result;
+        }
         if (name == "vec3") {
             llvm::Value* result = llvm::UndefValue::get(vec3Type_);
             result = builder_.CreateInsertValue(result, args[0], 0);
@@ -677,8 +726,44 @@ private:
             result = builder_.CreateInsertValue(result, args[2], 2);
             return result;
         }
+        if (name == "vec4") {
+            llvm::Value* result = llvm::UndefValue::get(vec4Type_);
+            result = builder_.CreateInsertValue(result, args[0], 0);
+            result = builder_.CreateInsertValue(result, args[1], 1);
+            result = builder_.CreateInsertValue(result, args[2], 2);
+            result = builder_.CreateInsertValue(result, args[3], 3);
+            return result;
+        }
         if (name == "dot") {
-            return Dot(args[0], args[1]);
+            return Dot(args[0], args[1], 3);
+        }
+        // No function overloading exists in CEL yet (functions_ is a flat
+        // name -> signature map, see sema.cpp's RegisterFuncSignature) --
+        // dot/length/normalize can't be reused for vec2/vec4 under the
+        // same name the way a real generic/overloaded function would
+        // allow, so these get an explicit size suffix instead. Revisit
+        // if/when real function overloading is added as its own feature.
+        if (name == "dot2") {
+            return Dot(args[0], args[1], 2);
+        }
+        if (name == "dot4") {
+            return Dot(args[0], args[1], 4);
+        }
+        if (name == "length2") {
+            return builder_.CreateCall(GetLLVMIntrinsic(llvm::Intrinsic::sqrt, builder_.getFloatTy()), Dot(args[0], args[0], 2));
+        }
+        if (name == "length4") {
+            return builder_.CreateCall(GetLLVMIntrinsic(llvm::Intrinsic::sqrt, builder_.getFloatTy()), Dot(args[0], args[0], 4));
+        }
+        if (name == "normalize2") {
+            llvm::Value* len =
+                builder_.CreateCall(GetLLVMIntrinsic(llvm::Intrinsic::sqrt, builder_.getFloatTy()), Dot(args[0], args[0], 2));
+            return VecScalarOp(args[0], len, Type::Vec2, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFDiv(a, b); });
+        }
+        if (name == "normalize4") {
+            llvm::Value* len =
+                builder_.CreateCall(GetLLVMIntrinsic(llvm::Intrinsic::sqrt, builder_.getFloatTy()), Dot(args[0], args[0], 4));
+            return VecScalarOp(args[0], len, Type::Vec4, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFDiv(a, b); });
         }
         if (name == "cross") {
             // (ay*bz - az*by, az*bx - ax*bz, ax*by - ay*bx)
@@ -698,26 +783,26 @@ private:
             return result;
         }
         if (name == "length") {
-            return builder_.CreateCall(GetLLVMIntrinsic(llvm::Intrinsic::sqrt, builder_.getFloatTy()), Dot(args[0], args[0]));
+            return builder_.CreateCall(GetLLVMIntrinsic(llvm::Intrinsic::sqrt, builder_.getFloatTy()), Dot(args[0], args[0], 3));
         }
         if (name == "normalize") {
             llvm::Value* len =
-                builder_.CreateCall(GetLLVMIntrinsic(llvm::Intrinsic::sqrt, builder_.getFloatTy()), Dot(args[0], args[0]));
-            return Vec3ScalarOp(args[0], len, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFDiv(a, b); });
+                builder_.CreateCall(GetLLVMIntrinsic(llvm::Intrinsic::sqrt, builder_.getFloatTy()), Dot(args[0], args[0], 3));
+            return VecScalarOp(args[0], len, Type::Vec3, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFDiv(a, b); });
         }
         return nullptr;
     }
 
-    llvm::Value* Dot(llvm::Value* a, llvm::Value* b) {
-        llvm::Value* ax = builder_.CreateExtractValue(a, 0);
-        llvm::Value* ay = builder_.CreateExtractValue(a, 1);
-        llvm::Value* az = builder_.CreateExtractValue(a, 2);
-        llvm::Value* bx = builder_.CreateExtractValue(b, 0);
-        llvm::Value* by = builder_.CreateExtractValue(b, 1);
-        llvm::Value* bz = builder_.CreateExtractValue(b, 2);
-        llvm::Value* sum = builder_.CreateFMul(ax, bx);
-        sum = builder_.CreateFAdd(sum, builder_.CreateFMul(ay, by));
-        sum = builder_.CreateFAdd(sum, builder_.CreateFMul(az, bz));
+    // Generalized over component count -- was hardcoded to 3 (Vec3-only)
+    // before vec2/vec4 existed.
+    llvm::Value* Dot(llvm::Value* a, llvm::Value* b, unsigned count) {
+        llvm::Value* sum = nullptr;
+        for (unsigned i = 0; i < count; ++i) {
+            llvm::Value* ai = builder_.CreateExtractValue(a, i);
+            llvm::Value* bi = builder_.CreateExtractValue(b, i);
+            llvm::Value* prod = builder_.CreateFMul(ai, bi);
+            sum = (i == 0) ? prod : builder_.CreateFAdd(sum, prod);
+        }
         return sum;
     }
 
@@ -869,7 +954,9 @@ private:
     llvm::LLVMContext& context_;
     llvm::Module& module_;
     llvm::IRBuilder<> builder_;
+    llvm::StructType* vec2Type_;
     llvm::StructType* vec3Type_;
+    llvm::StructType* vec4Type_;
     llvm::Type* scriptContextPtrTy_;
 
     std::unordered_map<std::string, llvm::Function*> functions_;

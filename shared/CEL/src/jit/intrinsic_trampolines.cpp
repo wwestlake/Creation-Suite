@@ -104,11 +104,13 @@ std::unordered_map<std::string, IntrinsicDomain> GetAbiSymbolDomains() {
 #define CEL_INTRINSIC1(name, cSymbol, purity, domain, ret, p1) domains[#cSymbol] = IntrinsicDomain::domain;
 #define CEL_INTRINSIC2(name, cSymbol, purity, domain, ret, p1, p2) domains[#cSymbol] = IntrinsicDomain::domain;
 #define CEL_INTRINSIC3(name, cSymbol, purity, domain, ret, p1, p2, p3) domains[#cSymbol] = IntrinsicDomain::domain;
+#define CEL_INTRINSIC4(name, cSymbol, purity, domain, ret, p1, p2, p3, p4) domains[#cSymbol] = IntrinsicDomain::domain;
 #include "lang/intrinsics.def"
 #undef CEL_INTRINSIC0
 #undef CEL_INTRINSIC1
 #undef CEL_INTRINSIC2
 #undef CEL_INTRINSIC3
+#undef CEL_INTRINSIC4
     return domains;
 }
 
