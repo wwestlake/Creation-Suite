@@ -11,6 +11,9 @@ const char* ToString(Type type) {
         case Type::Vec2: return "vec2";
         case Type::Vec3: return "vec3";
         case Type::Vec4: return "vec4";
+        case Type::Mat2: return "mat2";
+        case Type::Mat3: return "mat3";
+        case Type::Mat4: return "mat4";
         case Type::Entity: return "entity";
         case Type::String: return "string";
         case Type::Unknown: return "<error>";
@@ -25,6 +28,9 @@ Type ParseTypeName(const std::string& name) {
     if (name == "vec2") return Type::Vec2;
     if (name == "vec3") return Type::Vec3;
     if (name == "vec4") return Type::Vec4;
+    if (name == "mat2") return Type::Mat2;
+    if (name == "mat3") return Type::Mat3;
+    if (name == "mat4") return Type::Mat4;
     if (name == "entity") return Type::Entity;
     return Type::Unknown;
 }

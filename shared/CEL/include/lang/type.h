@@ -13,7 +13,7 @@ namespace ce::lang {
 // no operator accepts it. Unknown is an error-recovery sentinel: sema
 // assigns it after a type error so downstream checks on the same
 // expression don't cascade into a wall of duplicate diagnostics.
-enum class Type { Void, Int, Float, Bool, Vec2, Vec3, Vec4, Entity, String, Unknown };
+enum class Type { Void, Int, Float, Bool, Vec2, Vec3, Vec4, Mat2, Mat3, Mat4, Entity, String, Unknown };
 
 const char* ToString(Type type);
 

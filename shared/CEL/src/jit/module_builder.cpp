@@ -92,6 +92,9 @@ bool IsPureIrIntrinsic(const std::string& name) {
         { "cross", true },
         { "length", true }, { "length2", true }, { "length4", true },
         { "normalize", true }, { "normalize2", true }, { "normalize4", true },
+        { "mat2_identity", true }, { "mat3_identity", true }, { "mat4_identity", true },
+        { "mat2_from_columns", true }, { "mat3_from_columns", true }, { "mat4_from_columns", true },
+        { "transpose2", true }, { "transpose3", true }, { "transpose4", true },
     };
     return pureNames.count(name) != 0;
 }
@@ -107,6 +110,14 @@ public:
         vec4Type_ = llvm::StructType::get(
             context_, { builder_.getFloatTy(), builder_.getFloatTy(), builder_.getFloatTy(), builder_.getFloatTy() },
             /*isPacked=*/false);
+        // Column-major flat float arrays, matching juce::Matrix3D<float>'s
+        // own layout (see sema.cpp's IsMatType comment) -- N*N floats,
+        // no distinct "row"/"column" LLVM sub-structure, just a flat
+        // struct-of-floats like vecN. MatDimension/VecComponentCount
+        // below know how to index into it.
+        mat2Type_ = llvm::StructType::get(context_, std::vector<llvm::Type*>(4, builder_.getFloatTy()), /*isPacked=*/false);
+        mat3Type_ = llvm::StructType::get(context_, std::vector<llvm::Type*>(9, builder_.getFloatTy()), /*isPacked=*/false);
+        mat4Type_ = llvm::StructType::get(context_, std::vector<llvm::Type*>(16, builder_.getFloatTy()), /*isPacked=*/false);
         scriptContextPtrTy_ = builder_.getPtrTy();
     }
 
@@ -137,6 +148,9 @@ private:
             case Type::Vec2: return vec2Type_;
             case Type::Vec3: return vec3Type_;
             case Type::Vec4: return vec4Type_;
+            case Type::Mat2: return mat2Type_;
+            case Type::Mat3: return mat3Type_;
+            case Type::Mat4: return mat4Type_;
             case Type::Entity: return builder_.getInt64Ty();
             case Type::Void: return builder_.getVoidTy();
             case Type::String:
@@ -146,16 +160,58 @@ private:
         throw CodegenError("internal error: cannot map type '" + std::string(ToString(t)) + "' to an LLVM type");
     }
 
-    // Component count for a vector CEL type -- sema.cpp has its own copy
-    // of this same mapping (VecComponentCount there) since the two are
-    // compiled from different translation units with no shared header
-    // for it.
+    // Flat component count for a vector OR matrix CEL type -- sema.cpp
+    // has its own copy of the vector half of this mapping
+    // (VecComponentCount there) since the two are compiled from
+    // different translation units with no shared header for it. Doubles
+    // as a generic "is this an aggregate vec/mat type" test via
+    // `VecComponentCount(t) != 0` -- matrices are column-major flat
+    // arrays of N*N floats (see MatDimension's own comment), so the same
+    // componentwise-loop machinery (VecComponentWise/VecScalarOp below)
+    // already works for matrix add/sub/scalar-multiply unchanged; only
+    // real matrix multiply and matrix-vector product need their own
+    // codegen (MatMatMul/MatVecMul).
     static unsigned VecComponentCount(Type t) {
         switch (t) {
             case Type::Vec2: return 2;
             case Type::Vec3: return 3;
             case Type::Vec4: return 4;
+            case Type::Mat2: return 4;
+            case Type::Mat3: return 9;
+            case Type::Mat4: return 16;
             default: return 0;
+        }
+    }
+
+    static bool IsMatType(Type t) {
+        return t == Type::Mat2 || t == Type::Mat3 || t == Type::Mat4;
+    }
+
+    static bool IsVecType(Type t) {
+        return t == Type::Vec2 || t == Type::Vec3 || t == Type::Vec4;
+    }
+
+    // Column-major matrix dimension (2/3/4) -- the N in an NxN matrix,
+    // as opposed to VecComponentCount's N*N flat element count.
+    static unsigned MatDimension(Type t) {
+        switch (t) {
+            case Type::Mat2: return 2;
+            case Type::Mat3: return 3;
+            case Type::Mat4: return 4;
+            default: return 0;
+        }
+    }
+
+    // The vecN type with the same dimension as matN -- what matN * vecN
+    // returns. sema.cpp has the authoritative copy of this mapping
+    // (MatVecType there); codegen only needs it to pick the right
+    // result struct type, not to re-validate the operation.
+    static Type MatVecType(Type mat) {
+        switch (mat) {
+            case Type::Mat2: return Type::Vec2;
+            case Type::Mat3: return Type::Vec3;
+            case Type::Mat4: return Type::Vec4;
+            default: return Type::Unknown;
         }
     }
 
@@ -516,7 +572,7 @@ private:
         switch (op) {
             case AssignOp::AddAssign: return ArithAdd(current, rhs, targetType);
             case AssignOp::SubAssign: return ArithSub(current, rhs, targetType);
-            case AssignOp::MulAssign: return ArithMul(current, rhs, targetType);
+            case AssignOp::MulAssign: return ArithMul(current, rhs, targetType, targetType);
             case AssignOp::DivAssign: return ArithDiv(current, rhs, targetType);
             case AssignOp::Assign: break;
         }
@@ -592,11 +648,87 @@ private:
         if (t == Type::Float) return builder_.CreateFSub(lhs, rhs, "fsubtmp");
         return VecComponentWise(lhs, rhs, t, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFSub(a, b); });
     }
-    llvm::Value* ArithMul(llvm::Value* lhs, llvm::Value* rhs, Type t) {
-        if (t == Type::Int) return builder_.CreateMul(lhs, rhs, "multmp");
-        if (t == Type::Float) return builder_.CreateFMul(lhs, rhs, "fmultmp");
-        // vecN *= float is the only compound-mul combination sema allows.
-        return VecScalarOp(lhs, rhs, t, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFMul(a, b); });
+    // Takes BOTH operand types, unlike ArithAdd/Sub/Div -- Mul is the one
+    // operator sema allows in an asymmetric-type combination (scalar *
+    // vec/mat as well as vec/mat * scalar, see CheckBinary), so dispatch
+    // has to know which SIDE actually holds the aggregate value rather
+    // than assuming it's always the left operand. This fixes a real
+    // latent bug in the original vec3-only version of this function
+    // (single-`t`, always read from e.lhs->type): `2.0 * someVec3` was
+    // sema-approved but would have reached the `t == Float` branch and
+    // called CreateFMul on a struct value -- invalid IR, never caught
+    // because no existing test happened to write a scalar-first multiply.
+    llvm::Value* ArithMul(llvm::Value* lhs, llvm::Value* rhs, Type lhsType, Type rhsType) {
+        if (lhsType == Type::Int && rhsType == Type::Int) return builder_.CreateMul(lhs, rhs, "multmp");
+        if (lhsType == Type::Float && rhsType == Type::Float) return builder_.CreateFMul(lhs, rhs, "fmultmp");
+        auto fmul = [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFMul(a, b); };
+        if (lhsType == Type::Float && (IsVecType(rhsType) || IsMatType(rhsType))) {
+            return VecScalarOp(rhs, lhs, rhsType, fmul); // scalar-first: aggregate is rhs.
+        }
+        if ((IsVecType(lhsType) || IsMatType(lhsType)) && rhsType == Type::Float) {
+            return VecScalarOp(lhs, rhs, lhsType, fmul); // aggregate-first: aggregate is lhs.
+        }
+        if (IsMatType(lhsType) && lhsType == rhsType) {
+            return MatMatMul(lhs, rhs, lhsType);
+        }
+        if (IsMatType(lhsType) && rhsType == MatVecType(lhsType)) {
+            return MatVecMul(lhs, rhs, lhsType);
+        }
+        throw CodegenError("internal error: unhandled multiply operand type combination (" +
+                            std::string(ToString(lhsType)) + ", " + std::string(ToString(rhsType)) + ") reached codegen");
+    }
+
+    // Real matrix multiplication (NOT componentwise), column-major:
+    // C[col][row] = sum_k A[k][row] * B[col][k], flat index = col*N+row.
+    llvm::Value* MatMatMul(llvm::Value* a, llvm::Value* b, Type matType) {
+        const unsigned n = MatDimension(matType);
+        llvm::Value* result = llvm::UndefValue::get(MapType(matType));
+        for (unsigned col = 0; col < n; ++col) {
+            for (unsigned row = 0; row < n; ++row) {
+                llvm::Value* sum = nullptr;
+                for (unsigned k = 0; k < n; ++k) {
+                    llvm::Value* aElem = builder_.CreateExtractValue(a, k * n + row);
+                    llvm::Value* bElem = builder_.CreateExtractValue(b, col * n + k);
+                    llvm::Value* prod = builder_.CreateFMul(aElem, bElem);
+                    sum = (k == 0) ? prod : builder_.CreateFAdd(sum, prod);
+                }
+                result = builder_.CreateInsertValue(result, sum, col * n + row);
+            }
+        }
+        return result;
+    }
+
+    // Identity matrix -- diagonal elements are 1.0, everything else 0.0.
+    // Flat column-major index of a diagonal element (row == col) is
+    // col*N + col = col*(N+1).
+    llvm::Value* MatIdentity(Type matType) {
+        const unsigned n = MatDimension(matType);
+        llvm::Value* result = llvm::UndefValue::get(MapType(matType));
+        llvm::Value* zero = llvm::ConstantFP::get(builder_.getFloatTy(), 0.0);
+        llvm::Value* one = llvm::ConstantFP::get(builder_.getFloatTy(), 1.0);
+        for (unsigned col = 0; col < n; ++col) {
+            for (unsigned row = 0; row < n; ++row) {
+                result = builder_.CreateInsertValue(result, row == col ? one : zero, col * n + row);
+            }
+        }
+        return result;
+    }
+
+    // Matrix-vector product, column-major: v'[row] = sum_col M[row][col] * v[col].
+    llvm::Value* MatVecMul(llvm::Value* m, llvm::Value* v, Type matType) {
+        const unsigned n = MatDimension(matType);
+        llvm::Value* result = llvm::UndefValue::get(MapType(MatVecType(matType)));
+        for (unsigned row = 0; row < n; ++row) {
+            llvm::Value* sum = nullptr;
+            for (unsigned col = 0; col < n; ++col) {
+                llvm::Value* mElem = builder_.CreateExtractValue(m, col * n + row);
+                llvm::Value* vElem = builder_.CreateExtractValue(v, col);
+                llvm::Value* prod = builder_.CreateFMul(mElem, vElem);
+                sum = (col == 0) ? prod : builder_.CreateFAdd(sum, prod);
+            }
+            result = builder_.CreateInsertValue(result, sum, row);
+        }
+        return result;
     }
     llvm::Value* ArithDiv(llvm::Value* lhs, llvm::Value* rhs, Type t) {
         if (t == Type::Int) return builder_.CreateSDiv(lhs, rhs, "divtmp");
@@ -617,7 +749,7 @@ private:
         switch (e.binaryOp) {
             case BinaryOp::Add: return ArithAdd(lhs, rhs, operandType);
             case BinaryOp::Sub: return ArithSub(lhs, rhs, operandType);
-            case BinaryOp::Mul: return ArithMul(lhs, rhs, operandType);
+            case BinaryOp::Mul: return ArithMul(lhs, rhs, e.lhs->type, e.rhs->type);
             case BinaryOp::Div: return ArithDiv(lhs, rhs, operandType);
             case BinaryOp::Mod: return builder_.CreateSRem(lhs, rhs, "modtmp"); // int-only per sema.
             case BinaryOp::Eq: return CodegenCompare(lhs, rhs, operandType, /*negate=*/false);
@@ -649,8 +781,11 @@ private:
                 break;
             case Type::Vec2:
             case Type::Vec3:
-            case Type::Vec4: {
-                const unsigned count = VecComponentCount(t);
+            case Type::Vec4:
+            case Type::Mat2:
+            case Type::Mat3:
+            case Type::Mat4: {
+                const unsigned count = VecComponentCount(t); // flat element count either way.
                 for (unsigned i = 0; i < count; ++i) {
                     llvm::Value* eqI =
                         builder_.CreateFCmpOEQ(builder_.CreateExtractValue(lhs, i), builder_.CreateExtractValue(rhs, i));
@@ -764,6 +899,34 @@ private:
             llvm::Value* len =
                 builder_.CreateCall(GetLLVMIntrinsic(llvm::Intrinsic::sqrt, builder_.getFloatTy()), Dot(args[0], args[0], 4));
             return VecScalarOp(args[0], len, Type::Vec4, [&](llvm::Value* a, llvm::Value* b) { return builder_.CreateFDiv(a, b); });
+        }
+        if (name == "mat2_identity" || name == "mat3_identity" || name == "mat4_identity") {
+            const Type matType = name == "mat2_identity" ? Type::Mat2 : name == "mat3_identity" ? Type::Mat3 : Type::Mat4;
+            return MatIdentity(matType);
+        }
+        if (name == "mat2_from_columns" || name == "mat3_from_columns" || name == "mat4_from_columns") {
+            const Type matType =
+                name == "mat2_from_columns" ? Type::Mat2 : name == "mat3_from_columns" ? Type::Mat3 : Type::Mat4;
+            const unsigned n = MatDimension(matType);
+            llvm::Value* result = llvm::UndefValue::get(MapType(matType));
+            for (unsigned col = 0; col < n; ++col) {
+                for (unsigned row = 0; row < n; ++row) {
+                    result = builder_.CreateInsertValue(result, builder_.CreateExtractValue(args[col], row), col * n + row);
+                }
+            }
+            return result;
+        }
+        if (name == "transpose2" || name == "transpose3" || name == "transpose4") {
+            const Type matType = name == "transpose2" ? Type::Mat2 : name == "transpose3" ? Type::Mat3 : Type::Mat4;
+            const unsigned n = MatDimension(matType);
+            llvm::Value* result = llvm::UndefValue::get(MapType(matType));
+            for (unsigned col = 0; col < n; ++col) {
+                for (unsigned row = 0; row < n; ++row) {
+                    // Swap row/col: transposed[col][row] = original[row][col].
+                    result = builder_.CreateInsertValue(result, builder_.CreateExtractValue(args[0], row * n + col), col * n + row);
+                }
+            }
+            return result;
         }
         if (name == "cross") {
             // (ay*bz - az*by, az*bx - ax*bz, ax*by - ay*bx)
@@ -957,6 +1120,9 @@ private:
     llvm::StructType* vec2Type_;
     llvm::StructType* vec3Type_;
     llvm::StructType* vec4Type_;
+    llvm::StructType* mat2Type_;
+    llvm::StructType* mat3Type_;
+    llvm::StructType* mat4Type_;
     llvm::Type* scriptContextPtrTy_;
 
     std::unordered_map<std::string, llvm::Function*> functions_;

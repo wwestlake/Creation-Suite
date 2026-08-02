@@ -55,6 +55,37 @@ int VecComponentCount(Type t) {
     }
 }
 
+// Mat2/Mat3/Mat4 -- column-major (matching the existing convention
+// juce::Matrix3D<float>/cgltf_node_transform_local already use
+// elsewhere in Creation Engine's own code, see AnimationSampler.cpp's
+// ComposeTRS). Matrices deliberately don't participate in IsVecType --
+// member access (.x/.y/...) has no meaning on a matrix, only CheckBinary
+// needs to know about them.
+bool IsMatType(Type t) {
+    return t == Type::Mat2 || t == Type::Mat3 || t == Type::Mat4;
+}
+
+int MatDimension(Type t) {
+    switch (t) {
+        case Type::Mat2: return 2;
+        case Type::Mat3: return 3;
+        case Type::Mat4: return 4;
+        default: return 0;
+    }
+}
+
+// The vecN type with the same component count as matN's dimension --
+// what matN * vecN (matrix-vector product) returns, and what a matN's
+// columns are made of.
+Type MatVecType(Type mat) {
+    switch (mat) {
+        case Type::Mat2: return Type::Vec2;
+        case Type::Mat3: return Type::Vec3;
+        case Type::Mat4: return Type::Vec4;
+        default: return Type::Unknown;
+    }
+}
+
 const char* AssignOpSpelling(AssignOp op) {
     switch (op) {
         case AssignOp::Assign: return "=";
@@ -535,13 +566,25 @@ private:
             case BinaryOp::Sub:
                 if (lhs == Type::Int && rhs == Type::Int) { ok = true; result = Type::Int; }
                 else if (lhs == Type::Float && rhs == Type::Float) { ok = true; result = Type::Float; }
-                else if (lhs == rhs && IsVecType(lhs)) { ok = true; result = lhs; }
+                else if (lhs == rhs && (IsVecType(lhs) || IsMatType(lhs))) { ok = true; result = lhs; }
                 break;
             case BinaryOp::Mul:
                 if (lhs == Type::Int && rhs == Type::Int) { ok = true; result = Type::Int; }
                 else if (lhs == Type::Float && rhs == Type::Float) { ok = true; result = Type::Float; }
                 else if (IsVecType(lhs) && rhs == Type::Float) { ok = true; result = lhs; }
                 else if (lhs == Type::Float && IsVecType(rhs)) { ok = true; result = rhs; }
+                // Scalar * matrix (componentwise) -- same shape as scalar * vector above.
+                else if (IsMatType(lhs) && rhs == Type::Float) { ok = true; result = lhs; }
+                else if (lhs == Type::Float && IsMatType(rhs)) { ok = true; result = rhs; }
+                // Matrix * matrix (same size) -- real matrix multiplication, NOT
+                // componentwise, per standard linear-algebra convention (unlike
+                // vector '*', which IS componentwise -- vectors have no
+                // multiplication operator of their own; dot/cross are named
+                // functions instead, so there's no existing precedent this
+                // would collide with).
+                else if (IsMatType(lhs) && lhs == rhs) { ok = true; result = lhs; }
+                // Matrix * vector (matching size) -- matrix-vector product.
+                else if (IsMatType(lhs) && rhs == MatVecType(lhs)) { ok = true; result = rhs; }
                 break;
             case BinaryOp::Div:
                 if (lhs == Type::Int && rhs == Type::Int) {
@@ -558,8 +601,8 @@ private:
                 break;
             case BinaryOp::Eq:
             case BinaryOp::Neq:
-                if (lhs == rhs &&
-                    (lhs == Type::Int || lhs == Type::Float || lhs == Type::Bool || IsVecType(lhs) || lhs == Type::Entity)) {
+                if (lhs == rhs && (lhs == Type::Int || lhs == Type::Float || lhs == Type::Bool || IsVecType(lhs) ||
+                                    IsMatType(lhs) || lhs == Type::Entity)) {
                     ok = true; result = Type::Bool;
                 }
                 break;
@@ -594,7 +637,8 @@ private:
             e.type = Type::Unknown;
             return e.type;
         }
-        if (e.unaryOp == UnaryOp::Neg && (operand == Type::Int || operand == Type::Float || IsVecType(operand))) {
+        if (e.unaryOp == UnaryOp::Neg &&
+            (operand == Type::Int || operand == Type::Float || IsVecType(operand) || IsMatType(operand))) {
             e.type = operand;
             return e.type;
         }
