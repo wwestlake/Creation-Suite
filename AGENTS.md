@@ -48,6 +48,8 @@ If multiple agents need to work in parallel, each agent MUST use their designate
 
 Never assume that untracked files, half-finished edits, or local build outputs in a shared checkout are safe to build on.
 
+Reading reference material from another agent's workspace (scripts, templates, docs) to use as a pattern or run as a tool is fine. Writing, committing, or building directly against files inside another agent's workspace is not — copy what you need into your own workspace first.
+
 ## Secrets Directory Rule
 
 The `Secrets/` directory contains critical credentials and private keys.
