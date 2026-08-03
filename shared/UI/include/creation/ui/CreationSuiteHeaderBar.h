@@ -17,6 +17,13 @@ public:
         record
     };
 
+    enum class MetronomeMode
+    {
+        off,
+        playOrRecord,
+        always
+    };
+
     struct ProfileData
     {
         juce::String displayName;
@@ -34,7 +41,7 @@ public:
     std::function<void()> onRewind;
     std::function<void()> onFastForward;
     std::function<void(bool)> onLoopChanged;
-    std::function<void(bool)> onClickChanged;
+    std::function<void(MetronomeMode)> onMetronomeModeChanged;
     std::function<void()> onSignInRequested;
     std::function<void()> onOpenProfilePageRequested;
     std::function<void()> onLogoutRequested;
@@ -55,6 +62,8 @@ public:
     void setStatusText(const juce::String& text);
     void setMidiStatusText(const juce::String& text);
     void setPlaybackVisualState(bool playing, bool recording);
+    void setMetronomeMode(MetronomeMode mode);
+    MetronomeMode getMetronomeMode() const noexcept { return metronomeMode; }
     void setScrubModeEnabled(bool enabled);
     void setTransportControlsVisible(bool shouldBeVisible);
     void setTransportButtonVisible(TransportButtonSlot slot, bool shouldBeVisible);
@@ -75,6 +84,8 @@ private:
     TransportButtonConfig& getTransportButtonConfig(TransportButtonSlot slot);
     const TransportButtonConfig& getTransportButtonConfig(TransportButtonSlot slot) const;
     void refreshTransportButtonPresentation();
+    void advanceMetronomeMode();
+    void refreshMetronomeButton();
 
 public:
     juce::Label titleLabel;
@@ -110,6 +121,8 @@ private:
     bool scrubModeEnabled = false;
     bool playbackIsPlaying = false;
     bool playbackIsRecording = false;
+    MetronomeMode metronomeMode = MetronomeMode::off;
+    bool metronomeAudible = false;
     bool transportControlsVisible = true;
     TransportButtonConfig rewindButtonConfig;
     TransportButtonConfig fastForwardButtonConfig;
