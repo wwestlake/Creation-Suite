@@ -309,11 +309,12 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
         if (onLoopChanged)
             onLoopChanged(loopButton.getToggleState());
     };
-    clickButton.setClickingTogglesState(true);
+    clickButton.setClickingTogglesState(false);
     clickButton.onClick = [this]
     {
-        if (onClickChanged)
-            onClickChanged(clickButton.getToggleState());
+        advanceMetronomeMode();
+        if (onMetronomeModeChanged)
+            onMetronomeModeChanged(metronomeMode);
     };
 
     signInButton.onClick = [this, callback] { callback(onSignInRequested); };
@@ -450,6 +451,52 @@ void CreationSuiteHeaderBar::setPlaybackVisualState(bool playing, bool recording
     playbackIsPlaying = playing;
     playbackIsRecording = recording;
     refreshTransportButtonPresentation();
+    refreshMetronomeButton();
+}
+
+void CreationSuiteHeaderBar::setMetronomeMode(MetronomeMode mode)
+{
+    metronomeMode = mode;
+    refreshMetronomeButton();
+}
+
+void CreationSuiteHeaderBar::advanceMetronomeMode()
+{
+    switch (metronomeMode)
+    {
+        case MetronomeMode::off: metronomeMode = MetronomeMode::playOrRecord; break;
+        case MetronomeMode::playOrRecord: metronomeMode = MetronomeMode::always; break;
+        case MetronomeMode::always: metronomeMode = MetronomeMode::off; break;
+    }
+
+    refreshMetronomeButton();
+}
+
+void CreationSuiteHeaderBar::refreshMetronomeButton()
+{
+    metronomeAudible = metronomeMode == MetronomeMode::always
+                        || (metronomeMode == MetronomeMode::playOrRecord && (playbackIsPlaying || playbackIsRecording));
+
+    switch (metronomeMode)
+    {
+        case MetronomeMode::off:
+            clickButton.setToggleState(false, juce::dontSendNotification);
+            clickButton.setTooltip("Metronome off");
+            statusLabel.setText("Transport: click off", juce::dontSendNotification);
+            break;
+        case MetronomeMode::playOrRecord:
+            clickButton.setToggleState(true, juce::dontSendNotification);
+            clickButton.setTooltip("Metronome on while playing or recording");
+            statusLabel.setText("Transport: click on while playing or recording", juce::dontSendNotification);
+            break;
+        case MetronomeMode::always:
+            clickButton.setToggleState(true, juce::dontSendNotification);
+            clickButton.setTooltip("Metronome always on");
+            statusLabel.setText("Transport: click always on", juce::dontSendNotification);
+            break;
+    }
+
+    clickButton.repaint();
 }
 
 void CreationSuiteHeaderBar::setScrubModeEnabled(bool enabled)
