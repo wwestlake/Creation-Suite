@@ -75,11 +75,14 @@ public:
 
         auto bounds = button.getLocalBounds().toFloat().reduced(8.0f, 7.0f);
         g.setColour(button.getToggleState() ? juce::Colour(0xff5ce8ff) : juce::Colour(0xffb8c4d5));
-        drawTransportIcon(g, bounds, button.getButtonText());
+        auto metronomeState = button.getProperties().contains("metronomeState")
+                                ? (int) button.getProperties()["metronomeState"]
+                                : -1;
+        drawTransportIcon(g, bounds, button.getButtonText(), metronomeState);
     }
 
 private:
-    static void drawTransportIcon(juce::Graphics& g, juce::Rectangle<float> bounds, const juce::String& iconName)
+    static void drawTransportIcon(juce::Graphics& g, juce::Rectangle<float> bounds, const juce::String& iconName, int metronomeState = -1)
     {
         auto centre = bounds.getCentre();
         auto size = juce::jmin(bounds.getWidth(), bounds.getHeight());
@@ -131,12 +134,49 @@ private:
             return;
         }
 
-        if (iconName == "click")
+        if (iconName == "metronome")
         {
-            auto circle = bounds.reduced(size * 0.18f);
-            g.drawEllipse(circle, 2.0f);
-            auto point = circle.withSizeKeepingCentre(size * 0.16f, size * 0.16f);
-            g.fillEllipse(point);
+            // Pyramid body + plinth, drawn like a real metronome.
+            auto body = bounds.reduced(size * 0.10f, size * 0.04f);
+            juce::Point<float> apex(centre.x, body.getY());
+            juce::Point<float> baseLeft(body.getX() + size * 0.06f, body.getBottom() - size * 0.16f);
+            juce::Point<float> baseRight(body.getRight() - size * 0.06f, body.getBottom() - size * 0.16f);
+
+            juce::Path pyramid;
+            pyramid.startNewSubPath(apex);
+            pyramid.lineTo(baseRight);
+            pyramid.lineTo(baseLeft);
+            pyramid.closeSubPath();
+            g.strokePath(pyramid, juce::PathStrokeType(1.6f));
+
+            auto plinth = juce::Rectangle<float>(baseRight.x - baseLeft.x + size * 0.05f, size * 0.07f)
+                            .withCentre({ centre.x, baseLeft.y + size * 0.045f });
+            g.fillRoundedRectangle(plinth, 1.0f);
+
+            // Pendulum arm: centred = off, tilted left = play-or-record, tilted right = always.
+            auto pivot = juce::Point<float>(centre.x, baseLeft.y - size * 0.02f);
+            auto armLength = size * 0.34f;
+            auto tilt = metronomeState == 1 ? -0.42f : (metronomeState == 2 ? 0.42f : 0.0f);
+            juce::Point<float> armEnd(pivot.x + std::sin(tilt) * armLength, pivot.y - std::cos(tilt) * armLength);
+            g.drawLine(pivot.x, pivot.y, armEnd.x, armEnd.y, 1.6f);
+            g.fillEllipse(juce::Rectangle<float>(size * 0.09f, size * 0.09f).withCentre(armEnd));
+
+            // Explicit 3-state indicator: 0/1/2 lit dots for off/play-or-record/always.
+            if (metronomeState >= 0)
+            {
+                auto dotY = bounds.getBottom() - size * 0.01f;
+                auto dotSpacing = size * 0.18f;
+                for (int i = 0; i < 2; ++i)
+                {
+                    auto dot = juce::Rectangle<float>(size * 0.09f, size * 0.09f)
+                                .withCentre({ centre.x - dotSpacing * 0.5f + i * dotSpacing, dotY });
+                    if (i < metronomeState)
+                        g.fillEllipse(dot);
+                    else
+                        g.drawEllipse(dot, 1.1f);
+                }
+            }
+
             return;
         }
 
@@ -232,7 +272,7 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
     stopButton.setButtonText("stop");
     recordButton.setButtonText("record");
     loopButton.setButtonText("loop");
-    clickButton.setButtonText("click");
+    clickButton.setButtonText("metronome");
     rewindButton.setButtonText("prev");
     fastForwardButton.setButtonText("next");
     suiteButton.setButtonText("gear");
@@ -496,6 +536,7 @@ void CreationSuiteHeaderBar::refreshMetronomeButton()
             break;
     }
 
+    clickButton.getProperties().set("metronomeState", (int) metronomeMode);
     clickButton.repaint();
 }
 
