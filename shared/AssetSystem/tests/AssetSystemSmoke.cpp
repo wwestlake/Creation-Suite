@@ -251,6 +251,13 @@ int main()
                                                                            errorMessage))
                 fail("ProjectContainerService createProject failed: " + errorMessage);
 
+            const auto serviceProjectId = serviceSession.getManifest().projectId;
+            serviceSession.close();
+
+            // listProjects/findProjectById peek each container's manifest via
+            // its own short-lived mount -- they can only see containers that
+            // are not currently held open elsewhere (VFS-M4's single-owner
+            // rule), so the session above must be closed before scanning.
             juce::String listError;
             const auto modelerProjects = creation::assets::ProjectContainerService::listProjects(settings,
                                                                                                  creation::assets::SuiteAppDomain::modeler,
@@ -260,15 +267,13 @@ int main()
 
             creation::assets::ProjectContainerService::ProjectSummary foundProject;
             if (! creation::assets::ProjectContainerService::findProjectById(settings,
-                                                                             serviceSession.getManifest().projectId,
+                                                                             serviceProjectId,
                                                                              foundProject,
                                                                              errorMessage))
                 fail("ProjectContainerService findProjectById failed: " + errorMessage);
 
             if (foundProject.manifest.projectName != "Service Created Project")
                 fail("ProjectContainerService returned the wrong project summary.");
-
-            serviceSession.close();
         }
 
         creation::assets::ProjectSession workspaceSession;

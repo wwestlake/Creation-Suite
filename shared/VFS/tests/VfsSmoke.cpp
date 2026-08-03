@@ -66,6 +66,14 @@ int main()
             if (volume.fileExists("does_not_exist.bin"))
                 fail("fileExists(does_not_exist.bin) should be false.");
 
+            // Single-owner guarantee (VFS-M4's foundation): a second open
+            // attempt on an already-mounted container must fail cleanly,
+            // not silently double-mount and corrupt it.
+            creation::vfs::SuiteVolume secondHandle;
+            juce::String secondOpenError;
+            if (secondHandle.open(containerFile, secondOpenError))
+                fail("A second SuiteVolume should not be able to open an already-mounted container.");
+
             volume.close();
             if (volume.isOpen())
                 fail("Volume should report closed after close().");

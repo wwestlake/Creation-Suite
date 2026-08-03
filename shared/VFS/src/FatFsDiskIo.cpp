@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <share.h>
 
 namespace {
 
@@ -57,7 +58,15 @@ bool CreationVfs_AttachDrive(BYTE pdrv, const wchar_t* path, LBA_t sectorCount) 
         g_drives[pdrv].file = nullptr;
     }
 
-    std::FILE* file = _wfopen(path, L"r+b");
+    // _SH_DENYRW: exclusive open. A container is mounted by exactly one
+    // SuiteVolume at a time, in exactly one process -- a second open
+    // attempt (this process or another) must fail cleanly here rather
+    // than silently double-mounting the same backing file, which would
+    // corrupt it (two independent FatFs mount states, no shared cache).
+    // This is the actual single-owner guarantee VFS-M4's cross-process
+    // routing builds on: a sharing-violation failure means someone else
+    // already owns this container, right now.
+    std::FILE* file = _wfsopen(path, L"r+b", _SH_DENYRW);
     if (file == nullptr)
         return false;
 
