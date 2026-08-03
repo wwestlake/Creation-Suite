@@ -146,6 +146,24 @@ Use `Debug` builds by default for normal development, testing, and troubleshooti
 - Do not assume `Release` just because a build is meant to be runnable.
 - When reporting a build result, name the configuration you actually built.
 
+### Shared Bin Directory Rule
+
+Every agent maintains its own workspace-level shared bin directories, one per build configuration, at `D:\CreationSuite-Workspaces\<agent>-debug-bin\` and `D:\CreationSuite-Workspaces\<agent>-release-bin\` (e.g. Claude's are `claude-debug-bin`/`claude-release-bin`). These give a stable, no-need-to-hunt-for-it path to the latest built executable of every app in the suite, regardless of which app's build tree it actually lives in.
+
+For every real app executable target in your own repo (not test/smoke binaries), add a `POST_BUILD` custom command to that target's `CMakeLists.txt` that copies the built binary into your agent's bin directory for the configuration just built:
+
+```cmake
+add_custom_command(TARGET <YourTargetName> POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "D:/CreationSuite-Workspaces/<agent>-$<LOWER_CASE:$<CONFIG>>-bin"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:<YourTargetName>>" "D:/CreationSuite-Workspaces/<agent>-$<LOWER_CASE:$<CONFIG>>-bin/"
+    COMMENT "Copying <YourTargetName> to the shared <agent> bin directory"
+)
+```
+
+Replace `<agent>` with your own name (`claude`, `codex`, `gemini`, ...) and `<YourTargetName>` with the real target. `$<LOWER_CASE:$<CONFIG>>` resolves to `debug`/`release` automatically, so one command handles both configurations.
+
+This is a plain file copy at build time -- it does not require OS symlink privileges (creating a real Windows symlink needs Administrator or a freshly-logged-in session with Developer Mode already active, which made it the wrong tool for this). Do not attempt to symlink instead; copy.
+
 ## Merge Rule
 
 Do not merge just because code exists locally.
