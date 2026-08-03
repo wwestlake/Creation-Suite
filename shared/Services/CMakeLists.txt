@@ -7,6 +7,7 @@ add_library(creation_suite_services STATIC
     src/SuiteLegalSettings.cpp
     src/SuiteAiSettings.cpp
     src/SuiteProcessRegistry.cpp
+    src/SuiteProjectHandoff.cpp
     src/SuiteContextEngine.cpp
     src/SuiteAiChatClient.cpp
 )
@@ -27,4 +28,31 @@ target_link_libraries(creation_suite_services_smoke
 add_test(
     NAME creation_suite_services_smoke
     COMMAND creation_suite_services_smoke
+)
+
+# SuiteHandoffOwner is a helper process spawned by
+# SuiteProjectHandoffMultiProcessSmoke, not a test in its own right.
+add_executable(SuiteHandoffOwner
+    tests/SuiteHandoffOwner.cpp
+)
+
+target_link_libraries(SuiteHandoffOwner
+    PRIVATE
+        creation_suite_services
+)
+
+add_executable(creation_suite_project_handoff_multiprocess_smoke
+    tests/SuiteProjectHandoffMultiProcessSmoke.cpp
+)
+
+target_link_libraries(creation_suite_project_handoff_multiprocess_smoke
+    PRIVATE
+        creation_suite_services
+)
+
+add_dependencies(creation_suite_project_handoff_multiprocess_smoke SuiteHandoffOwner)
+
+add_test(
+    NAME creation_suite_project_handoff_multiprocess_smoke
+    COMMAND creation_suite_project_handoff_multiprocess_smoke
 )

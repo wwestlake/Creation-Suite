@@ -35,6 +35,7 @@ juce::var toVar(const creation::services::SuiteProcessRecord& record)
     object->setProperty("pipeName", record.pipeName);
     object->setProperty("startedAtMs", record.startedAt.toMilliseconds());
     object->setProperty("lastHeartbeatMs", record.lastHeartbeat.toMilliseconds());
+    object->setProperty("openProjectContainerPath", record.openProjectContainerPath);
     return juce::var(object);
 }
 
@@ -51,6 +52,7 @@ creation::services::SuiteProcessRecord fromVar(const juce::var& value)
     record.pipeName = object->getProperty("pipeName").toString();
     record.startedAt = juce::Time(static_cast<juce::int64>(object->getProperty("startedAtMs")));
     record.lastHeartbeat = juce::Time(static_cast<juce::int64>(object->getProperty("lastHeartbeatMs")));
+    record.openProjectContainerPath = object->getProperty("openProjectContainerPath").toString();
     return record;
 }
 }
@@ -78,14 +80,30 @@ void SuiteProcessRegistration::RegisterSelf(const juce::String& appId, int oscPo
 {
     appId_ = appId;
     oscPort_ = oscPort;
-    pipeName_ = pipeName;
     processId_ = currentProcessId();
     startedAt_ = juce::Time::getCurrentTime();
+
+    // A real, unique pipe name by default -- every process is reachable
+    // for control-channel requests (SuiteProjectHandoff) without every
+    // caller needing to invent its own naming scheme.
+    pipeName_ = pipeName.isNotEmpty() ? pipeName : ("CreationSuiteControl-" + appId + "-" + juce::String(static_cast<int>(processId_)));
 
     // Written immediately, not left to wait for the first heartbeat
     // interval, so a just-started process is discoverable right away.
     WriteHeartbeatFile();
     startThread(juce::Thread::Priority::low);
+}
+
+void SuiteProcessRegistration::SetOpenProject(const juce::File& containerFile)
+{
+    openProjectContainerPath_ = containerFile.getFullPathName();
+    WriteHeartbeatFile();
+}
+
+void SuiteProcessRegistration::ClearOpenProject()
+{
+    openProjectContainerPath_.clear();
+    WriteHeartbeatFile();
 }
 
 void SuiteProcessRegistration::run()
@@ -108,6 +126,7 @@ void SuiteProcessRegistration::WriteHeartbeatFile()
     record.pipeName = pipeName_;
     record.startedAt = startedAt_;
     record.lastHeartbeat = juce::Time::getCurrentTime();
+    record.openProjectContainerPath = openProjectContainerPath_;
 
     auto directory = SuiteProcessRegistry::RegistryDirectory();
     if (! directory.exists())

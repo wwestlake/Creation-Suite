@@ -16,6 +16,12 @@ struct SuiteProcessRecord
     juce::String pipeName;
     juce::Time startedAt;
     juce::Time lastHeartbeat;
+
+    // Full path of the project container this process currently has open,
+    // or empty if none. This is how another app finds out who to ask for
+    // a project before it bothers trying (and failing) to mount it --
+    // see SuiteProjectHandoff.h for the actual release request.
+    juce::String openProjectContainerPath;
 };
 
 // Owns this process's OWN registration file and the background thread
@@ -37,8 +43,27 @@ public:
 
     // Starts the heartbeat thread and writes the initial registration
     // file immediately (not waiting for the first heartbeat interval to
-    // elapse) so a just-started process is discoverable right away.
+    // elapse) so a just-started process is discoverable right away. If
+    // pipeName is left empty, a real one is generated (unique per app +
+    // process) so this process is always reachable for control-channel
+    // requests -- see SuiteProjectHandoff.h -- without every caller
+    // needing to invent its own naming scheme.
     void RegisterSelf(const juce::String& appId, int oscPort = 0, const juce::String& pipeName = {});
+
+    // The pipe name this process is actually listening on (whatever was
+    // passed to RegisterSelf, or the generated one). Wire a
+    // SuiteProjectHandoffListener to this same name so requesters --
+    // which read it back out of the registry -- can actually reach it.
+    juce::String getPipeName() const noexcept { return pipeName_; }
+
+    // Publishes/clears which project container this process currently has
+    // open, so another process can find out who owns a project before
+    // trying (and failing) to mount it itself. Rewrites the heartbeat file
+    // immediately rather than waiting for the next interval, since a
+    // project open/close is exactly the moment another app might be
+    // checking.
+    void SetOpenProject(const juce::File& containerFile);
+    void ClearOpenProject();
 
     static constexpr int kHeartbeatIntervalMs = 5000;
 
@@ -52,6 +77,7 @@ private:
     juce::String pipeName_;
     juce::Time startedAt_;
     juce::uint32 processId_ = 0;
+    juce::String openProjectContainerPath_;
 };
 
 // Discovery side -- stateless, callable by any process (whether or not
