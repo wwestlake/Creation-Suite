@@ -159,13 +159,13 @@ bool SuiteVolume::createAndFormat(const juce::File& containerFile, juce::int64 s
     const auto drivePrefix = juce::String(driveIndex) + ":";
 
     MKFS_PARM options{};
-    options.fmt = FM_ANY;
+    options.fmt = FM_EXFAT; // exFAT specifically: FAT32's 4GB per-file cap is unacceptable for real project assets (video, audio).
     options.n_fat = 0;   // 0 = FatFs default
     options.align = 0;   // 0 = auto-detect from disk_ioctl(GET_BLOCK_SIZE)
     options.n_root = 0;  // 0 = FatFs default
     options.au_size = 0; // 0 = FatFs default cluster size for the volume size
 
-    std::array<BYTE, 8192> workBuffer{};
+    std::array<BYTE, 32768> workBuffer{};
     const auto mkfsResult = f_mkfs(drivePrefix.toRawUTF8(), &options, workBuffer.data(), static_cast<UINT>(workBuffer.size()));
     if (mkfsResult != FR_OK) {
         errorMessage = "Could not format the project container (FatFs error " + juce::String(static_cast<int>(mkfsResult)) + ").";
@@ -236,6 +236,15 @@ void SuiteVolume::close() {
     openContainerFile = juce::File();
 }
 
+namespace {
+// f_write/f_read take a 32-bit UINT byte count, so a single call cannot move
+// more than ~4GB regardless of the underlying FAT format -- files larger
+// than that (the whole point of enabling exFAT) must be moved in bounded
+// chunks. 32MB balances call overhead against not needing a second large
+// buffer.
+constexpr size_t kIoChunkBytes = 32 * 1024 * 1024;
+}
+
 bool SuiteVolume::writeFile(const juce::String& logicalPath, const juce::MemoryBlock& data, juce::String& errorMessage) {
     if (! mounted) {
         errorMessage = "The volume is not open.";
@@ -253,11 +262,26 @@ bool SuiteVolume::writeFile(const juce::String& logicalPath, const juce::MemoryB
         return false;
     }
 
-    UINT written = 0;
-    const auto writeResult = f_write(&file, data.getData(), static_cast<UINT>(data.getSize()), &written);
+    const auto* bytes = static_cast<const std::uint8_t*>(data.getData());
+    size_t remaining = data.getSize();
+    size_t offset = 0;
+    bool ok = true;
+
+    while (remaining > 0) {
+        const auto thisChunk = static_cast<UINT>(juce::jmin(remaining, kIoChunkBytes));
+        UINT written = 0;
+        const auto writeResult = f_write(&file, bytes + offset, thisChunk, &written);
+        if (writeResult != FR_OK || written != thisChunk) {
+            ok = false;
+            break;
+        }
+        offset += thisChunk;
+        remaining -= thisChunk;
+    }
+
     f_close(&file);
 
-    if (writeResult != FR_OK || written != data.getSize()) {
+    if (! ok) {
         errorMessage = "Could not write the asset's data.";
         return false;
     }
@@ -277,14 +301,29 @@ bool SuiteVolume::readFile(const juce::String& logicalPath, juce::MemoryBlock& o
         return false;
     }
 
-    const auto size = f_size(&file);
+    const FSIZE_t size = f_size(&file);
     outData.setSize(static_cast<size_t>(size));
 
-    UINT bytesRead = 0;
-    const auto readResult = f_read(&file, outData.getData(), static_cast<UINT>(size), &bytesRead);
+    auto* bytes = static_cast<std::uint8_t*>(outData.getData());
+    FSIZE_t remaining = size;
+    size_t offset = 0;
+    bool ok = true;
+
+    while (remaining > 0) {
+        const auto thisChunk = static_cast<UINT>(juce::jmin<FSIZE_t>(remaining, static_cast<FSIZE_t>(kIoChunkBytes)));
+        UINT bytesRead = 0;
+        const auto readResult = f_read(&file, bytes + offset, thisChunk, &bytesRead);
+        if (readResult != FR_OK || bytesRead != thisChunk) {
+            ok = false;
+            break;
+        }
+        offset += thisChunk;
+        remaining -= thisChunk;
+    }
+
     f_close(&file);
 
-    if (readResult != FR_OK || bytesRead != size) {
+    if (! ok) {
         errorMessage = "Could not read the asset's data.";
         return false;
     }

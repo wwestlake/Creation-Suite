@@ -35,3 +35,17 @@ add_test(
     NAME creation_suite_vfs_smoke
     COMMAND creation_suite_vfs_smoke
 )
+
+add_executable(creation_suite_vfs_largefile_smoke
+    tests/VfsLargeFileSmoke.cpp
+)
+
+target_link_libraries(creation_suite_vfs_largefile_smoke
+    PRIVATE
+        creation_suite_vfs
+)
+
+add_test(
+    NAME creation_suite_vfs_largefile_smoke
+    COMMAND creation_suite_vfs_largefile_smoke
+)

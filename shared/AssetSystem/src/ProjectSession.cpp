@@ -4,10 +4,11 @@ namespace
 {
 // Reserved logical size for a freshly created container. The backing file
 // is an NTFS sparse file, so this costs no real disk space up front --
-// FatFs just needs a fixed volume size to format against. FAT32 caps a
-// single file at 4GB regardless of volume size; exFAT support (VFS-M3)
-// is what actually lifts that per-file ceiling.
-constexpr juce::int64 kDefaultContainerSizeBytes = 4LL * 1024 * 1024 * 1024;
+// FatFs just needs a fixed volume size to format against. Containers are
+// formatted exFAT (VFS-M3), which has no meaningful per-file size cap, so
+// this is sized for real project assets (multi-GB video/audio) rather than
+// FAT32's old 4GB ceiling.
+constexpr juce::int64 kDefaultContainerSizeBytes = 64LL * 1024 * 1024 * 1024;
 }
 
 namespace creation::assets
