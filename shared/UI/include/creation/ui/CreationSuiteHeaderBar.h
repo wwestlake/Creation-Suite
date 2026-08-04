@@ -49,6 +49,7 @@ public:
     std::function<void()> onTourRequested;
     std::function<void()> onAudioRequested;
     std::function<void()> onSuiteRequested;
+    std::function<void()> onAssetManagerRequested;
     std::function<void(const juce::String& targetId, const juce::String& displayLabel)> onLearnMidiRequested;
 
     void setAppTitle(const juce::String& title);
@@ -102,6 +103,7 @@ public:
     juce::TextButton signInButton { "Sign In" };
     juce::TextButton projectButton { "Project" };
     juce::TextButton audioButton { "Audio" };
+    juce::TextButton assetsButton { "Assets" };
     juce::TextButton suiteButton { juce::String(juce::CharPointer_UTF8("\xe2\x9a\x99")) };
     juce::TextButton tourButton { "Tour" };
     juce::Label profileNameLabel;

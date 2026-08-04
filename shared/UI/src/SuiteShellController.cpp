@@ -1,4 +1,5 @@
 #include <creation/ui/SuiteShellController.h>
+#include <creation/ui/SuiteAssetManagerPanel.h>
 #include <creation/ui/SuiteEulaPanel.h>
 
 #include <creation/suite/SuiteStoragePaths.h>
@@ -613,6 +614,7 @@ void SuiteShellController::attach(CreationSuiteHeaderBar& headerBarToUse,
 
     headerBar->onSuiteRequested = [this] { showSuiteSettingsWindow(); };
     headerBar->onProjectMenuRequested = [this] { showProjectBrowserWindow(); };
+    headerBar->onAssetManagerRequested = [this] { showAssetManagerWindow(); };
     headerBar->onSignInRequested = [this] { beginSuiteSignIn(); };
     headerBar->onOpenProfilePageRequested = [this] { openLagDaemonProfile(); };
     headerBar->onLogoutRequested = [this] { logoutProfile(); };
@@ -627,6 +629,11 @@ void SuiteShellController::showSuiteSettings()
 void SuiteShellController::showProjectBrowser()
 {
     showProjectBrowserWindow();
+}
+
+void SuiteShellController::showAssetManager()
+{
+    showAssetManagerWindow();
 }
 
 void SuiteShellController::showSuiteEula()
@@ -712,6 +719,37 @@ void SuiteShellController::showProjectBrowserWindow()
 void SuiteShellController::closeProjectBrowserWindow()
 {
     projectBrowserWindow.reset();
+}
+
+void SuiteShellController::showAssetManagerWindow()
+{
+    if (assetManagerWindow != nullptr)
+    {
+        assetManagerWindow->toFront(true);
+        return;
+    }
+
+    auto capability = config.assetManagerCapability;
+    if (capability.hostAppDisplayName.isEmpty())
+        capability.hostAppDisplayName = config.appDisplayName;
+
+    auto panel = std::make_unique<SuiteAssetManagerPanel>(capability);
+    auto window = std::make_unique<ManagedDocumentWindow>("Creation Suite Asset Manager",
+                                                          config.backgroundColour,
+                                                          juce::DocumentWindow::allButtons,
+                                                          [this] { closeAssetManagerWindow(); });
+    window->setUsingNativeTitleBar(true);
+    window->setResizable(true, true);
+    window->setContentOwned(panel.release(), true);
+    window->centreWithSize(980, 620);
+    window->setVisible(true);
+    assetManagerWindow = std::move(window);
+    setStatus("Opened suite asset manager.");
+}
+
+void SuiteShellController::closeAssetManagerWindow()
+{
+    assetManagerWindow.reset();
 }
 
 void SuiteShellController::showEulaWindow()

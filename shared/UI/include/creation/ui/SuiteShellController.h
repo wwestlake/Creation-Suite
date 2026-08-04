@@ -5,6 +5,7 @@
 #include <creation/assets/ProjectContainerService.h>
 #include <creation/suite/SuiteSettings.h>
 #include <creation/ui/CreationSuiteHeaderBar.h>
+#include <creation/ui/SuiteAssetManagerCapability.h>
 #include <creation/ui/SuiteDesktopAuthSession.h>
 #include <creation/ui/SuiteSettingsPanel.h>
 
@@ -18,6 +19,7 @@ public:
         juce::String appDisplayName;
         creation::assets::SuiteAppDomain appDomain = creation::assets::SuiteAppDomain::unknown;
         juce::Colour backgroundColour { juce::Colour(0xff10161f) };
+        SuiteAssetManagerCapability assetManagerCapability;
     };
 
     SuiteShellController() = default;
@@ -30,6 +32,7 @@ public:
                 std::function<void(const juce::String&)> statusSink = {});
     void showSuiteSettings();
     void showProjectBrowser();
+    void showAssetManager();
     void showSuiteEula();
     void openSuiteSignIn();
     void openSuiteProfile();
@@ -42,6 +45,8 @@ private:
     void closeSuiteSettingsWindow();
     void showProjectBrowserWindow();
     void closeProjectBrowserWindow();
+    void showAssetManagerWindow();
+    void closeAssetManagerWindow();
     void showEulaWindow();
     void closeEulaWindow();
     void chooseSuiteDirectory(const juce::String& fieldId);
@@ -64,6 +69,7 @@ private:
     creation::services::SuiteAiSettings suiteAiSettings;
     std::unique_ptr<juce::DocumentWindow> suiteSettingsWindow;
     std::unique_ptr<juce::DocumentWindow> projectBrowserWindow;
+    std::unique_ptr<juce::DocumentWindow> assetManagerWindow;
     std::unique_ptr<juce::DocumentWindow> eulaWindow;
     juce::Component::SafePointer<SuiteSettingsPanel> suiteSettingsPanel;
     std::unique_ptr<juce::FileChooser> suiteDirectoryChooser;

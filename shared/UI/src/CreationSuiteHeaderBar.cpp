@@ -327,6 +327,10 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
     audioButton.setTooltip("Open audio settings");
     addAndMakeVisible(audioButton);
 
+    assetsButton.onClick = [this, callback] { callback(onAssetManagerRequested); };
+    assetsButton.setTooltip("Open the Suite Asset Manager");
+    addAndMakeVisible(assetsButton);
+
     suiteButton.onClick = [this, callback] { callback(onSuiteRequested); };
     suiteButton.setTooltip("Open suite settings");
     addAndMakeVisible(suiteButton);
@@ -675,6 +679,8 @@ void CreationSuiteHeaderBar::resized()
     suiteButton.setBounds(bottomRow.removeFromLeft(44));
     bottomRow.removeFromLeft(10);
     audioButton.setBounds(bottomRow.removeFromLeft(82));
+    bottomRow.removeFromLeft(6);
+    assetsButton.setBounds(bottomRow.removeFromLeft(82));
     tourButton.setBounds(bottomRow.removeFromLeft(78));
     statusLabel.setBounds(bottomRow.removeFromRight(220));
 
