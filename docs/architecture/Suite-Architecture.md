@@ -47,16 +47,25 @@ Keep inside app repos:
 
 ## Asset And Project Hierarchy
 
-The suite uses two levels of storage:
+The suite uses a single, suite-wide VFS as the one project/asset store (this
+replaces the earlier "two levels of storage" framing below it used to have —
+there is one level: the suite VFS):
 
-1. Suite-level shared configuration/discovery
-   This is the canonical location every app can find. It stores suite
-   configuration, shared resources, and project root discovery data.
-
-2. App-level project spaces
-   Each app has its own project root, discovered through the suite
-   configuration layer. Projects inside those spaces use the suite asset
-   model and virtual filesystem conventions.
+- Exactly one VFS root, one user-configured location, shared by every app.
+  Recommended to live on a large storage device, chosen during first-run
+  setup.
+- Projects are objects inside that one VFS, not separate per-app project
+  roots. Any app can open any project; there is no per-app project silo and
+  no import/export step between apps for data that already lives in the
+  suite (see [[Suite-Shared-Project-Model]]).
+- A background service, not any app process, owns the VFS exclusively and
+  exposes it to every app over a localhost HTTP + WebSocket API (see
+  [[Suite-Shared-Project-Model]] for the chosen mechanism).
+- Suite-level bootstrap configuration (where the VFS root is, whether setup
+  has been completed) is itself suite-shared, not app-local: an app will not
+  load its main screen until suite setup — VFS location foremost — is
+  complete, and that setup flow is a single shared component every app
+  defers to, not six separate copies of it.
 
 ## CEL Strategy
 

@@ -4,11 +4,13 @@ Date: July 29, 2026
 
 This document explains how an LLM should work inside the Creation Suite codebase without reintroducing app-local infrastructure drift.
 
+This doc is subordinate to the top-level `AGENTS.md`, specifically its Development Environment Rule: there is no backward compatibility requirement anywhere in this codebase, this is new development, and legacy filesystem-first behavior is not to be preserved. If anything below reads as sanctioning a compatibility wrapper, dual-storage support, or a fallback path for old data, that wording is wrong and should be fixed, not followed — treat old folder-era project structures as disposable, full stop.
+
 ## Bottom Line
 
 If you are adding or changing shared behavior, prefer `shared/` first.
 
-Do not build new app-local persistence, VFS, suite settings, account/provider settings, shared shell behavior, or project-container logic inside a specific app unless you are intentionally creating a temporary compatibility wrapper around the shared implementation.
+Do not build new app-local persistence, VFS, suite settings, account/provider settings, shared shell behavior, or project-container logic inside a specific app. No exceptions — not for a "temporary" compatibility wrapper, not for a migration bridge, not for "just in case." If old app-local code exists doing this, cut it over to the shared implementation and delete the old code in the same pass; do not wrap it.
 
 ## Non-Negotiable Rules
 
@@ -92,7 +94,7 @@ Use this layer for:
 - legal/EULA settings
 - cross-app service behavior
 
-Do not add new app-local copies of these behaviors unless you are bridging to the shared version during a migration.
+Do not add new app-local copies of these behaviors.
 
 ### Shared Interop
 
@@ -110,14 +112,14 @@ Project discovery should use the authoritative shared container services, not ha
 
 ## Current Migration Truths
 
-As of July 29, 2026:
+As of August 3, 2026 — stated as known debt to eliminate, not as sanctioned dual-mode behavior:
 
 - `shared/AssetSystem` is the main suite storage/container/VFS path.
 - `shared/UI` owns the real shared suite shell behavior for migrated apps.
-- Creation Station can link a project to a suite container and route asset operations through the shared container path while still supporting older folder-only projects.
-- Creation Engine has been cut over away from its local VFS target and now rides on the shared suite VFS path through a compatibility wrapper.
+- Creation Station still has old folder-only-project code paths (`.patina.json` extension handling in `ProjectStorage.cpp`, a legacy per-app AI-settings migration in `MainComponent.cpp`) that have not yet been removed. These are bugs to fix, not a supported "old projects still work" mode — do not extend or imitate this pattern elsewhere.
+- Creation Engine's shared-VFS integration still goes through a compatibility-wrapper header (`shared/AssetSystem/include/assets/VirtualFileSystem.h`, old `ce::assets` namespace) instead of the real `creation::assets::VirtualFileSystem` API, kept only to avoid a symbol-rename pass across `AssetCatalog.h`, `ViewportComponent.h`, `ShaderComposer.h`, `GltfLoader.h`. This wrapper is scheduled for removal — do the rename pass instead of adding more call sites through it.
 - Creation Live is still early and not fully wired to the shared asset/container path yet.
-- Movie still has some cleanup left around the last duplicated LLVM helper path.
+- Movie has already been fully cut over (its old `.creationmovie` flat-file format was deleted outright, not wrapped) — this is the pattern to follow for the other apps, not Station's or Engine's current state.
 
 ## How To Add A New App
 
@@ -141,9 +143,9 @@ For a new suite-owned workflow:
 
 If you are touching an older app that still has folder-era code:
 
-1. Prefer adding a compatibility bridge to the shared path.
-2. Preserve fallback behavior for old projects when necessary.
-3. Avoid rewriting the whole app storage model in one pass unless explicitly requested.
+1. Cut it over to the shared path directly. Do not add a compatibility bridge.
+2. Do not preserve fallback behavior for old projects — treat old folder-era data as disposable test data, per `AGENTS.md`.
+3. A full rewrite of the app's storage model in one pass is the expected outcome when the task touches that model, not something to avoid — the exception is scoping down to a smaller, explicitly-requested slice of the work, not leaving old and new paths coexisting.
 
 ## What Not To Do
 
