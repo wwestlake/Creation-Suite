@@ -117,7 +117,7 @@ As of August 3, 2026 — stated as known debt to eliminate, not as sanctioned du
 - `shared/AssetSystem` is the main suite storage/container/VFS path.
 - `shared/UI` owns the real shared suite shell behavior for migrated apps.
 - Creation Station still has old folder-only-project code paths (`.patina.json` extension handling in `ProjectStorage.cpp`, a legacy per-app AI-settings migration in `MainComponent.cpp`) that have not yet been removed. These are bugs to fix, not a supported "old projects still work" mode — do not extend or imitate this pattern elsewhere.
-- Creation Engine's shared-VFS integration still goes through a compatibility-wrapper header (`shared/AssetSystem/include/assets/VirtualFileSystem.h`, old `ce::assets` namespace) instead of the real `creation::assets::VirtualFileSystem` API, kept only to avoid a symbol-rename pass across `AssetCatalog.h`, `ViewportComponent.h`, `ShaderComposer.h`, `GltfLoader.h`. This wrapper is scheduled for removal — do the rename pass instead of adding more call sites through it.
+- Creation Engine's shared-VFS integration was cut over directly onto `creation::assets::VirtualFileSystem`; the old `ce::assets` compatibility-wrapper header has been deleted.
 - Creation Live is still early and not fully wired to the shared asset/container path yet.
 - Movie has already been fully cut over (its old `.creationmovie` flat-file format was deleted outright, not wrapped) — this is the pattern to follow for the other apps, not Station's or Engine's current state.
 

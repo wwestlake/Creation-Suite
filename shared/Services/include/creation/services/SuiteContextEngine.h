@@ -6,8 +6,8 @@ namespace creation::services
 {
 // One retrievable piece of suite/project state. Contributed by any app
 // via a SuiteContextProvider -- the engine itself knows nothing about
-// what a Patina buffer or a CEL script is, only that it's a document
-// with a category and a body.
+// what a CEL script or a DAW patch is, only that it's a document with a
+// category and a body.
 struct SuiteContextDocument
 {
     juce::String id;
