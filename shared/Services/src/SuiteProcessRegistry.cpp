@@ -33,6 +33,7 @@ juce::var toVar(const creation::services::SuiteProcessRecord& record)
     object->setProperty("processId", static_cast<int>(record.processId));
     object->setProperty("oscPort", record.oscPort);
     object->setProperty("pipeName", record.pipeName);
+    object->setProperty("httpPort", record.httpPort);
     object->setProperty("startedAtMs", record.startedAt.toMilliseconds());
     object->setProperty("lastHeartbeatMs", record.lastHeartbeat.toMilliseconds());
     object->setProperty("openProjectContainerPath", record.openProjectContainerPath);
@@ -50,6 +51,7 @@ creation::services::SuiteProcessRecord fromVar(const juce::var& value)
     record.processId = static_cast<juce::uint32>(static_cast<int>(object->getProperty("processId")));
     record.oscPort = static_cast<int>(object->getProperty("oscPort"));
     record.pipeName = object->getProperty("pipeName").toString();
+    record.httpPort = static_cast<int>(object->getProperty("httpPort"));
     record.startedAt = juce::Time(static_cast<juce::int64>(object->getProperty("startedAtMs")));
     record.lastHeartbeat = juce::Time(static_cast<juce::int64>(object->getProperty("lastHeartbeatMs")));
     record.openProjectContainerPath = object->getProperty("openProjectContainerPath").toString();
@@ -76,10 +78,11 @@ SuiteProcessRegistration::~SuiteProcessRegistration()
         RegistrationFile().deleteFile();
 }
 
-void SuiteProcessRegistration::RegisterSelf(const juce::String& appId, int oscPort, const juce::String& pipeName)
+void SuiteProcessRegistration::RegisterSelf(const juce::String& appId, int oscPort, const juce::String& pipeName, int httpPort)
 {
     appId_ = appId;
     oscPort_ = oscPort;
+    httpPort_ = httpPort;
     processId_ = currentProcessId();
     startedAt_ = juce::Time::getCurrentTime();
 
@@ -124,6 +127,7 @@ void SuiteProcessRegistration::WriteHeartbeatFile()
     record.processId = processId_;
     record.oscPort = oscPort_;
     record.pipeName = pipeName_;
+    record.httpPort = httpPort_;
     record.startedAt = startedAt_;
     record.lastHeartbeat = juce::Time::getCurrentTime();
     record.openProjectContainerPath = openProjectContainerPath_;

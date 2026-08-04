@@ -8,6 +8,7 @@ add_library(creation_suite_services STATIC
     src/SuiteAiSettings.cpp
     src/SuiteProcessRegistry.cpp
     src/SuiteProjectHandoff.cpp
+    src/SuiteVfsServiceClient.cpp
     src/SuiteContextEngine.cpp
     src/SuiteAiChatClient.cpp
 )

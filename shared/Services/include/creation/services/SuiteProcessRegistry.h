@@ -14,6 +14,14 @@ struct SuiteProcessRecord
     juce::uint32 processId = 0;
     int oscPort = 0;
     juce::String pipeName;
+
+    // The suite VFS service's localhost HTTP port, 0 if this record isn't
+    // the VFS service (or it isn't listening yet). Named distinctly from
+    // oscPort/pipeName above rather than reusing either -- this is a
+    // different transport, not a third meaning grafted onto a field named
+    // for something else.
+    int httpPort = 0;
+
     juce::Time startedAt;
     juce::Time lastHeartbeat;
 
@@ -48,7 +56,7 @@ public:
     // process) so this process is always reachable for control-channel
     // requests -- see SuiteProjectHandoff.h -- without every caller
     // needing to invent its own naming scheme.
-    void RegisterSelf(const juce::String& appId, int oscPort = 0, const juce::String& pipeName = {});
+    void RegisterSelf(const juce::String& appId, int oscPort = 0, const juce::String& pipeName = {}, int httpPort = 0);
 
     // The pipe name this process is actually listening on (whatever was
     // passed to RegisterSelf, or the generated one). Wire a
@@ -75,6 +83,7 @@ private:
     juce::String appId_;
     int oscPort_ = 0;
     juce::String pipeName_;
+    int httpPort_ = 0;
     juce::Time startedAt_;
     juce::uint32 processId_ = 0;
     juce::String openProjectContainerPath_;

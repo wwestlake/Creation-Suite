@@ -1,14 +1,9 @@
 #include <creation/services/SuiteAiSettings.h>
 #include <creation/services/SuiteAiProviderRuntime.h>
-#include <creation/suite/SuiteSettings.h>
+#include <creation/services/SuiteVfsServiceClient.h>
 
 namespace
 {
-juce::File getSuiteConfigDirectory()
-{
-    return creation::suite::SuiteSettingsStore().getSuiteConfigDirectory();
-}
-
 juce::var toVar(const creation::services::SuiteAiSettings& settings)
 {
     auto* object = new juce::DynamicObject();
@@ -131,14 +126,21 @@ const SuiteAiProviderPreset* SuiteAiProviderCatalog::findById(const juce::Array<
 
 SuiteAiSettings SuiteAiSettingsStore::load(juce::String& errorMessage) const
 {
-    auto settingsFile = getSettingsFile();
-    if (! settingsFile.existsAsFile())
+    SuiteVfsServiceClient client;
+    if (! client.discover())
+    {
+        errorMessage = "Could not reach the suite VFS service.";
         return {};
+    }
 
-    const auto parsed = juce::JSON::parse(settingsFile);
+    juce::MemoryBlock data;
+    if (! client.readEntry("ai-settings.json", data))
+        return {}; // no entry yet -- same "nothing saved" meaning the old missing-file case had.
+
+    const auto parsed = juce::JSON::parse(juce::String::createStringFromData(data.getData(), static_cast<int>(data.getSize())));
     if (parsed.isVoid())
     {
-        errorMessage = "Could not parse the suite AI settings file.";
+        errorMessage = "Could not parse the suite AI settings entry.";
         return {};
     }
 
@@ -147,25 +149,22 @@ SuiteAiSettings SuiteAiSettingsStore::load(juce::String& errorMessage) const
 
 bool SuiteAiSettingsStore::save(const SuiteAiSettings& settings, juce::String& errorMessage) const
 {
-    auto configDirectory = getSuiteConfigDirectory();
-    if (! configDirectory.exists() && ! configDirectory.createDirectory())
+    SuiteVfsServiceClient client;
+    if (! client.discover())
     {
-        errorMessage = "Could not create the suite configuration folder for AI settings.";
+        errorMessage = "Could not reach the suite VFS service.";
         return false;
     }
 
-    if (! getSettingsFile().replaceWithText(juce::JSON::toString(toVar(settings), true)))
+    const auto json = juce::JSON::toString(toVar(settings), true);
+    const juce::MemoryBlock data(json.toRawUTF8(), json.getNumBytesAsUTF8());
+    if (! client.writeEntry("ai-settings.json", data))
     {
-        errorMessage = "Could not save the suite AI settings file.";
+        errorMessage = "Could not save the suite AI settings entry.";
         return false;
     }
 
     return true;
-}
-
-juce::File SuiteAiSettingsStore::getSettingsFile() const
-{
-    return getSuiteConfigDirectory().getChildFile("suite-ai-settings.json");
 }
 
 const SuiteAiAccountSettings* SuiteAiSettingsResolver::findAccountById(const SuiteAiSettings& settings,

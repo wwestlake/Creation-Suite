@@ -35,6 +35,7 @@ juce::String appDomainFolderName(creation::assets::SuiteAppDomain domain)
         case creation::assets::SuiteAppDomain::live: return "Creation Live";
         case creation::assets::SuiteAppDomain::texture: return "Creation Texture";
         case creation::assets::SuiteAppDomain::modeler: return "Creation Modeler";
+        case creation::assets::SuiteAppDomain::suite: return "Suite";
         case creation::assets::SuiteAppDomain::unknown: break;
     }
 

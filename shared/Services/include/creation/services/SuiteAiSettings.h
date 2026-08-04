@@ -58,8 +58,6 @@ class SuiteAiSettingsStore final
 public:
     SuiteAiSettings load(juce::String& errorMessage) const;
     bool save(const SuiteAiSettings& settings, juce::String& errorMessage) const;
-
-    juce::File getSettingsFile() const;
 };
 
 class SuiteAiProviderCatalog

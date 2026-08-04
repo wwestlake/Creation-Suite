@@ -55,7 +55,6 @@ private:
         int port = 0;
     };
 
-    static juce::File getSessionFile();
     static juce::String makeRandomToken(int byteCount);
     static juce::String toBase64Url(const void* data, size_t size);
     static juce::String sha256Base64Url(const juce::String& text);
@@ -79,7 +78,7 @@ private:
     void setError(const juce::String& text);
     void setBusy(bool shouldBeBusy);
     void notifyAuthenticated();
-    void loadSessionFromValueTree(const juce::ValueTree& tree);
+    void loadSessionFromVar(const juce::DynamicObject& object);
 
     juce::CriticalSection sessionLock;
     SessionData session;

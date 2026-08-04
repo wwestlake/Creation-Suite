@@ -14,7 +14,13 @@ enum class SuiteAppDomain
     movie,
     live,
     texture,
-    modeler
+    modeler,
+    // Reserved for the suite's own root project (suite-wide data: AI
+    // settings, auth session, etc. -- see SuiteRootProject.h). Never
+    // included in listProjects/listAllProjects/findProjectById's per-app
+    // domain iteration, so it never appears in any app's own project
+    // browser by construction, not by special-case filtering.
+    suite
 };
 
 struct ProjectManifest

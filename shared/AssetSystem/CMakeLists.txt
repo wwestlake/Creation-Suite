@@ -8,6 +8,7 @@ add_library(creation_suite_asset_system STATIC
     src/ProjectSession.cpp
     src/ProjectWorkspaceService.cpp
     src/ProjectManifest.cpp
+    src/SuiteRootProject.cpp
     src/SuiteSettings.cpp
     src/SuiteStoragePaths.cpp
     src/VirtualFileSystem.cpp

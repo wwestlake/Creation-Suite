@@ -24,6 +24,7 @@ juce::String toStorageToken(SuiteAppDomain domain)
         case SuiteAppDomain::live: return "live";
         case SuiteAppDomain::texture: return "texture";
         case SuiteAppDomain::modeler: return "modeler";
+        case SuiteAppDomain::suite: return "suite";
         case SuiteAppDomain::unknown: break;
     }
 
@@ -39,6 +40,7 @@ SuiteAppDomain suiteAppDomainFromStorageToken(const juce::String& token)
     if (normalized == "live") return SuiteAppDomain::live;
     if (normalized == "texture") return SuiteAppDomain::texture;
     if (normalized == "modeler") return SuiteAppDomain::modeler;
+    if (normalized == "suite") return SuiteAppDomain::suite;
     return SuiteAppDomain::unknown;
 }
 
@@ -52,6 +54,7 @@ juce::String toDisplayName(SuiteAppDomain domain)
         case SuiteAppDomain::live: return "Creation Live";
         case SuiteAppDomain::texture: return "Creation Texture";
         case SuiteAppDomain::modeler: return "Creation Modeler";
+        case SuiteAppDomain::suite: return "Creation Suite";
         case SuiteAppDomain::unknown: break;
     }
 

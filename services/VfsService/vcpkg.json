@@ -1,0 +1,9 @@
+{
+  "name": "creation-suite-vfs-service",
+  "version-string": "0.0.1",
+  "builtin-baseline": "40f3c709db80acf154ac4b17a1f83c564ebd022e",
+  "dependencies": [
+    { "name": "cpp-httplib", "default-features": false },
+    { "name": "ixwebsocket", "default-features": false }
+  ]
+}

@@ -1,12 +1,12 @@
 #include <creation/ui/SuiteDesktopAuthSession.h>
 
-#include <creation/suite/SuiteSettings.h>
+#include <creation/services/SuiteVfsServiceClient.h>
 
 #include <thread>
 
 namespace
 {
-juce::String authFileName() { return "suite-desktop-auth.xml"; }
+juce::String authEntryName() { return "desktop-auth.json"; }
 juce::String authSiteBase() { return "https://lagdaemon.com"; }
 juce::String tokenApiBase() { return "https://lagdaemon.com/djehuti"; }
 
@@ -46,19 +46,20 @@ SuiteDesktopAuthSession::~SuiteDesktopAuthSession()
 
 bool SuiteDesktopAuthSession::loadFromDisk()
 {
-    auto file = getSessionFile();
-    if (! file.existsAsFile())
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
         return false;
 
-    auto xml = juce::parseXML(file);
-    if (xml == nullptr)
+    juce::MemoryBlock data;
+    if (! client.readEntry(authEntryName(), data))
         return false;
 
-    auto tree = juce::ValueTree::fromXml(*xml);
-    if (! tree.isValid())
+    const auto parsed = juce::JSON::parse(juce::String::createStringFromData(data.getData(), static_cast<int>(data.getSize())));
+    const auto* object = parsed.getDynamicObject();
+    if (object == nullptr)
         return false;
 
-    loadSessionFromValueTree(tree);
+    loadSessionFromVar(*object);
     return hasValidSession();
 }
 
@@ -69,19 +70,25 @@ void SuiteDesktopAuthSession::saveToDisk() const
     if (session.token.isEmpty())
         return;
 
-    juce::ValueTree tree("SuiteDesktopAuthSession");
-    tree.setProperty("token", session.token, nullptr);
-    tree.setProperty("expiresAt", session.expiresAt, nullptr);
-    tree.setProperty("email", session.user.email, nullptr);
-    tree.setProperty("displayName", session.user.displayName, nullptr);
-    tree.setProperty("role", session.user.role, nullptr);
-    tree.setProperty("userId", session.user.id, nullptr);
-    tree.setProperty("entitlements", session.user.entitlements.joinIntoString("\n"), nullptr);
+    auto* object = new juce::DynamicObject();
+    object->setProperty("token", session.token);
+    object->setProperty("expiresAt", session.expiresAt);
+    object->setProperty("email", session.user.email);
+    object->setProperty("displayName", session.user.displayName);
+    object->setProperty("role", session.user.role);
+    object->setProperty("userId", session.user.id);
 
-    auto file = getSessionFile();
-    file.getParentDirectory().createDirectory();
-    if (auto xml = tree.createXml())
-        xml->writeTo(file);
+    juce::Array<juce::var> entitlements;
+    for (const auto& entitlement : session.user.entitlements)
+        entitlements.add(entitlement);
+    object->setProperty("entitlements", entitlements);
+
+    const auto json = juce::JSON::toString(juce::var(object), true);
+    const juce::MemoryBlock data(json.toRawUTF8(), json.getNumBytesAsUTF8());
+
+    creation::services::SuiteVfsServiceClient client;
+    if (client.discover())
+        client.writeEntry(authEntryName(), data);
 }
 
 void SuiteDesktopAuthSession::clearSession()
@@ -93,9 +100,9 @@ void SuiteDesktopAuthSession::clearSession()
         statusMessage = "Signed out.";
     }
 
-    auto file = getSessionFile();
-    if (file.existsAsFile())
-        file.deleteFile();
+    creation::services::SuiteVfsServiceClient client;
+    if (client.discover())
+        client.removeEntry(authEntryName());
 
     if (onSessionCleared != nullptr)
         onSessionCleared();
@@ -223,12 +230,6 @@ void SuiteDesktopAuthSession::run()
     }
 
     setBusy(false);
-}
-
-juce::File SuiteDesktopAuthSession::getSessionFile()
-{
-    auto configDirectory = creation::suite::SuiteSettingsStore().getSuiteConfigDirectory();
-    return configDirectory.getChildFile(authFileName());
 }
 
 juce::String SuiteDesktopAuthSession::makeRandomToken(int byteCount)
@@ -615,16 +616,19 @@ void SuiteDesktopAuthSession::notifyAuthenticated()
     onAuthenticated(copiedSession);
 }
 
-void SuiteDesktopAuthSession::loadSessionFromValueTree(const juce::ValueTree& tree)
+void SuiteDesktopAuthSession::loadSessionFromVar(const juce::DynamicObject& object)
 {
     juce::ScopedLock lock(sessionLock);
-    session.token = tree.getProperty("token").toString();
-    session.expiresAt = static_cast<std::int64_t>(tree.getProperty("expiresAt", 0));
-    session.user.id = tree.getProperty("userId").toString();
-    session.user.email = tree.getProperty("email").toString();
-    session.user.displayName = tree.getProperty("displayName").toString();
-    session.user.role = tree.getProperty("role").toString();
-    session.user.entitlements = juce::StringArray::fromLines(tree.getProperty("entitlements").toString());
+    session.token = object.getProperty("token").toString();
+    session.expiresAt = static_cast<std::int64_t>(static_cast<juce::int64>(object.getProperty("expiresAt")));
+    session.user.id = object.getProperty("userId").toString();
+    session.user.email = object.getProperty("email").toString();
+    session.user.displayName = object.getProperty("displayName").toString();
+    session.user.role = object.getProperty("role").toString();
+    session.user.entitlements.clear();
+    if (auto* entitlementsArray = object.getProperty("entitlements").getArray())
+        for (const auto& entitlement : *entitlementsArray)
+            session.user.entitlements.add(entitlement.toString());
 
     if (session.token.isNotEmpty()
         && (session.user.role.isEmpty() || session.user.entitlements.isEmpty() || session.user.displayName.isEmpty() || session.user.email.isEmpty()))

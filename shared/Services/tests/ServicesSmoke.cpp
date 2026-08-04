@@ -30,9 +30,12 @@ int main()
         creation::services::SuiteAiDiagnosticsStore diagnosticsStore;
         creation::services::SuiteLogStore logStoreForCleanup;
 
-        auto aiFile = aiStore.getSettingsFile();
+        // AI settings now live inside the suite root project via
+        // SuiteVfsServiceClient (requires services/VfsService to be built
+        // and reachable, per docs/architecture/Suite-Shared-Project-Model.md)
+        // rather than a loose file -- save() below overwrites whatever was
+        // there, so no separate pre-test delete step is needed for it.
         auto legalFile = legalStore.getSettingsFile();
-        aiFile.deleteFile();
         legalFile.deleteFile();
         // These three persist across runs and are never reset by the settings-file
         // deletes above -- a prior direct run of this executable (e.g. manual
