@@ -30,6 +30,11 @@ public:
 class SuiteAssetDetailsPanel final : public juce::Component
 {
 public:
+    std::function<void()> onOpenRequested;
+    std::function<void()> onStopRequested;
+    std::function<void()> onPlaceRequested;
+    std::function<void()> onExportRequested;
+
     SuiteAssetDetailsPanel()
     {
         headerLabel.setText("Details", juce::dontSendNotification);
@@ -48,6 +53,38 @@ public:
         statusLabel.setJustificationType(juce::Justification::topLeft);
         addAndMakeVisible(statusLabel);
 
+        openButton.setButtonText("Open / Preview");
+        openButton.onClick = [this]
+        {
+            if (onOpenRequested)
+                onOpenRequested();
+        };
+        addAndMakeVisible(openButton);
+
+        stopButton.setButtonText("Stop");
+        stopButton.onClick = [this]
+        {
+            if (onStopRequested)
+                onStopRequested();
+        };
+        addAndMakeVisible(stopButton);
+
+        placeButton.setButtonText("Place on Track");
+        placeButton.onClick = [this]
+        {
+            if (onPlaceRequested)
+                onPlaceRequested();
+        };
+        addAndMakeVisible(placeButton);
+
+        exportButton.setButtonText("Export");
+        exportButton.onClick = [this]
+        {
+            if (onExportRequested)
+                onExportRequested();
+        };
+        addAndMakeVisible(exportButton);
+
         showNothingSelected();
     }
 
@@ -56,6 +93,10 @@ public:
         nameLabel.setText("No selection", juce::dontSendNotification);
         metaLabel.setText({}, juce::dontSendNotification);
         statusLabel.setText({}, juce::dontSendNotification);
+        openButton.setEnabled(false);
+        stopButton.setEnabled(false);
+        placeButton.setEnabled(false);
+        exportButton.setEnabled(false);
     }
 
     void setFile(const juce::File& file, const SuiteAssetManagerCapability& capability)
@@ -72,6 +113,10 @@ public:
         {
             metaLabel.setText("Folder", juce::dontSendNotification);
             statusLabel.setText({}, juce::dontSendNotification);
+            openButton.setEnabled(false);
+            stopButton.setEnabled(false);
+            placeButton.setEnabled(false);
+            exportButton.setEnabled(false);
             return;
         }
 
@@ -105,6 +150,11 @@ public:
         {
             statusLabel.setText({}, juce::dontSendNotification);
         }
+
+        openButton.setEnabled(false);
+        stopButton.setEnabled(false);
+        placeButton.setEnabled(false);
+        exportButton.setEnabled(false);
     }
 
     void setAsset(const creation::assets::AssetDescriptor& asset, const SuiteAssetManagerCapability& capability)
@@ -137,6 +187,11 @@ public:
             statusLabel.setText("Project asset", juce::dontSendNotification);
             statusLabel.setColour(juce::Label::textColourId, juce::Colour(0xff74caff));
         }
+
+        openButton.setEnabled(static_cast<bool>(capability.openProjectAsset));
+        stopButton.setEnabled(static_cast<bool>(capability.stopProjectAsset));
+        placeButton.setEnabled(static_cast<bool>(capability.placeProjectAsset));
+        exportButton.setEnabled(static_cast<bool>(capability.exportProjectAsset));
     }
 
     void resized() override
@@ -149,6 +204,15 @@ public:
         metaLabel.setBounds(area.removeFromTop(96));
         area.removeFromTop(8);
         statusLabel.setBounds(area.removeFromTop(24));
+        area.removeFromTop(12);
+        auto actions = area.removeFromTop(34);
+        openButton.setBounds(actions.removeFromLeft(110));
+        actions.removeFromLeft(8);
+        stopButton.setBounds(actions.removeFromLeft(80));
+        actions.removeFromLeft(8);
+        placeButton.setBounds(actions.removeFromLeft(120));
+        actions.removeFromLeft(8);
+        exportButton.setBounds(actions.removeFromLeft(90));
     }
 
 private:
@@ -156,6 +220,10 @@ private:
     juce::Label nameLabel;
     juce::Label metaLabel;
     juce::Label statusLabel;
+    juce::TextButton openButton;
+    juce::TextButton stopButton;
+    juce::TextButton placeButton;
+    juce::TextButton exportButton;
 };
 
 class SuiteFilesystemListModel final : public juce::ListBoxModel
@@ -259,6 +327,7 @@ public:
 
             projectAssetListModel.onAssetSelected = [this](const creation::assets::AssetDescriptor& asset)
             {
+                selectedAsset = asset;
                 detailsPanel.setAsset(asset, capability);
             };
             projectAssetList.setModel(&projectAssetListModel);
@@ -290,6 +359,26 @@ public:
         }
 
         addAndMakeVisible(detailsPanel);
+        detailsPanel.onOpenRequested = [this]
+        {
+            if (selectedAsset.has_value() && capability.openProjectAsset)
+                capability.openProjectAsset(*selectedAsset);
+        };
+        detailsPanel.onStopRequested = [this]
+        {
+            if (selectedAsset.has_value() && capability.stopProjectAsset)
+                capability.stopProjectAsset(*selectedAsset);
+        };
+        detailsPanel.onPlaceRequested = [this]
+        {
+            if (selectedAsset.has_value() && capability.placeProjectAsset)
+                capability.placeProjectAsset(*selectedAsset);
+        };
+        detailsPanel.onExportRequested = [this]
+        {
+            if (selectedAsset.has_value() && capability.exportProjectAsset)
+                capability.exportProjectAsset(*selectedAsset);
+        };
     }
 
     ~SuiteAssetExplorerTab() override
@@ -371,7 +460,10 @@ private:
         projectAssetList.updateContent();
         projectAssetList.repaint();
         if (assets.isEmpty())
+        {
+            selectedAsset.reset();
             detailsPanel.showNothingSelected();
+        }
     }
 
     SuiteAssetManagerCapability capability;
@@ -385,6 +477,7 @@ private:
     juce::ListBox projectAssetList;
     SuiteProjectAssetListModel projectAssetListModel;
     SuiteAssetDetailsPanel detailsPanel;
+    std::optional<creation::assets::AssetDescriptor> selectedAsset;
 };
 
 class SuiteAssetManagerPlaceholderTab final : public juce::Component

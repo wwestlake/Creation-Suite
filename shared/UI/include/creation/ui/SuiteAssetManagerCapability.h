@@ -18,6 +18,10 @@ struct SuiteAssetManagerCapability
     juce::StringArray runnableExtensions;
     std::function<juce::Array<creation::assets::AssetDescriptor>()> enumerateProjectAssets;
     std::function<juce::String(const creation::assets::AssetDescriptor&)> describeProjectAsset;
+    std::function<void(const creation::assets::AssetDescriptor&)> openProjectAsset;
+    std::function<void(const creation::assets::AssetDescriptor&)> stopProjectAsset;
+    std::function<void(const creation::assets::AssetDescriptor&)> placeProjectAsset;
+    std::function<void(const creation::assets::AssetDescriptor&)> exportProjectAsset;
 
     bool canParse(const juce::String& extension) const
     {
