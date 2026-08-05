@@ -233,8 +233,8 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
     recordButton.setButtonText("record");
     loopButton.setButtonText("loop");
     clickButton.setButtonText("click");
-    rewindButton.setButtonText("prev");
-    fastForwardButton.setButtonText("next");
+    rewindButton.setButtonText("next");
+    fastForwardButton.setButtonText("prev");
     suiteButton.setButtonText("gear");
 
     playButton.setTooltip("Play");
@@ -673,16 +673,56 @@ void CreationSuiteHeaderBar::resized()
     topRow.removeFromLeft(10);
     logoRailBounds = topRow.removeFromLeft(248);
 
-    auto transportRow = transportControlsVisible ? bottomRow.removeFromLeft(662) : juce::Rectangle<int>();
-    projectButton.setBounds(bottomRow.removeFromLeft(220));
-    bottomRow.removeFromLeft(6);
-    suiteButton.setBounds(bottomRow.removeFromLeft(44));
-    bottomRow.removeFromLeft(10);
-    audioButton.setBounds(bottomRow.removeFromLeft(82));
-    bottomRow.removeFromLeft(6);
-    assetsButton.setBounds(bottomRow.removeFromLeft(82));
-    tourButton.setBounds(bottomRow.removeFromLeft(78));
-    statusLabel.setBounds(bottomRow.removeFromRight(220));
+    auto utilityRow = topRow;
+    auto placeUtilityGap = [&utilityRow](int amount)
+    {
+        if (utilityRow.getWidth() > 0)
+            utilityRow.removeFromLeft(juce::jmin(amount, utilityRow.getWidth()));
+    };
+
+    constexpr int suiteButtonWidth = 44;
+    constexpr int audioButtonWidth = 72;
+    constexpr int assetsButtonWidth = 72;
+    constexpr int tourButtonWidth = 68;
+    constexpr int utilityGap = 6;
+    constexpr int projectGap = 10;
+    constexpr int minimumProjectWidth = 140;
+    constexpr int preferredProjectWidth = 190;
+
+    const int reservedUtilityWidth = suiteButtonWidth
+                                     + audioButtonWidth
+                                     + assetsButtonWidth
+                                     + tourButtonWidth
+                                     + (utilityGap * 3)
+                                     + projectGap;
+    const int availableProjectWidth = utilityRow.getWidth() - reservedUtilityWidth;
+    const int projectWidth = availableProjectWidth >= minimumProjectWidth
+                                 ? juce::jmin(preferredProjectWidth, availableProjectWidth)
+                                 : 0;
+
+    if (projectWidth > 0)
+    {
+        projectButton.setVisible(true);
+        projectButton.setBounds(utilityRow.removeFromLeft(projectWidth));
+        placeUtilityGap(projectGap);
+    }
+    else
+    {
+        projectButton.setBounds({});
+        projectButton.setVisible(false);
+    }
+
+    suiteButton.setBounds(utilityRow.removeFromLeft(juce::jmin(suiteButtonWidth, utilityRow.getWidth())));
+    placeUtilityGap(utilityGap);
+    audioButton.setBounds(utilityRow.removeFromLeft(juce::jmin(audioButtonWidth, utilityRow.getWidth())));
+    placeUtilityGap(utilityGap);
+    assetsButton.setBounds(utilityRow.removeFromLeft(juce::jmin(assetsButtonWidth, utilityRow.getWidth())));
+    placeUtilityGap(utilityGap);
+    tourButton.setBounds(utilityRow.removeFromLeft(juce::jmin(tourButtonWidth, utilityRow.getWidth())));
+
+    auto statusArea = bottomRow.removeFromRight(220);
+    statusLabel.setBounds(statusArea);
+    auto transportRow = transportControlsVisible ? bottomRow : juce::Rectangle<int>();
 
     auto placeTransportButton = [&transportRow](juce::Button& button, int width, bool isVisible)
     {

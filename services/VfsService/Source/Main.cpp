@@ -9,6 +9,7 @@
 #include <ixwebsocket/IXNetSystem.h>
 #include <ixwebsocket/IXWebSocketServer.h>
 
+#include <fstream>
 #include <iostream>
 #include <thread>
 #include <vector>
@@ -26,6 +27,42 @@ namespace
 constexpr const char* kServiceAppId = "CreationSuiteVfsService";
 constexpr double kIdleShutdownGraceSeconds = 20.0;
 constexpr int kLivenessCheckIntervalMs = 5000;
+
+void appendBootLog(const std::string& message)
+{
+    const char* appData = std::getenv("APPDATA");
+    const std::string base = appData != nullptr ? appData : "C:\\Users\\wwestlake\\AppData\\Roaming";
+    const std::string logsDirectory = base + "\\Creation Suite\\Logs";
+    juce::File(logsDirectory).createDirectory();
+
+    std::ofstream out(logsDirectory + "\\CreationSuiteVfsService-boot.log", std::ios::app);
+    if (! out.is_open())
+        return;
+
+    out << message << std::endl;
+}
+
+void appendServiceLog(const juce::String& message)
+{
+    auto logFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                       .getChildFile("Creation Suite")
+                       .getChildFile("Logs")
+                       .getChildFile("CreationSuiteVfsService.log");
+
+    if (! logFile.getParentDirectory().exists())
+        logFile.getParentDirectory().createDirectory();
+
+    juce::FileOutputStream stream(logFile);
+    if (! stream.openedOk())
+        return;
+
+    stream.setPosition(logFile.existsAsFile() ? logFile.getSize() : 0);
+    stream.writeText("[" + juce::Time::getCurrentTime().toString(true, true, true, true) + "] " + message + "\n",
+                     false,
+                     false,
+                     "\n");
+    stream.flush();
+}
 
 // Every entry this service manages lives under "suite/" inside the root
 // project's container -- keeps this API scoped to suite-level data, not a
@@ -75,6 +112,7 @@ bool suiteHasAnyOtherLiveApp()
 
 int main(int, char*[])
 {
+    appendBootLog("main: entered");
     // Deliberately the first local declared, so it's the LAST thing torn
     // down on the way out of main() (locals unwind in reverse declaration
     // order). Everything below that touches a JUCE facility (juce::File,
@@ -86,23 +124,33 @@ int main(int, char*[])
     // in a file-scope global outlived this initialiser and tried to use
     // JUCE facilities that no longer existed.
     juce::ScopedJuceInitialiser_GUI juceInit; // pulls in message loop/timer plumbing shared code relies on -- same pattern CreationEngineServer uses for its own headless console app.
+    appendBootLog("main: juce init complete");
 
     juce::String settingsError;
     const auto settings = creation::suite::SuiteSettingsStore().load(settingsError);
+    appendBootLog("main: settings loaded");
+    appendServiceLog("startup; suiteVfsRoot=" + settings.suiteVfsRoot
+                     + (settingsError.isNotEmpty() ? " settingsError=" + settingsError : ""));
 
     juce::CriticalSection sessionLock;
     creation::assets::ProjectSession rootSession;
     {
         juce::String rootError;
         const juce::ScopedLock lock(sessionLock);
+        appendBootLog("main: opening suite root");
         if (! creation::assets::SuiteRootProject::openOrCreate(settings, rootSession, rootError))
         {
+            appendBootLog("main: suite root open/create failed");
+            appendServiceLog("failed to open/create suite root project: " + rootError);
             std::cerr << "[vfs-service] failed to open/create the suite root project: " << rootError << std::endl;
             return 1;
         }
     }
+    appendBootLog("main: suite root ready");
+    appendServiceLog("suite root project ready");
 
     ix::initNetSystem();
+    appendBootLog("main: net init complete");
 
     std::vector<std::weak_ptr<ix::WebSocket>> wsClients;
     juce::CriticalSection wsClientsLock;
@@ -206,6 +254,7 @@ int main(int, char*[])
     });
 
     const int httpPort = http.bind_to_any_port("127.0.0.1");
+    appendBootLog("main: http bound");
     std::thread httpThread([&http] { http.listen_after_bind(); });
 
     const int wsPort = httpPort + 1;
@@ -220,14 +269,19 @@ int main(int, char*[])
     const auto wsListenResult = wsServer.listen();
     if (! wsListenResult.first)
     {
+        appendBootLog("main: websocket listen failed");
+        appendServiceLog("failed to start websocket server: " + juce::String(wsListenResult.second));
         std::cerr << "[vfs-service] failed to start the WebSocket server: " << wsListenResult.second << std::endl;
         return 1;
     }
     wsServer.start();
+    appendBootLog("main: websocket started");
 
     creation::services::SuiteProcessRegistration registration;
     registration.RegisterSelf(kServiceAppId, /*oscPort*/ 0, /*pipeName*/ {}, httpPort);
+    appendBootLog("main: process registered");
 
+    appendServiceLog("listening; http=" + juce::String(httpPort) + " ws=" + juce::String(wsPort));
     std::cout << "[vfs-service] listening: http=" << httpPort << " ws=" << wsPort << std::endl;
 
     // Lifecycle: no app launched this process to own its lifetime the way
@@ -248,6 +302,7 @@ int main(int, char*[])
         secondsSinceLastSeenAnotherApp += kLivenessCheckIntervalMs / 1000.0;
         if (secondsSinceLastSeenAnotherApp >= kIdleShutdownGraceSeconds)
         {
+            appendServiceLog("idle shutdown");
             std::cout << "[vfs-service] no other suite app running; shutting down." << std::endl;
             break;
         }
@@ -261,5 +316,6 @@ int main(int, char*[])
     httpThread.join();
     ix::uninitNetSystem();
 
+    appendServiceLog("shutdown complete");
     return 0;
 }

@@ -74,15 +74,6 @@ private:
     juce::Label storageIntroLabel;
     juce::Label storageSectionLabel;
     PathRow suiteVfsRow;
-    PathRow sharedResourcesRow;
-    PathRow projectContainersRow;
-    PathRow cacheRootRow;
-    PathRow materializedFilesRow;
-    PathRow exportsRootRow;
-    PathRow stationProjectsRow;
-    PathRow engineProjectsRow;
-    PathRow movieProjectsRow;
-    PathRow liveProjectsRow;
     juce::Label aiIntroLabel;
     juce::Label aiSectionLabel;
     juce::ComboBox accountSelectorCombo;

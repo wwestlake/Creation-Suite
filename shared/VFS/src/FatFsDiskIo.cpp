@@ -20,6 +20,7 @@
 #include "FatFsDiskIo.h"
 
 #include <array>
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -33,6 +34,7 @@ struct DriveSlot {
 };
 
 std::array<DriveSlot, FF_VOLUMES> g_drives{};
+int g_lastAttachErrno = 0;
 
 constexpr WORD kSectorSize = 512;
 
@@ -50,6 +52,7 @@ extern "C" {
 // GET_SECTOR_COUNT reports to f_mkfs()/f_mount(), independent of how much of
 // the backing file is a sparse hole versus real allocated disk space.
 bool CreationVfs_AttachDrive(BYTE pdrv, const wchar_t* path, LBA_t sectorCount) {
+    g_lastAttachErrno = 0;
     if (pdrv >= FF_VOLUMES)
         return false;
 
@@ -67,8 +70,10 @@ bool CreationVfs_AttachDrive(BYTE pdrv, const wchar_t* path, LBA_t sectorCount) 
     // routing builds on: a sharing-violation failure means someone else
     // already owns this container, right now.
     std::FILE* file = _wfsopen(path, L"r+b", _SH_DENYRW);
-    if (file == nullptr)
+    if (file == nullptr) {
+        g_lastAttachErrno = errno;
         return false;
+    }
 
     g_drives[pdrv].file = file;
     g_drives[pdrv].sectorCount = sectorCount;
@@ -84,6 +89,10 @@ void CreationVfs_DetachDrive(BYTE pdrv) {
         g_drives[pdrv].file = nullptr;
     }
     g_drives[pdrv].sectorCount = 0;
+}
+
+int CreationVfs_LastAttachErrno() {
+    return g_lastAttachErrno;
 }
 
 DSTATUS disk_status(BYTE pdrv) {

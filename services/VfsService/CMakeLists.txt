@@ -45,6 +45,11 @@ target_compile_definitions(CreationSuiteVfsService PRIVATE
 
 find_package(ZLIB REQUIRED)
 
+set(CREATION_VFS_DLL_COPY_PREFIX "")
+if(CMAKE_PREFIX_PATH)
+    list(GET CMAKE_PREFIX_PATH 0 CREATION_VFS_DLL_COPY_PREFIX)
+endif()
+
 target_link_libraries(CreationSuiteVfsService PRIVATE
     creation_suite_asset_system
     creation_suite_services
@@ -59,15 +64,11 @@ target_link_libraries(CreationSuiteVfsService PRIVATE
 )
 
 add_custom_command(TARGET CreationSuiteVfsService POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "D:/CreationSuite-Workspaces/claude-$<LOWER_CASE:$<CONFIG>>-bin"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:CreationSuiteVfsService>" "D:/CreationSuite-Workspaces/claude-$<LOWER_CASE:$<CONFIG>>-bin/"
-    # vcpkg's applocal step already drops runtime DLL deps (e.g. zlib's
-    # zd.dll) next to the built exe in its own artefacts dir -- copy those
-    # along too, or the exe fails to start from the shared bin dir with a
-    # "cannot open shared object file" error (`|| exit 0` since a wildcard
-    # copy with zero matches would otherwise fail the build).
-    COMMAND cmd /c "copy /Y \"$<TARGET_FILE_DIR:CreationSuiteVfsService>\\*.dll\" \"D:\\CreationSuite-Workspaces\\claude-$<LOWER_CASE:$<CONFIG>>-bin\\\" >nul 2>nul & exit 0"
-    COMMENT "Copying CreationSuiteVfsService (and its runtime DLLs) to the shared claude bin directory"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "D:/CreationSuite-Workspaces/codex-$<LOWER_CASE:$<CONFIG>>-bin"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:CreationSuiteVfsService>" "D:/CreationSuite-Workspaces/codex-$<LOWER_CASE:$<CONFIG>>-bin/"
+    COMMAND cmd /c "if exist \"${CREATION_VFS_DLL_COPY_PREFIX}\\bin\\z.dll\" copy /Y \"${CREATION_VFS_DLL_COPY_PREFIX}\\bin\\z.dll\" \"D:\\CreationSuite-Workspaces\\codex-$<LOWER_CASE:$<CONFIG>>-bin\\\" >nul"
+    COMMAND cmd /c "if exist \"${CREATION_VFS_DLL_COPY_PREFIX}\\debug\\bin\\zd.dll\" copy /Y \"${CREATION_VFS_DLL_COPY_PREFIX}\\debug\\bin\\zd.dll\" \"D:\\CreationSuite-Workspaces\\codex-$<LOWER_CASE:$<CONFIG>>-bin\\\" >nul"
+    COMMENT "Copying CreationSuiteVfsService (and its runtime DLLs) to the shared codex bin directory"
 )
 
 install(TARGETS CreationSuiteVfsService

@@ -74,22 +74,13 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     addAndMakeVisible(scrollViewport);
 
     configureHintLabel(storageIntroLabel,
-                       "This is the suite-level storage surface. Every Creation app should be able to start here, find the suite roots, and share the same VFS story.");
+                       "Set one suite VFS root here. Everything else in the Creation Suite is derived inside that VFS automatically.");
     scrollContent.addAndMakeVisible(storageIntroLabel);
 
     configureSectionTitle(storageSectionLabel, "Storage And VFS");
     scrollContent.addAndMakeVisible(storageSectionLabel);
 
     configureRow(suiteVfsRow, "suite_vfs_root", "Suite VFS Root");
-    configureRow(sharedResourcesRow, "shared_resources_root", "Shared Resources");
-    configureRow(projectContainersRow, "project_containers_root", "Project Containers");
-    configureRow(cacheRootRow, "cache_root", "Cache Root");
-    configureRow(materializedFilesRow, "materialized_files_root", "Materialized Files");
-    configureRow(exportsRootRow, "exports_root", "Exports Root");
-    configureRow(stationProjectsRow, "creation_station_projects_root", "Creation Station Projects");
-    configureRow(engineProjectsRow, "creation_engine_projects_root", "Creation Engine Projects");
-    configureRow(movieProjectsRow, "creation_movie_projects_root", "Creation Movie Projects");
-    configureRow(liveProjectsRow, "creation_live_projects_root", "Creation Live Projects");
 
     configureHintLabel(aiIntroLabel,
                        "Shared accounts and per-app routing live here so every app in the suite can resolve AI behavior from one place.");
@@ -305,30 +296,12 @@ SuiteSettingsPanel::SuiteSettingsPanel()
 void SuiteSettingsPanel::setSettings(const creation::suite::SuiteSettings& settings)
 {
     suiteVfsRow.editor.setText(settings.suiteVfsRoot, juce::dontSendNotification);
-    sharedResourcesRow.editor.setText(settings.sharedResourcesRoot, juce::dontSendNotification);
-    projectContainersRow.editor.setText(settings.projectContainersRoot, juce::dontSendNotification);
-    cacheRootRow.editor.setText(settings.cacheRoot, juce::dontSendNotification);
-    materializedFilesRow.editor.setText(settings.materializedFilesRoot, juce::dontSendNotification);
-    exportsRootRow.editor.setText(settings.exportsRoot, juce::dontSendNotification);
-    stationProjectsRow.editor.setText(settings.creationStationProjectsRoot, juce::dontSendNotification);
-    engineProjectsRow.editor.setText(settings.creationEngineProjectsRoot, juce::dontSendNotification);
-    movieProjectsRow.editor.setText(settings.creationMovieProjectsRoot, juce::dontSendNotification);
-    liveProjectsRow.editor.setText(settings.creationLiveProjectsRoot, juce::dontSendNotification);
 }
 
 creation::suite::SuiteSettings SuiteSettingsPanel::getSettings() const
 {
     creation::suite::SuiteSettings settings;
     settings.suiteVfsRoot = suiteVfsRow.editor.getText().trim();
-    settings.sharedResourcesRoot = sharedResourcesRow.editor.getText().trim();
-    settings.projectContainersRoot = projectContainersRow.editor.getText().trim();
-    settings.cacheRoot = cacheRootRow.editor.getText().trim();
-    settings.materializedFilesRoot = materializedFilesRow.editor.getText().trim();
-    settings.exportsRoot = exportsRootRow.editor.getText().trim();
-    settings.creationStationProjectsRoot = stationProjectsRow.editor.getText().trim();
-    settings.creationEngineProjectsRoot = engineProjectsRow.editor.getText().trim();
-    settings.creationMovieProjectsRoot = movieProjectsRow.editor.getText().trim();
-    settings.creationLiveProjectsRoot = liveProjectsRow.editor.getText().trim();
     return settings;
 }
 
@@ -529,15 +502,6 @@ void SuiteSettingsPanel::updateScrollContentLayout()
         storageIntroLabel.setVisible(visible);
         storageSectionLabel.setVisible(visible);
         setRowVisible(suiteVfsRow);
-        setRowVisible(sharedResourcesRow);
-        setRowVisible(projectContainersRow);
-        setRowVisible(cacheRootRow);
-        setRowVisible(materializedFilesRow);
-        setRowVisible(exportsRootRow);
-        setRowVisible(stationProjectsRow);
-        setRowVisible(engineProjectsRow);
-        setRowVisible(movieProjectsRow);
-        setRowVisible(liveProjectsRow);
     };
 
     auto setAiVisible = [&](bool visible)
@@ -604,15 +568,6 @@ void SuiteSettingsPanel::layoutStorageTab(juce::Rectangle<int>& area)
     area.removeFromTop(12);
 
     layoutRow(suiteVfsRow, area);
-    layoutRow(sharedResourcesRow, area);
-    layoutRow(projectContainersRow, area);
-    layoutRow(cacheRootRow, area);
-    layoutRow(materializedFilesRow, area);
-    layoutRow(exportsRootRow, area);
-    layoutRow(stationProjectsRow, area);
-    layoutRow(engineProjectsRow, area);
-    layoutRow(movieProjectsRow, area);
-    layoutRow(liveProjectsRow, area);
 }
 
 void SuiteSettingsPanel::layoutAiTab(juce::Rectangle<int>& area)

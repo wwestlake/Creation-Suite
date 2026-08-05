@@ -18,20 +18,26 @@ juce::MemoryBlock makeTestBlock(const char* text)
 }
 }
 
-int main()
+int main(int argc, char* argv[])
 {
     try
     {
-        const auto containerFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                                        .getChildFile("creation_suite_vfs_smoke_" + juce::String(juce::Random::getSystemRandom().nextInt()) + ".suitevfs");
+        juce::File containerFile;
+        if (argc > 1)
+            containerFile = juce::File(juce::String::fromUTF8(argv[1]));
+        else
+            containerFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                                .getChildFile("creation_suite_vfs_smoke_" + juce::String(juce::Random::getSystemRandom().nextInt()) + ".suitevfs");
         containerFile.deleteFile();
 
         juce::String errorMessage;
+        juce::int64 containerSizeBytes = 8 * 1024 * 1024;
+        if (argc > 2)
+            containerSizeBytes = juce::String::fromUTF8(argv[2]).getLargeIntValue();
 
         // --- create + format ------------------------------------------------
         {
             creation::vfs::SuiteVolume volume;
-            constexpr juce::int64 containerSizeBytes = 8 * 1024 * 1024; // 8 MB -- small, fast smoke-test volume
             if (! volume.createAndFormat(containerFile, containerSizeBytes, errorMessage))
                 fail("createAndFormat failed: " + errorMessage.toStdString());
             if (! volume.isOpen())

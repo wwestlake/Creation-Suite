@@ -7,15 +7,6 @@ namespace creation::suite
 struct SuiteSettings
 {
     juce::String suiteVfsRoot;
-    juce::String sharedResourcesRoot;
-    juce::String projectContainersRoot;
-    juce::String cacheRoot;
-    juce::String materializedFilesRoot;
-    juce::String exportsRoot;
-    juce::String creationStationProjectsRoot;
-    juce::String creationEngineProjectsRoot;
-    juce::String creationMovieProjectsRoot;
-    juce::String creationLiveProjectsRoot;
 };
 
 class SuiteSettingsStore final

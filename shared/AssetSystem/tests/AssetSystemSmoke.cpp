@@ -30,9 +30,6 @@ int main()
         tempRoot.createDirectory();
 
         settings.suiteVfsRoot = tempRoot.getChildFile("SuiteRoot").getFullPathName();
-        settings.projectContainersRoot = tempRoot.getChildFile("Containers").getFullPathName();
-        settings.materializedFilesRoot = tempRoot.getChildFile("Materialized").getFullPathName();
-        settings.exportsRoot = tempRoot.getChildFile("Exports").getFullPathName();
 
         juce::String errorMessage;
 

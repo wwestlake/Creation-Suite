@@ -25,7 +25,6 @@ int main()
         tempRoot.createDirectory();
 
         settings.suiteVfsRoot = tempRoot.getChildFile("SuiteRoot").getFullPathName();
-        settings.projectContainersRoot = tempRoot.getChildFile("Containers").getFullPathName();
 
         juce::String errorMessage;
 

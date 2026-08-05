@@ -9,4 +9,5 @@
 extern "C" {
 bool CreationVfs_AttachDrive(BYTE pdrv, const wchar_t* path, LBA_t sectorCount);
 void CreationVfs_DetachDrive(BYTE pdrv);
+int CreationVfs_LastAttachErrno();
 }

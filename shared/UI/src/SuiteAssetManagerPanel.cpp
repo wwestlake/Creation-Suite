@@ -1,5 +1,6 @@
 #include <creation/ui/SuiteAssetManagerPanel.h>
 
+#include <creation/assets/AssetTypes.h>
 #include <creation/suite/SuiteSettings.h>
 #include <creation/suite/SuiteStoragePaths.h>
 
@@ -7,9 +8,6 @@ namespace creation::ui
 {
 namespace
 {
-// A small, fixed set of extensions treated as "code" for compile/run gating
-// purposes. Anything outside this set is just a regular file -- no gating
-// status is shown for it.
 const juce::StringArray& codeExtensions()
 {
     static const juce::StringArray extensions { ".cel", ".cpp", ".h", ".hpp", ".py", ".js", ".lua" };
@@ -27,46 +25,6 @@ public:
     {
         return ! file.getFileName().startsWithChar('.');
     }
-};
-
-class SuiteAssetFileListModel final : public juce::ListBoxModel
-{
-public:
-    std::function<void(const juce::File&)> onFileSelected;
-
-    void setFiles(const juce::Array<juce::File>& newFiles)
-    {
-        files = newFiles;
-        files.sort();
-    }
-
-    int getNumRows() override { return files.size(); }
-
-    void paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected) override
-    {
-        if (rowNumber < 0 || rowNumber >= files.size())
-            return;
-
-        if (rowIsSelected)
-            g.fillAll(juce::Colour(0xff273e5e));
-        else if (rowNumber % 2 == 0)
-            g.fillAll(juce::Colour(0xff141c26));
-
-        g.setColour(juce::Colours::white);
-        g.setFont(juce::Font(14.0f));
-        g.drawText(files[rowNumber].getFileName(), 8, 0, width - 16, height, juce::Justification::centredLeft);
-    }
-
-    void selectedRowsChanged(int lastRowSelected) override
-    {
-        if (onFileSelected && juce::isPositiveAndBelow(lastRowSelected, files.size()))
-            onFileSelected(files[lastRowSelected]);
-    }
-
-    const juce::File& getFile(int row) const { return files.getReference(row); }
-
-private:
-    juce::Array<juce::File> files;
 };
 
 class SuiteAssetDetailsPanel final : public juce::Component
@@ -134,7 +92,7 @@ public:
             else if (capability.canParse(extension))
             {
                 statusLabel.setText("Viewable here, not runnable (" + capability.hostAppDisplayName + ")",
-                                     juce::dontSendNotification);
+                                    juce::dontSendNotification);
                 statusLabel.setColour(juce::Label::textColourId, juce::Colour(0xffe8c96f));
             }
             else
@@ -149,6 +107,38 @@ public:
         }
     }
 
+    void setAsset(const creation::assets::AssetDescriptor& asset, const SuiteAssetManagerCapability& capability)
+    {
+        nameLabel.setText(asset.displayName.isNotEmpty() ? asset.displayName : asset.logicalPath, juce::dontSendNotification);
+
+        auto extension = juce::File(asset.logicalPath).getFileExtension();
+        juce::String meta;
+        meta << "Kind: " << creation::assets::toDisplayName(asset.kind) << juce::newLine;
+        meta << "Path: " << asset.logicalPath << juce::newLine;
+        meta << "Size: " << juce::File::descriptionOfSizeInBytes(asset.fileSizeBytes) << juce::newLine;
+        meta << "Modified: " << asset.modifiedAt.toString(true, true);
+        if (capability.describeProjectAsset)
+            meta << capability.describeProjectAsset(asset);
+        metaLabel.setText(meta, juce::dontSendNotification);
+
+        if (capability.canRun(extension))
+        {
+            statusLabel.setText("Runnable here (" + capability.hostAppDisplayName + ")", juce::dontSendNotification);
+            statusLabel.setColour(juce::Label::textColourId, juce::Colour(0xff6fe89a));
+        }
+        else if (capability.canParse(extension))
+        {
+            statusLabel.setText("Viewable here, not runnable (" + capability.hostAppDisplayName + ")",
+                                juce::dontSendNotification);
+            statusLabel.setColour(juce::Label::textColourId, juce::Colour(0xffe8c96f));
+        }
+        else
+        {
+            statusLabel.setText("Project asset", juce::dontSendNotification);
+            statusLabel.setColour(juce::Label::textColourId, juce::Colour(0xff74caff));
+        }
+    }
+
     void resized() override
     {
         auto area = getLocalBounds().reduced(12);
@@ -156,7 +146,7 @@ public:
         area.removeFromTop(8);
         nameLabel.setBounds(area.removeFromTop(28));
         area.removeFromTop(8);
-        metaLabel.setBounds(area.removeFromTop(80));
+        metaLabel.setBounds(area.removeFromTop(96));
         area.removeFromTop(8);
         statusLabel.setBounds(area.removeFromTop(24));
     }
@@ -166,6 +156,89 @@ private:
     juce::Label nameLabel;
     juce::Label metaLabel;
     juce::Label statusLabel;
+};
+
+class SuiteFilesystemListModel final : public juce::ListBoxModel
+{
+public:
+    std::function<void(const juce::File&)> onFileSelected;
+
+    void setFiles(const juce::Array<juce::File>& newFiles)
+    {
+        files = newFiles;
+        files.sort();
+    }
+
+    int getNumRows() override { return files.size(); }
+
+    void paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected) override
+    {
+        if (rowNumber < 0 || rowNumber >= files.size())
+            return;
+
+        if (rowIsSelected)
+            g.fillAll(juce::Colour(0xff273e5e));
+        else if (rowNumber % 2 == 0)
+            g.fillAll(juce::Colour(0xff141c26));
+
+        g.setColour(juce::Colours::white);
+        g.setFont(juce::Font(14.0f));
+        g.drawText(files[rowNumber].getFileName(), 8, 0, width - 16, height, juce::Justification::centredLeft);
+    }
+
+    void selectedRowsChanged(int lastRowSelected) override
+    {
+        if (onFileSelected && juce::isPositiveAndBelow(lastRowSelected, files.size()))
+            onFileSelected(files[lastRowSelected]);
+    }
+
+private:
+    juce::Array<juce::File> files;
+};
+
+class SuiteProjectAssetListModel final : public juce::ListBoxModel
+{
+public:
+    std::function<void(const creation::assets::AssetDescriptor&)> onAssetSelected;
+
+    void setAssets(const juce::Array<creation::assets::AssetDescriptor>& newAssets)
+    {
+        assets = newAssets;
+        std::sort(assets.begin(), assets.end(), [](const auto& left, const auto& right)
+        {
+            if (left.modifiedAt == right.modifiedAt)
+                return left.displayName.compareIgnoreCase(right.displayName) < 0;
+            return left.modifiedAt > right.modifiedAt;
+        });
+    }
+
+    int getNumRows() override { return assets.size(); }
+
+    void paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected) override
+    {
+        if (rowNumber < 0 || rowNumber >= assets.size())
+            return;
+
+        if (rowIsSelected)
+            g.fillAll(juce::Colour(0xff273e5e));
+        else if (rowNumber % 2 == 0)
+            g.fillAll(juce::Colour(0xff141c26));
+
+        const auto& asset = assets.getReference(rowNumber);
+        g.setColour(juce::Colours::white);
+        g.setFont(juce::Font(14.0f));
+        g.drawText(asset.displayName.isNotEmpty() ? asset.displayName : asset.logicalPath,
+                   8, 0, width - 16, height, juce::Justification::centredLeft);
+    }
+
+    void selectedRowsChanged(int lastRowSelected) override
+    {
+        if (onAssetSelected && juce::isPositiveAndBelow(lastRowSelected, assets.size()))
+            onAssetSelected(assets.getReference(lastRowSelected));
+    }
+
+private:
+    juce::Array<creation::assets::AssetDescriptor> assets;
 };
 
 class SuiteAssetExplorerTab final : public juce::Component,
@@ -178,24 +251,45 @@ public:
     {
         scanThread.startThread();
 
-        auto rootDirectory = resolveRootDirectory();
-        directoryList = std::make_unique<juce::DirectoryContentsList>(&directoriesFilter, scanThread);
-        directoryList->setDirectory(rootDirectory, true, true);
+        if (capability.enumerateProjectAssets)
+        {
+            refreshButton.setButtonText("Refresh");
+            refreshButton.onClick = [this] { refreshProjectAssetList(); };
+            addAndMakeVisible(refreshButton);
 
-        fileTree = std::make_unique<juce::FileTreeComponent>(*directoryList);
-        fileTree->addListener(this);
-        addAndMakeVisible(*fileTree);
+            projectAssetListModel.onAssetSelected = [this](const creation::assets::AssetDescriptor& asset)
+            {
+                detailsPanel.setAsset(asset, capability);
+            };
+            projectAssetList.setModel(&projectAssetListModel);
+            projectAssetList.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff121a24));
+            projectAssetList.setColour(juce::ListBox::outlineColourId, juce::Colour(0xff253549));
+            projectAssetList.setRowHeight(24);
+            addAndMakeVisible(projectAssetList);
 
-        fileListModel.onFileSelected = [this](const juce::File& file) { showFileDetails(file); };
-        fileList.setModel(&fileListModel);
-        fileList.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff121a24));
-        fileList.setColour(juce::ListBox::outlineColourId, juce::Colour(0xff253549));
-        fileList.setRowHeight(24);
-        addAndMakeVisible(fileList);
+            refreshProjectAssetList();
+        }
+        else
+        {
+            auto rootDirectory = resolveRootDirectory();
+            directoryList = std::make_unique<juce::DirectoryContentsList>(&directoriesFilter, scanThread);
+            directoryList->setDirectory(rootDirectory, true, true);
+
+            fileTree = std::make_unique<juce::FileTreeComponent>(*directoryList);
+            fileTree->addListener(this);
+            addAndMakeVisible(*fileTree);
+
+            filesystemListModel.onFileSelected = [this](const juce::File& file) { detailsPanel.setFile(file, capability); };
+            filesystemList.setModel(&filesystemListModel);
+            filesystemList.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff121a24));
+            filesystemList.setColour(juce::ListBox::outlineColourId, juce::Colour(0xff253549));
+            filesystemList.setRowHeight(24);
+            addAndMakeVisible(filesystemList);
+
+            refreshFileList(rootDirectory);
+        }
 
         addAndMakeVisible(detailsPanel);
-
-        refreshFileList(rootDirectory);
     }
 
     ~SuiteAssetExplorerTab() override
@@ -208,14 +302,27 @@ public:
     void resized() override
     {
         auto area = getLocalBounds();
-        fileTree->setBounds(area.removeFromLeft(area.getWidth() / 3));
-        fileList.setBounds(area.removeFromLeft(area.getWidth() / 2));
+
+        if (capability.enumerateProjectAssets)
+        {
+            auto header = area.removeFromTop(36);
+            refreshButton.setBounds(header.removeFromRight(120).reduced(4, 4));
+            projectAssetList.setBounds(area.removeFromLeft(area.getWidth() / 2));
+        }
+        else
+        {
+            fileTree->setBounds(area.removeFromLeft(area.getWidth() / 3));
+            filesystemList.setBounds(area.removeFromLeft(area.getWidth() / 2));
+        }
+
         detailsPanel.setBounds(area);
     }
 
-    // juce::FileBrowserListener
     void selectionChanged() override
     {
+        if (fileTree == nullptr)
+            return;
+
         auto selected = fileTree->getSelectedFile();
         if (selected.isDirectory())
             refreshFileList(selected);
@@ -234,7 +341,13 @@ private:
 
         if (errorMessage.isEmpty())
         {
-            auto root = creation::suite::getProjectContainerDirectory(settings);
+            auto root = capability.appDomain != creation::assets::SuiteAppDomain::unknown
+                            ? creation::suite::getAppProjectsDirectory(settings, capability.appDomain)
+                            : creation::suite::getSuiteRootDirectory(settings);
+
+            if (! root.exists())
+                root.createDirectory();
+
             if (root.isDirectory())
                 return root;
         }
@@ -246,14 +359,19 @@ private:
     {
         juce::Array<juce::File> files;
         directory.findChildFiles(files, juce::File::findFiles, false);
-        fileListModel.setFiles(files);
-        fileList.updateContent();
-        fileList.repaint();
+        filesystemListModel.setFiles(files);
+        filesystemList.updateContent();
+        filesystemList.repaint();
     }
 
-    void showFileDetails(const juce::File& file)
+    void refreshProjectAssetList()
     {
-        detailsPanel.setFile(file, capability);
+        auto assets = capability.enumerateProjectAssets();
+        projectAssetListModel.setAssets(assets);
+        projectAssetList.updateContent();
+        projectAssetList.repaint();
+        if (assets.isEmpty())
+            detailsPanel.showNothingSelected();
     }
 
     SuiteAssetManagerCapability capability;
@@ -261,8 +379,11 @@ private:
     DirectoriesOnlyFilter directoriesFilter;
     std::unique_ptr<juce::DirectoryContentsList> directoryList;
     std::unique_ptr<juce::FileTreeComponent> fileTree;
-    juce::ListBox fileList;
-    SuiteAssetFileListModel fileListModel;
+    juce::ListBox filesystemList;
+    SuiteFilesystemListModel filesystemListModel;
+    juce::TextButton refreshButton;
+    juce::ListBox projectAssetList;
+    SuiteProjectAssetListModel projectAssetListModel;
     SuiteAssetDetailsPanel detailsPanel;
 };
 
@@ -286,7 +407,7 @@ private:
 
 SuiteAssetManagerPanel::SuiteAssetManagerPanel(SuiteAssetManagerCapability capability)
 {
-    tabs.addTab("Files", juce::Colour(0xff10161f), new SuiteAssetExplorerTab(std::move(capability)), true);
+    tabs.addTab("Projects", juce::Colour(0xff10161f), new SuiteAssetExplorerTab(std::move(capability)), true);
     tabs.addTab("Asset Store",
                 juce::Colour(0xff10161f),
                 new SuiteAssetManagerPlaceholderTab("Coming soon -- LagDaemon.com asset store"),

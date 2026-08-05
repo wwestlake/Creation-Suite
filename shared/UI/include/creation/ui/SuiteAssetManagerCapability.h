@@ -1,6 +1,8 @@
 #pragma once
 
+#include <creation/assets/ProjectManifest.h>
 #include <juce_core/juce_core.h>
+#include <functional>
 
 namespace creation::ui
 {
@@ -11,8 +13,11 @@ namespace creation::ui
 struct SuiteAssetManagerCapability
 {
     juce::String hostAppDisplayName;
+    creation::assets::SuiteAppDomain appDomain = creation::assets::SuiteAppDomain::unknown;
     juce::StringArray parseableExtensions;
     juce::StringArray runnableExtensions;
+    std::function<juce::Array<creation::assets::AssetDescriptor>()> enumerateProjectAssets;
+    std::function<juce::String(const creation::assets::AssetDescriptor&)> describeProjectAsset;
 
     bool canParse(const juce::String& extension) const
     {
