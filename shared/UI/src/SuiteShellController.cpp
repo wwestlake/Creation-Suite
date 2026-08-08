@@ -781,16 +781,6 @@ void SuiteShellController::closeEulaWindow()
 void SuiteShellController::chooseSuiteDirectory(const juce::String& fieldId)
 {
     juce::String currentPath = suiteSettings.suiteVfsRoot;
-    if (fieldId == "shared_resources_root")
-        currentPath = suiteSettings.sharedResourcesRoot;
-    else if (fieldId == "project_containers_root")
-        currentPath = suiteSettings.projectContainersRoot;
-    else if (fieldId == "cache_root")
-        currentPath = suiteSettings.cacheRoot;
-    else if (fieldId == "materialized_files_root")
-        currentPath = suiteSettings.materializedFilesRoot;
-    else if (fieldId == "exports_root")
-        currentPath = suiteSettings.exportsRoot;
 
     suiteDirectoryChooser = std::make_unique<juce::FileChooser>("Choose a folder for the Creation Suite",
                                                                 currentPath.isNotEmpty()
@@ -812,16 +802,6 @@ void SuiteShellController::chooseSuiteDirectory(const juce::String& fieldId)
                              auto selectedPath = selected.getFullPathName();
                              if (fieldId == "suite_vfs_root")
                                  suiteSettings.suiteVfsRoot = selectedPath;
-                             else if (fieldId == "shared_resources_root")
-                                 suiteSettings.sharedResourcesRoot = selectedPath;
-                             else if (fieldId == "project_containers_root")
-                                 suiteSettings.projectContainersRoot = selectedPath;
-                             else if (fieldId == "cache_root")
-                                 suiteSettings.cacheRoot = selectedPath;
-                             else if (fieldId == "materialized_files_root")
-                                 suiteSettings.materializedFilesRoot = selectedPath;
-                             else if (fieldId == "exports_root")
-                                 suiteSettings.exportsRoot = selectedPath;
 
                              if (suiteSettingsPanel != nullptr)
                                  suiteSettingsPanel->setSettings(suiteSettings);

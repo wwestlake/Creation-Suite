@@ -150,7 +150,8 @@ bool SuiteVolume::createAndFormat(const juce::File& containerFile, juce::int64 s
     }
 
     if (! CreationVfs_AttachDrive(static_cast<BYTE>(driveIndex), containerFile.getFullPathName().toWideCharPointer(), sectorCount)) {
-        errorMessage = "Could not attach the container file to a drive slot.";
+        errorMessage = "Could not attach the container file to a drive slot (errno "
+                     + juce::String(CreationVfs_LastAttachErrno()) + ").";
         releaseDriveSlot();
         containerFile.deleteFile();
         return false;
@@ -205,7 +206,8 @@ bool SuiteVolume::open(const juce::File& containerFile, juce::String& errorMessa
         return false;
 
     if (! CreationVfs_AttachDrive(static_cast<BYTE>(driveIndex), containerFile.getFullPathName().toWideCharPointer(), sectorCount)) {
-        errorMessage = "Could not attach the container file to a drive slot.";
+        errorMessage = "Could not attach the container file to a drive slot (errno "
+                     + juce::String(CreationVfs_LastAttachErrno()) + ").";
         releaseDriveSlot();
         return false;
     }

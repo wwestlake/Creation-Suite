@@ -7,6 +7,13 @@ juce::String fallbackIfEmpty(juce::String value, const juce::String& fallback)
     value = value.trim();
     return value.isNotEmpty() ? value : fallback;
 }
+
+juce::File getInternalSuiteDataDirectory()
+{
+    auto base = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                    .getChildFile("Creation Suite");
+    return base;
+}
 }
 
 namespace creation::suite
@@ -42,59 +49,67 @@ juce::String appDomainFolderName(creation::assets::SuiteAppDomain domain)
     return "Unknown";
 }
 
+juce::File getSuiteRootDirectory(const SuiteSettings& settings)
+{
+    auto suiteRoot = fallbackIfEmpty(settings.suiteVfsRoot,
+                                     juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                                         .getChildFile("Creation Suite")
+                                         .getFullPathName());
+    return juce::File(suiteRoot);
+}
+
+juce::File getSharedResourcesDirectory(const SuiteSettings& settings)
+{
+    juce::ignoreUnused(settings);
+    return getInternalSuiteDataDirectory().getChildFile("Shared");
+}
+
+juce::File getContentDirectory(const SuiteSettings& settings)
+{
+    juce::ignoreUnused(settings);
+    return getInternalSuiteDataDirectory().getChildFile("Content");
+}
+
+juce::File getTutorialsDirectory(const SuiteSettings& settings)
+{
+    juce::ignoreUnused(settings);
+    return getInternalSuiteDataDirectory().getChildFile("Tutorials");
+}
+
+juce::File getTemplatesDirectory(const SuiteSettings& settings)
+{
+    juce::ignoreUnused(settings);
+    return getInternalSuiteDataDirectory().getChildFile("Templates");
+}
+
+juce::File getCacheDirectory(const SuiteSettings& settings)
+{
+    juce::ignoreUnused(settings);
+    return getInternalSuiteDataDirectory().getChildFile("Cache");
+}
+
 juce::File getAppProjectsDirectory(const SuiteSettings& settings,
                                    creation::assets::SuiteAppDomain domain)
 {
-    juce::String configured;
-
-    switch (domain)
-    {
-        case creation::assets::SuiteAppDomain::station:
-            configured = settings.creationStationProjectsRoot;
-            break;
-        case creation::assets::SuiteAppDomain::engine:
-            configured = settings.creationEngineProjectsRoot;
-            break;
-        case creation::assets::SuiteAppDomain::movie:
-            configured = settings.creationMovieProjectsRoot;
-            break;
-        case creation::assets::SuiteAppDomain::live:
-            configured = settings.creationLiveProjectsRoot;
-            break;
-        case creation::assets::SuiteAppDomain::texture:
-        case creation::assets::SuiteAppDomain::modeler:
-        case creation::assets::SuiteAppDomain::unknown:
-            break;
-    }
-
-    configured = configured.trim();
-    if (configured.isNotEmpty())
-        return juce::File(configured);
-
-    auto suiteRoot = fallbackIfEmpty(settings.suiteVfsRoot, juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                                                            .getChildFile("Creation Suite")
-                                                            .getFullPathName());
-    return juce::File(suiteRoot)
+    juce::ignoreUnused(settings);
+    return getInternalSuiteDataDirectory()
         .getChildFile("Projects")
         .getChildFile(appDomainFolderName(domain));
 }
 
 juce::File getProjectContainerDirectory(const SuiteSettings& settings)
 {
-    auto configured = settings.projectContainersRoot.trim();
-    if (configured.isNotEmpty())
-        return juce::File(configured);
-
-    auto suiteRoot = fallbackIfEmpty(settings.suiteVfsRoot, juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                                                            .getChildFile("Creation Suite")
-                                                            .getFullPathName());
-    return juce::File(suiteRoot).getChildFile("Project Containers");
+    juce::ignoreUnused(settings);
+    return getInternalSuiteDataDirectory().getChildFile("Project Containers");
 }
 
 juce::File getProjectContainerPath(const SuiteSettings& settings,
                                    creation::assets::SuiteAppDomain domain,
                                    const juce::String& projectName)
 {
+    if (domain == creation::assets::SuiteAppDomain::suite)
+        return getSuiteRootDirectory(settings).getChildFile("suite.csproj");
+
     auto baseDirectory = getProjectContainerDirectory(settings).getChildFile(appDomainFolderName(domain));
     return baseDirectory.getChildFile(sanitizeProjectName(projectName) + ".csproj");
 }
@@ -102,10 +117,7 @@ juce::File getProjectContainerPath(const SuiteSettings& settings,
 juce::File getMaterializedFilesDirectory(const SuiteSettings& settings,
                                          const juce::String& projectId)
 {
-    auto configured = settings.materializedFilesRoot.trim();
-    juce::File baseDirectory = configured.isNotEmpty()
-                                 ? juce::File(configured)
-                                 : getProjectContainerDirectory(settings).getSiblingFile("Cache").getChildFile("Materialized");
+    auto baseDirectory = getCacheDirectory(settings).getChildFile("Materialized");
     return baseDirectory.getChildFile(sanitizeProjectName(projectId));
 }
 
@@ -113,10 +125,8 @@ juce::File getExportDirectory(const SuiteSettings& settings,
                               creation::assets::SuiteAppDomain domain,
                               const juce::String& projectName)
 {
-    auto configured = settings.exportsRoot.trim();
-    juce::File baseDirectory = configured.isNotEmpty()
-                                 ? juce::File(configured)
-                                 : getProjectContainerDirectory(settings).getSiblingFile("Exports");
+    juce::ignoreUnused(settings);
+    auto baseDirectory = getInternalSuiteDataDirectory().getChildFile("Exports");
     return baseDirectory.getChildFile(appDomainFolderName(domain))
                         .getChildFile(sanitizeProjectName(projectName));
 }

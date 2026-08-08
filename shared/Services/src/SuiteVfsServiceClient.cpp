@@ -11,9 +11,9 @@ constexpr const char* kServiceAppId = "CreationSuiteVfsService";
 juce::File findServiceExecutable()
 {
 #if JUCE_DEBUG
-    constexpr const char* kConfigDir = "claude-debug-bin";
+    constexpr const char* kConfigDir = "codex-debug-bin";
 #else
-    constexpr const char* kConfigDir = "claude-release-bin";
+    constexpr const char* kConfigDir = "codex-release-bin";
 #endif
     return juce::File("D:/CreationSuite-Workspaces")
         .getChildFile(kConfigDir)

@@ -10,6 +10,12 @@ namespace creation::suite
 juce::String sanitizeProjectName(const juce::String& projectName);
 juce::String appDomainFolderName(creation::assets::SuiteAppDomain domain);
 
+juce::File getSuiteRootDirectory(const SuiteSettings& settings);
+juce::File getSharedResourcesDirectory(const SuiteSettings& settings);
+juce::File getContentDirectory(const SuiteSettings& settings);
+juce::File getTutorialsDirectory(const SuiteSettings& settings);
+juce::File getTemplatesDirectory(const SuiteSettings& settings);
+juce::File getCacheDirectory(const SuiteSettings& settings);
 juce::File getAppProjectsDirectory(const SuiteSettings& settings,
                                    creation::assets::SuiteAppDomain domain);
 juce::File getProjectContainerDirectory(const SuiteSettings& settings);

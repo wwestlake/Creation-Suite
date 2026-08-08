@@ -28,6 +28,23 @@ This workspace is a development/evaluation environment by default.
 - Resolve locations through the suite settings/bootstrap system, shared storage helpers, configuration, or explicit user choice where appropriate.
 - If code still depends on a specific filesystem layout, treat that as technical debt to remove rather than a pattern to extend.
 
+## UI Context Menu Rule
+
+Context menus in Creation Suite follow two different anchoring models, and they are not interchangeable:
+
+- Left-click button menus are command-source menus. They belong to the button the user activated, so they should open anchored to that button/component.
+- Right-click menus are spatial context menus. They belong to the exact place and object under the pointer, so they must open at the pointer location, not at some unrelated toolbar button or arbitrary component edge.
+
+Implementation rule:
+
+- For button-triggered menus, use component anchoring (`withTargetComponent(...)`).
+- For right-click context menus on canvases, timelines, editors, nodes, ports, clips, connections, and similar work surfaces, convert the click point to a screen-area anchor and use pointer-position anchoring (`withTargetScreenArea(...)`).
+- The menu contents must also depend on what was under the cursor: empty surface, node, port, connection, clip, track cell, scope, generator, etc. Position and content are both context-sensitive.
+
+Do not collapse these into one generic "popup menu" pattern. If the user right-clicked a location in the workspace, mouse location is authoritative.
+
+This rule is mandatory, not stylistic. If a right-click menu is anchored to an unrelated toolbar button, parent panel edge, or generic fallback location, that implementation is wrong and should be treated as a bug.
+
 ## Shared Ownership Rule
 
 `shared/` is the highest-risk collision area in this workspace.
@@ -211,6 +228,7 @@ This file is a MAP, not a manual — it tells you which document governs a given
 - Creation Engine: [docs/CAPABILITIES.md](apps/CreationEngine/docs/CAPABILITIES.md) (scope/non-goals), [docs/GS_SCRIPTING_PLAN.md](apps/CreationEngine/docs/GS_SCRIPTING_PLAN.md) (CEL milestone plan), [docs/SCRIPTING_ABI.md](apps/CreationEngine/docs/SCRIPTING_ABI.md) (host ABI spec), [docs/CROSS_APP_LANGUAGE_DOMAINS.md](apps/CreationEngine/docs/CROSS_APP_LANGUAGE_DOMAINS.md) (intrinsic domain gating), [docs/CROSS_APP_ASSET_INTEROP.md](apps/CreationEngine/docs/CROSS_APP_ASSET_INTEROP.md)
 - Creation Movie: [docs/CAPABILITIES.md](apps/CreationMovie/docs/CAPABILITIES.md), [docs/LANGUAGE_ROLLOUT.md](apps/CreationMovie/docs/LANGUAGE_ROLLOUT.md)
 - Creation Station: [docs/Creation-Shared-Language-Rollout.md](apps/CreationStation/docs/Creation-Shared-Language-Rollout.md), [docs/Creation-Suite-AssetSystem-Standard.md](apps/CreationStation/docs/Creation-Suite-AssetSystem-Standard.md), [docs/Creation-Suite-Interop-Spec.md](apps/CreationStation/docs/Creation-Suite-Interop-Spec.md), [docs/Studio-Grade-Audio-Routing-Checklist.md](apps/CreationStation/docs/Studio-Grade-Audio-Routing-Checklist.md), [docs/Creation-Station-0.5.0-Beta-Checklist.md](apps/CreationStation/docs/Creation-Station-0.5.0-Beta-Checklist.md), [docs/STATION_CONTROL_REGISTRY_SEED.md](apps/CreationStation/docs/STATION_CONTROL_REGISTRY_SEED.md) — concrete set_state/get_state entries for the CEL control registry, seeded from a real codebase investigation
+- Creation Station: [docs/Creation-Shared-Language-Rollout.md](apps/CreationStation/docs/Creation-Shared-Language-Rollout.md), [docs/Creation-Suite-AssetSystem-Standard.md](apps/CreationStation/docs/Creation-Suite-AssetSystem-Standard.md), [docs/Creation-Suite-Interop-Spec.md](apps/CreationStation/docs/Creation-Suite-Interop-Spec.md), [docs/Studio-Grade-Audio-Routing-Checklist.md](apps/CreationStation/docs/Studio-Grade-Audio-Routing-Checklist.md), [docs/Creation-Station-0.5.0-Beta-Checklist.md](apps/CreationStation/docs/Creation-Station-0.5.0-Beta-Checklist.md), [docs/STATION_CONTROL_REGISTRY_SEED.md](apps/CreationStation/docs/STATION_CONTROL_REGISTRY_SEED.md), [docs/Signal-Lab-Character-Macros-Spec.md](apps/CreationStation/docs/Signal-Lab-Character-Macros-Spec.md) — Signal Lab's high-level sound-character macro definitions and guardrails
 
 **Task/status tracking:** GitHub Issues + the **Creation Suite Road Map** project board (Project #19) — see the GitHub Project Board Rule above, not a doc file.
 
