@@ -91,16 +91,14 @@ juce::File getCacheDirectory(const SuiteSettings& settings)
 juce::File getAppProjectsDirectory(const SuiteSettings& settings,
                                    creation::assets::SuiteAppDomain domain)
 {
-    juce::ignoreUnused(settings);
-    return getInternalSuiteDataDirectory()
+    return getSuiteRootDirectory(settings)
         .getChildFile("Projects")
         .getChildFile(appDomainFolderName(domain));
 }
 
 juce::File getProjectContainerDirectory(const SuiteSettings& settings)
 {
-    juce::ignoreUnused(settings);
-    return getInternalSuiteDataDirectory().getChildFile("Project Containers");
+    return getSuiteRootDirectory(settings).getChildFile("Project Containers");
 }
 
 juce::File getProjectContainerPath(const SuiteSettings& settings,

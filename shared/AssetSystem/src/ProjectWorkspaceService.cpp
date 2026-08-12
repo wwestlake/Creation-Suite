@@ -19,11 +19,12 @@ bool ProjectWorkspaceService::createProject(const creation::suite::SuiteSettings
                                                   errorMessage);
 }
 
-bool ProjectWorkspaceService::openProject(const juce::File& containerFile,
+bool ProjectWorkspaceService::openProject(const creation::suite::SuiteSettings& settings,
+                                          const juce::String& projectId,
                                           ProjectSession& outSession,
                                           juce::String& errorMessage)
 {
-    return ProjectContainerService::openProject(containerFile, outSession, errorMessage);
+    return ProjectContainerService::openProject(settings, projectId, outSession, errorMessage);
 }
 
 bool ProjectWorkspaceService::openProjectById(const creation::suite::SuiteSettings& settings,
@@ -31,11 +32,7 @@ bool ProjectWorkspaceService::openProjectById(const creation::suite::SuiteSettin
                                               ProjectSession& outSession,
                                               juce::String& errorMessage)
 {
-    ProjectContainerService::ProjectSummary summary;
-    if (! ProjectContainerService::findProjectById(settings, projectId, summary, errorMessage))
-        return false;
-
-    return openProject(summary.containerFile, outSession, errorMessage);
+    return openProject(settings, projectId, outSession, errorMessage);
 }
 
 bool ProjectWorkspaceService::importFile(ProjectSession& session,

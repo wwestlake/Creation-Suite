@@ -1,7 +1,8 @@
 #include <JuceHeader.h>
 
-#include <creation/assets/ProjectSession.h>
-#include <creation/assets/SuiteRootProject.h>
+#include "VfsProjectStore.h"
+
+#include <creation/assets/ProjectManifest.h>
 #include <creation/services/SuiteProcessRegistry.h>
 #include <creation/suite/SuiteSettings.h>
 
@@ -15,12 +16,12 @@
 #include <vector>
 
 // The suite-owned VFS service (docs/architecture/Suite-Shared-Project-Model.md,
-// "Mechanism chosen"): the only process that ever opens the suite root
-// project's container directly. Every app is an HTTP/WebSocket client of
-// this process instead. Scope for this pass: the root project only --
-// regular per-app project containers are unaffected, still opened
-// directly by their owning app (see the plan's "explicitly deferred"
-// section for why).
+// "Mechanism chosen"): the only process that ever touches VFS files directly --
+// real folders on disk, under the configured VFS root, via VfsProjectStore (plain
+// juce::File I/O, no packed containers, no FatFs). Every app is an HTTP/WebSocket
+// client of this process instead, for both suite-level entries and per-app project
+// storage alike -- there is no separate "per-app containers are still opened
+// directly by their owning app" carve-out anymore.
 
 namespace
 {
@@ -132,22 +133,10 @@ int main(int, char*[])
     appendServiceLog("startup; suiteVfsRoot=" + settings.suiteVfsRoot
                      + (settingsError.isNotEmpty() ? " settingsError=" + settingsError : ""));
 
-    juce::CriticalSection sessionLock;
-    creation::assets::ProjectSession rootSession;
-    {
-        juce::String rootError;
-        const juce::ScopedLock lock(sessionLock);
-        appendBootLog("main: opening suite root");
-        if (! creation::assets::SuiteRootProject::openOrCreate(settings, rootSession, rootError))
-        {
-            appendBootLog("main: suite root open/create failed");
-            appendServiceLog("failed to open/create suite root project: " + rootError);
-            std::cerr << "[vfs-service] failed to open/create the suite root project: " << rootError << std::endl;
-            return 1;
-        }
-    }
-    appendBootLog("main: suite root ready");
-    appendServiceLog("suite root project ready");
+    juce::CriticalSection storeLock;
+    VfsProjectStore store(settings);
+    appendBootLog("main: project store ready");
+    appendServiceLog("project store ready; suite root folder=" + store.suiteRootFolder().getFullPathName());
 
     ix::initNetSystem();
     appendBootLog("main: net init complete");
@@ -173,8 +162,8 @@ int main(int, char*[])
         const auto path = normalizeEntryPath(juce::String(req.get_param_value("path")));
         juce::MemoryBlock data;
         {
-            const juce::ScopedLock lock(sessionLock);
-            if (! rootSession.readEntry(path, data))
+            const juce::ScopedLock lock(storeLock);
+            if (! store.readSuiteEntry(path, data))
             {
                 res.status = 404;
                 return;
@@ -194,19 +183,12 @@ int main(int, char*[])
         const auto path = normalizeEntryPath(juce::String(req.get_param_value("path")));
         const juce::MemoryBlock data(req.body.data(), req.body.size());
 
-        juce::String commitError;
         {
-            const juce::ScopedLock lock(sessionLock);
-            if (! rootSession.writeEntry(path, data))
+            const juce::ScopedLock lock(storeLock);
+            if (! store.writeSuiteEntry(path, data))
             {
                 res.status = 500;
                 res.set_content("Could not write the entry.", "text/plain");
-                return;
-            }
-            if (! rootSession.commit(commitError))
-            {
-                res.status = 500;
-                res.set_content(commitError.toStdString(), "text/plain");
                 return;
             }
         }
@@ -225,14 +207,11 @@ int main(int, char*[])
 
         const auto path = normalizeEntryPath(juce::String(req.get_param_value("path")));
 
-        juce::String commitError;
         {
-            const juce::ScopedLock lock(sessionLock);
-            rootSession.removeEntry(path);
-            if (! rootSession.commit(commitError))
+            const juce::ScopedLock lock(storeLock);
+            if (! store.removeSuiteEntry(path))
             {
-                res.status = 500;
-                res.set_content(commitError.toStdString(), "text/plain");
+                res.status = 404;
                 return;
             }
         }
@@ -243,8 +222,268 @@ int main(int, char*[])
 
     http.Get("/suite/entries", [&](const httplib::Request&, httplib::Response& res)
     {
-        const juce::ScopedLock lock(sessionLock);
-        const auto paths = rootSession.listEntryPaths();
+        const juce::ScopedLock lock(storeLock);
+        const auto paths = store.listSuiteEntryPaths();
+
+        juce::Array<juce::var> array;
+        for (const auto& path : paths)
+            array.add(path);
+
+        res.set_content(juce::JSON::toString(juce::var(array), false).toStdString(), "application/json");
+    });
+
+    // --- Project storage: real folders under the VFS root, keyed by projectId, never a real
+    // path handed back to a caller (see docs/architecture/Suite-Shared-Project-Model.md).
+
+    http.Post("/project/create", [&](const httplib::Request& req, httplib::Response& res)
+    {
+        const auto body = juce::JSON::parse(juce::String(req.body));
+        const auto* object = body.getDynamicObject();
+        if (object == nullptr)
+        {
+            res.status = 400;
+            return;
+        }
+
+        const auto appDomain = creation::assets::suiteAppDomainFromStorageToken(object->getProperty("appDomain").toString());
+        const auto projectName = object->getProperty("projectName").toString();
+        const auto suiteVersion = object->getProperty("suiteVersion").toString();
+        const auto appVersion = object->getProperty("appVersion").toString();
+
+        juce::String projectId, errorMessage;
+        creation::assets::ProjectManifest manifest;
+        {
+            const juce::ScopedLock lock(storeLock);
+            if (! store.createProject(appDomain, projectName, suiteVersion, appVersion, projectId, manifest, errorMessage))
+            {
+                res.status = 500;
+                res.set_content(errorMessage.toStdString(), "text/plain");
+                return;
+            }
+        }
+
+        auto* resultObject = new juce::DynamicObject();
+        resultObject->setProperty("projectId", projectId);
+        resultObject->setProperty("manifest", creation::assets::toVar(manifest));
+        res.set_content(juce::JSON::toString(juce::var(resultObject), false).toStdString(), "application/json");
+    });
+
+    http.Get("/project/manifest", [&](const httplib::Request& req, httplib::Response& res)
+    {
+        if (! req.has_param("projectId"))
+        {
+            res.status = 400;
+            return;
+        }
+
+        creation::assets::ProjectManifest manifest;
+        juce::String errorMessage;
+        {
+            const juce::ScopedLock lock(storeLock);
+            if (! store.readManifest(juce::String(req.get_param_value("projectId")), manifest, errorMessage))
+            {
+                res.status = 404;
+                res.set_content(errorMessage.toStdString(), "text/plain");
+                return;
+            }
+        }
+
+        res.set_content(juce::JSON::toString(creation::assets::toVar(manifest), false).toStdString(), "application/json");
+    });
+
+    http.Put("/project/manifest", [&](const httplib::Request& req, httplib::Response& res)
+    {
+        if (! req.has_param("projectId"))
+        {
+            res.status = 400;
+            return;
+        }
+
+        creation::assets::ProjectManifest manifest;
+        juce::String parseError;
+        if (! creation::assets::deserializeManifest(juce::String(req.body), manifest, parseError))
+        {
+            res.status = 400;
+            res.set_content(parseError.toStdString(), "text/plain");
+            return;
+        }
+
+        juce::String errorMessage;
+        {
+            const juce::ScopedLock lock(storeLock);
+            if (! store.writeManifest(juce::String(req.get_param_value("projectId")), manifest, errorMessage))
+            {
+                res.status = 500;
+                res.set_content(errorMessage.toStdString(), "text/plain");
+                return;
+            }
+        }
+
+        res.set_content("{\"status\":\"ok\"}", "application/json");
+    });
+
+    http.Get("/project/list", [&](const httplib::Request& req, httplib::Response& res)
+    {
+        if (! req.has_param("appDomain"))
+        {
+            res.status = 400;
+            return;
+        }
+
+        const auto appDomain = creation::assets::suiteAppDomainFromStorageToken(juce::String(req.get_param_value("appDomain")));
+        juce::Array<VfsProjectStore::ProjectSummary> summaries;
+        {
+            const juce::ScopedLock lock(storeLock);
+            store.listProjects(appDomain, summaries);
+        }
+
+        juce::Array<juce::var> array;
+        for (const auto& summary : summaries)
+        {
+            auto* entry = new juce::DynamicObject();
+            entry->setProperty("projectId", summary.projectId);
+            entry->setProperty("manifest", creation::assets::toVar(summary.manifest));
+            entry->setProperty("totalSizeBytes", static_cast<juce::int64>(summary.totalSizeBytes));
+            array.add(juce::var(entry));
+        }
+
+        res.set_content(juce::JSON::toString(juce::var(array), false).toStdString(), "application/json");
+    });
+
+    http.Delete("/project", [&](const httplib::Request& req, httplib::Response& res)
+    {
+        if (! req.has_param("projectId"))
+        {
+            res.status = 400;
+            return;
+        }
+
+        juce::String errorMessage;
+        {
+            const juce::ScopedLock lock(storeLock);
+            if (! store.deleteProject(juce::String(req.get_param_value("projectId")), errorMessage))
+            {
+                res.status = 404;
+                res.set_content(errorMessage.toStdString(), "text/plain");
+                return;
+            }
+        }
+
+        res.set_content("{\"status\":\"ok\"}", "application/json");
+    });
+
+    http.Post("/project/clone", [&](const httplib::Request& req, httplib::Response& res)
+    {
+        const auto body = juce::JSON::parse(juce::String(req.body));
+        const auto* object = body.getDynamicObject();
+        if (object == nullptr)
+        {
+            res.status = 400;
+            return;
+        }
+
+        juce::String newProjectId, errorMessage;
+        {
+            const juce::ScopedLock lock(storeLock);
+            if (! store.cloneProject(object->getProperty("sourceProjectId").toString(),
+                                     object->getProperty("newProjectName").toString(),
+                                     newProjectId, errorMessage))
+            {
+                res.status = 500;
+                res.set_content(errorMessage.toStdString(), "text/plain");
+                return;
+            }
+        }
+
+        auto* resultObject = new juce::DynamicObject();
+        resultObject->setProperty("projectId", newProjectId);
+        res.set_content(juce::JSON::toString(juce::var(resultObject), false).toStdString(), "application/json");
+    });
+
+    http.Get("/project/entry", [&](const httplib::Request& req, httplib::Response& res)
+    {
+        if (! req.has_param("projectId") || ! req.has_param("path"))
+        {
+            res.status = 400;
+            return;
+        }
+
+        juce::MemoryBlock data;
+        {
+            const juce::ScopedLock lock(storeLock);
+            if (! store.readEntry(juce::String(req.get_param_value("projectId")), juce::String(req.get_param_value("path")), data))
+            {
+                res.status = 404;
+                return;
+            }
+        }
+        res.set_content(static_cast<const char*>(data.getData()), data.getSize(), "application/octet-stream");
+    });
+
+    http.Put("/project/entry", [&](const httplib::Request& req, httplib::Response& res)
+    {
+        if (! req.has_param("projectId") || ! req.has_param("path"))
+        {
+            res.status = 400;
+            return;
+        }
+
+        const auto projectId = juce::String(req.get_param_value("projectId"));
+        const auto path = juce::String(req.get_param_value("path"));
+        const juce::MemoryBlock data(req.body.data(), req.body.size());
+
+        juce::String errorMessage;
+        {
+            const juce::ScopedLock lock(storeLock);
+            if (! store.writeEntry(projectId, path, data, errorMessage))
+            {
+                res.status = 500;
+                res.set_content(errorMessage.toStdString(), "text/plain");
+                return;
+            }
+        }
+
+        broadcastEntryChanged(wsClients, wsClientsLock, projectId + ":" + path);
+        res.set_content("{\"status\":\"ok\"}", "application/json");
+    });
+
+    http.Delete("/project/entry", [&](const httplib::Request& req, httplib::Response& res)
+    {
+        if (! req.has_param("projectId") || ! req.has_param("path"))
+        {
+            res.status = 400;
+            return;
+        }
+
+        const auto projectId = juce::String(req.get_param_value("projectId"));
+        const auto path = juce::String(req.get_param_value("path"));
+
+        {
+            const juce::ScopedLock lock(storeLock);
+            if (! store.removeEntry(projectId, path))
+            {
+                res.status = 404;
+                return;
+            }
+        }
+
+        broadcastEntryChanged(wsClients, wsClientsLock, projectId + ":" + path);
+        res.set_content("{\"status\":\"ok\"}", "application/json");
+    });
+
+    http.Get("/project/entries", [&](const httplib::Request& req, httplib::Response& res)
+    {
+        if (! req.has_param("projectId"))
+        {
+            res.status = 400;
+            return;
+        }
+
+        juce::StringArray paths;
+        {
+            const juce::ScopedLock lock(storeLock);
+            paths = store.listEntryPaths(juce::String(req.get_param_value("projectId")));
+        }
 
         juce::Array<juce::var> array;
         for (const auto& path : paths)

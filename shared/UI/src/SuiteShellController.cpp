@@ -128,7 +128,7 @@ public:
         {
             if (auto* selected = getSelectedProject())
                 if (onProjectOpenRequested)
-                    onProjectOpenRequested(selected->containerFile);
+                    onProjectOpenRequested(selected->projectId);
         };
         addAndMakeVisible(loadButton);
 
@@ -154,7 +154,7 @@ public:
         refresh();
     }
 
-    std::function<void(const juce::File&)> onProjectOpenRequested;
+    std::function<void(const juce::String&)> onProjectOpenRequested;
 
     void refresh()
     {
@@ -193,8 +193,7 @@ public:
             if (query.isNotEmpty())
             {
                 auto name = project.manifest.projectName.toLowerCase();
-                auto file = project.containerFile.getFileName().toLowerCase();
-                if (! name.contains(query) && ! file.contains(query))
+                if (! name.contains(query))
                     continue;
             }
 
@@ -234,11 +233,11 @@ public:
 
         g.setColour(juce::Colour(0xff8da3c0));
         g.setFont(12.0f);
-        auto sizeMb = juce::String(project.containerFile.getSize() / 1024.0 / 1024.0, 1) + " MB";
+        auto sizeMb = juce::String(project.totalSizeBytes / 1024.0 / 1024.0, 1) + " MB";
         g.drawText(domainBadge + "  |  " + sizeMb + "  |  Rev " + juce::String(project.manifest.revision),
                    14, 24, width - 200, 18, juce::Justification::centredLeft, true);
 
-        auto modTime = project.containerFile.getLastModificationTime().formatted("%Y-%m-%d %H:%M");
+        auto modTime = project.manifest.modifiedAt.formatted("%Y-%m-%d %H:%M");
         g.drawText(modTime, width - 185, 0, 170, height, juce::Justification::centredRight, true);
     }
 
@@ -246,7 +245,7 @@ public:
     {
         if (juce::isPositiveAndBelow(row, filteredProjects.size()))
             if (onProjectOpenRequested)
-                onProjectOpenRequested(filteredProjects[row].containerFile);
+                onProjectOpenRequested(filteredProjects[row].projectId);
     }
 
     void selectedRowsChanged(int lastRowSelected) override
@@ -334,15 +333,14 @@ private:
         text << "Application Domain: " << creation::assets::toDisplayName(selected->manifest.appDomain) << "\n";
         text << "Project UUID: " << selected->manifest.projectId << "\n";
         text << "Revision Number: " << selected->manifest.revision << "\n";
-        text << "Container Size: " << juce::String(selected->containerFile.getSize() / 1024.0 / 1024.0, 2) << " MB\n";
+        text << "Project Size: " << juce::String(selected->totalSizeBytes / 1024.0 / 1024.0, 2) << " MB\n";
         text << "Created Date: " << selected->manifest.createdAt.formatted("%Y-%m-%d %H:%M:%S") << "\n";
         text << "Last Modified: " << selected->manifest.modifiedAt.formatted("%Y-%m-%d %H:%M:%S") << "\n";
         text << "Created With Suite: v" << selected->manifest.createdWithSuiteVersion << " (App v" << selected->manifest.createdByAppVersion << ")\n\n";
-        text << "Container Path:\n" << selected->containerFile.getFullPathName() << "\n\n";
 
         creation::assets::ProjectSession session;
         juce::String openError;
-        if (creation::assets::ProjectSession::open(selected->containerFile, session, openError))
+        if (creation::assets::ProjectSession::open(loadedSettings, selected->projectId, session, openError))
         {
             const auto entryPaths = session.listEntryPaths();
             text << "Asset Catalog (" << entryPaths.size() << " entries total):\n";
@@ -397,9 +395,9 @@ private:
         prompt->addButton("Rename", 1);
         prompt->addButton("Cancel", 0);
 
-        auto fileToRename = selected->containerFile;
+        auto projectIdToRename = selected->projectId;
         auto options = juce::Component::SafePointer<SuiteProjectBrowserPanel>(this);
-        prompt->enterModalState(true, juce::ModalCallbackFunction::create([options, prompt, fileToRename](int result) mutable
+        prompt->enterModalState(true, juce::ModalCallbackFunction::create([options, prompt, projectIdToRename](int result) mutable
         {
             std::unique_ptr<juce::AlertWindow> dialog(prompt);
             if (result != 1 || options == nullptr)
@@ -411,7 +409,7 @@ private:
 
             creation::assets::ProjectSession session;
             juce::String err;
-            if (creation::assets::ProjectSession::open(fileToRename, session, err))
+            if (creation::assets::ProjectSession::open(options->loadedSettings, projectIdToRename, session, err))
             {
                 session.getManifest().projectName = newName;
                 session.getManifest().modifiedAt = juce::Time::getCurrentTime();
@@ -435,10 +433,9 @@ private:
         prompt->addButton("Clone Project", 1);
         prompt->addButton("Cancel", 0);
 
-        auto sourceFile = selected->containerFile;
-        auto domain = selected->manifest.appDomain;
+        auto sourceProjectId = selected->projectId;
         auto options = juce::Component::SafePointer<SuiteProjectBrowserPanel>(this);
-        prompt->enterModalState(true, juce::ModalCallbackFunction::create([options, prompt, sourceFile, domain](int result) mutable
+        prompt->enterModalState(true, juce::ModalCallbackFunction::create([options, prompt, sourceProjectId](int result) mutable
         {
             std::unique_ptr<juce::AlertWindow> dialog(prompt);
             if (result != 1 || options == nullptr)
@@ -448,28 +445,13 @@ private:
             if (cloneName.isEmpty())
                 return;
 
-            auto targetFile = creation::suite::getProjectContainerPath(options->loadedSettings, domain, cloneName);
-            if (targetFile.existsAsFile())
+            // The VFS service does the actual folder-tree copy and re-mints the clone's
+            // projectId server-side -- clients never touch project files directly.
+            juce::String newProjectId, err;
+            if (! creation::assets::ProjectContainerService::cloneProject(options->loadedSettings, sourceProjectId, cloneName, newProjectId, err))
             {
-                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Clone Error", "A project container with that name already exists.");
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Clone Error", err);
                 return;
-            }
-
-            if (! sourceFile.copyFileTo(targetFile))
-            {
-                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Clone Error", "Could not copy project container file.");
-                return;
-            }
-
-            creation::assets::ProjectSession cloneSession;
-            juce::String err;
-            if (creation::assets::ProjectSession::open(targetFile, cloneSession, err))
-            {
-                cloneSession.getManifest().projectId = juce::Uuid().toString();
-                cloneSession.getManifest().projectName = cloneName;
-                cloneSession.getManifest().createdAt = juce::Time::getCurrentTime();
-                cloneSession.getManifest().modifiedAt = cloneSession.getManifest().createdAt;
-                cloneSession.commit(err);
             }
 
             options->refresh();
@@ -495,13 +477,12 @@ private:
         if (selected == nullptr)
             return;
 
-        auto containerFileToDelete = selected->containerFile;
         auto projectIdToDelete = selected->manifest.projectId;
         auto projectName = selected->manifest.projectName;
 
         auto* confirmWindow = new juce::AlertWindow("DELETE PROJECT",
                                                      "Are you sure you want to PERMANENTLY delete project '" + projectName + "'?\n\n"
-                                                     "This will remove the .csproj container file from disk.\n"
+                                                     "This will remove the project folder from the suite VFS.\n"
                                                      "Type DELETE below to confirm:",
                                                      juce::MessageBoxIconType::WarningIcon);
         confirmWindow->addTextEditor("confirmText", "");
@@ -509,7 +490,7 @@ private:
         confirmWindow->addButton("Cancel", 0);
 
         auto options = juce::Component::SafePointer<SuiteProjectBrowserPanel>(this);
-        confirmWindow->enterModalState(true, juce::ModalCallbackFunction::create([options, confirmWindow, containerFileToDelete, projectIdToDelete, projectName](int result) mutable
+        confirmWindow->enterModalState(true, juce::ModalCallbackFunction::create([options, confirmWindow, projectIdToDelete, projectName](int result) mutable
         {
             std::unique_ptr<juce::AlertWindow> dialog(confirmWindow);
             if (result != 1 || options == nullptr)
@@ -522,8 +503,8 @@ private:
                 return;
             }
 
-            if (containerFileToDelete.existsAsFile())
-                containerFileToDelete.deleteFile();
+            juce::String deleteError;
+            creation::assets::ProjectContainerService::deleteProject(options->loadedSettings, projectIdToDelete, deleteError);
 
             auto cacheDir = creation::suite::getMaterializedFilesDirectory(options->loadedSettings, projectIdToDelete);
             if (cacheDir.isDirectory())

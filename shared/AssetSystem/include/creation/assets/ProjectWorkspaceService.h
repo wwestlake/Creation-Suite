@@ -18,7 +18,8 @@ public:
                               ProjectSession& outSession,
                               juce::String& errorMessage);
 
-    static bool openProject(const juce::File& containerFile,
+    static bool openProject(const creation::suite::SuiteSettings& settings,
+                            const juce::String& projectId,
                             ProjectSession& outSession,
                             juce::String& errorMessage);
 

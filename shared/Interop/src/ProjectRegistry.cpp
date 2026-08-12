@@ -31,7 +31,7 @@ juce::Array<ProjectRecord> ProjectRegistry::discoverProjects(const creation::sui
     const auto summaries = creation::assets::ProjectContainerService::listAllProjects(settings, errorMessage);
 
     for (const auto& summary : summaries)
-        projects.add({ summary.containerFile, summary.manifest });
+        projects.add({ summary.projectId, summary.manifest });
 
     std::sort(projects.begin(), projects.end(), [](const ProjectRecord& left, const ProjectRecord& right)
     {
