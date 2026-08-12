@@ -22,12 +22,6 @@ bool ProjectSession::createNew(const creation::suite::SuiteSettings&,
                                ProjectSession& outSession,
                                juce::String& errorMessage)
 {
-    if (outSession.isValid())
-    {
-        errorMessage = "This ProjectSession is already open.";
-        return false;
-    }
-
     creation::services::SuiteVfsServiceClient client;
     if (! client.discover())
     {
@@ -44,12 +38,6 @@ bool ProjectSession::open(const creation::suite::SuiteSettings&,
                           ProjectSession& outSession,
                           juce::String& errorMessage)
 {
-    if (outSession.isValid())
-    {
-        errorMessage = "This ProjectSession is already open.";
-        return false;
-    }
-
     creation::services::SuiteVfsServiceClient client;
     if (! client.discover())
     {

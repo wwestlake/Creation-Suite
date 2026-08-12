@@ -20,6 +20,10 @@ class ProjectSession final
 public:
     ProjectSession() = default;
 
+    // outSession may already hold a different project -- there is nothing to release (see
+    // close() below), so createNew simply overwrites it with the new project. Exactly one
+    // project can be the active target of a given ProjectSession at a time; switching targets
+    // is just reassignment, not an error.
     static bool createNew(const creation::suite::SuiteSettings& settings,
                           SuiteAppDomain appDomain,
                           const juce::String& projectName,
@@ -28,6 +32,8 @@ public:
                           ProjectSession& outSession,
                           juce::String& errorMessage);
 
+    // Same reassignment behavior as createNew: opening a different project while one is
+    // already held simply switches outSession to point at the new project.
     static bool open(const creation::suite::SuiteSettings& settings,
                      const juce::String& projectId,
                      ProjectSession& outSession,
