@@ -6,7 +6,10 @@
 #include <creation/services/SuiteLogging.h>
 #include <creation/services/SuiteProcessRegistry.h>
 #include <creation/services/SuiteContextEngine.h>
+#include <creation/services/SuiteVfsServiceClient.h>
 #include <creation/assets/ProjectManifest.h>
+#include <creation/suite/SuiteSettings.h>
+#include <creation/suite/SuiteStoragePaths.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -438,6 +441,109 @@ int main()
                 fail("SuiteContextEngine: an excludeCategories instruction should remove the matching document entirely.");
 
             engine.UnregisterProvider(&provider);
+        }
+
+        // --- Project storage: real folders under the configured VFS root, all through the
+        // running service (docs/architecture/Suite-Shared-Project-Model.md, VfsProjectStore
+        // in services/VfsService). Proves both the new /project/* endpoints and this session's
+        // getProjectContainerDirectory path-bug fix (folder must land under the CONFIGURED
+        // suiteVfsRoot, not AppData).
+        {
+            creation::services::SuiteVfsServiceClient client;
+            if (! client.discover())
+                fail("VfsProjectStore smoke: could not reach the suite VFS service.");
+
+            juce::String suiteSettingsError;
+            const auto suiteSettings = creation::suite::SuiteSettingsStore().load(suiteSettingsError);
+
+            juce::String createError, projectId;
+            creation::assets::ProjectManifest manifest;
+            if (! client.createProject(creation::assets::SuiteAppDomain::station, "Services Smoke Test Project",
+                                       "0.0.0-smoke", "0.0.0-smoke", projectId, manifest, createError))
+                fail("VfsProjectStore smoke: createProject failed: " + createError.toStdString());
+
+            if (projectId.isEmpty() || manifest.projectId != projectId)
+                fail("VfsProjectStore smoke: createProject returned a mismatched projectId.");
+
+            const auto expectedFolder = creation::suite::getProjectContainerDirectory(suiteSettings)
+                                            .getChildFile("Creation Station")
+                                            .getChildFile(projectId);
+            if (! expectedFolder.isDirectory())
+                fail("VfsProjectStore smoke: project folder does not exist at the configured VFS root: "
+                     + expectedFolder.getFullPathName().toStdString());
+            if (expectedFolder.getFullPathName().contains("AppData") && suiteSettings.suiteVfsRoot.isNotEmpty()
+                && ! suiteSettings.suiteVfsRoot.contains("AppData"))
+                fail("VfsProjectStore smoke: project folder landed in AppData despite a real configured VFS root -- "
+                     "the getProjectContainerDirectory bug fix did not take effect.");
+
+            const juce::String entryText = "hello from ServicesSmoke";
+            const juce::MemoryBlock entryData(entryText.toRawUTF8(), entryText.getNumBytesAsUTF8());
+            if (! client.writeProjectEntry(projectId, "Assets/Source/note.txt", entryData))
+                fail("VfsProjectStore smoke: writeProjectEntry failed.");
+
+            juce::MemoryBlock readBack;
+            if (! client.readProjectEntry(projectId, "Assets/Source/note.txt", readBack)
+                || readBack.toString() != entryText)
+                fail("VfsProjectStore smoke: readProjectEntry round-trip mismatch.");
+
+            juce::StringArray entries;
+            if (! client.listProjectEntries(projectId, entries) || ! entries.contains("Assets/Source/note.txt"))
+                fail("VfsProjectStore smoke: listProjectEntries did not include the written entry.");
+
+            manifest.tags.add("smoke-tested");
+            if (! client.writeManifest(projectId, manifest))
+                fail("VfsProjectStore smoke: writeManifest failed.");
+
+            creation::assets::ProjectManifest reloadedManifest;
+            if (! client.readManifest(projectId, reloadedManifest) || ! reloadedManifest.tags.contains("smoke-tested"))
+                fail("VfsProjectStore smoke: readManifest did not reflect the written manifest.");
+
+            juce::Array<creation::services::SuiteVfsServiceClient::ProjectSummary> projects;
+            if (! client.listProjects(creation::assets::SuiteAppDomain::station, projects))
+                fail("VfsProjectStore smoke: listProjects failed.");
+            bool foundInListing = false;
+            for (const auto& summary : projects)
+                if (summary.projectId == projectId)
+                    foundInListing = true;
+            if (! foundInListing)
+                fail("VfsProjectStore smoke: listProjects did not include the created project.");
+
+            juce::String cloneError, clonedProjectId;
+            if (! client.cloneProject(projectId, "Services Smoke Test Project (Clone)", clonedProjectId, cloneError))
+                fail("VfsProjectStore smoke: cloneProject failed: " + cloneError.toStdString());
+            if (clonedProjectId.isEmpty() || clonedProjectId == projectId)
+                fail("VfsProjectStore smoke: cloneProject did not return a distinct new id.");
+
+            juce::MemoryBlock clonedEntry;
+            if (! client.readProjectEntry(clonedProjectId, "Assets/Source/note.txt", clonedEntry)
+                || clonedEntry.toString() != entryText)
+                fail("VfsProjectStore smoke: cloned project's entry did not match the source.");
+
+            if (! client.removeProjectEntry(projectId, "Assets/Source/note.txt"))
+                fail("VfsProjectStore smoke: removeProjectEntry failed.");
+            juce::MemoryBlock afterRemove;
+            if (client.readProjectEntry(projectId, "Assets/Source/note.txt", afterRemove))
+                fail("VfsProjectStore smoke: entry still readable after removeProjectEntry.");
+
+            // Regression guard for the existing /suite/entry* contract, reimplemented against
+            // VfsProjectStore this pass -- must still round-trip exactly as before.
+            const juce::String suiteEntryText = "suite entry regression check";
+            const juce::MemoryBlock suiteEntryData(suiteEntryText.toRawUTF8(), suiteEntryText.getNumBytesAsUTF8());
+            if (! client.writeEntry("services-smoke-regression.txt", suiteEntryData))
+                fail("VfsProjectStore smoke: /suite/entry regression write failed.");
+            juce::MemoryBlock suiteReadBack;
+            if (! client.readEntry("services-smoke-regression.txt", suiteReadBack)
+                || suiteReadBack.toString() != suiteEntryText)
+                fail("VfsProjectStore smoke: /suite/entry regression read-back mismatch.");
+            client.removeEntry("services-smoke-regression.txt");
+
+            // Clean up only the two project folders this test created -- never touch the rest
+            // of "Project Containers" (real projects, or other tests' data, may live alongside).
+            expectedFolder.deleteRecursively();
+            const auto clonedFolder = creation::suite::getProjectContainerDirectory(suiteSettings)
+                                          .getChildFile("Creation Station")
+                                          .getChildFile(clonedProjectId);
+            clonedFolder.deleteRecursively();
         }
 
         return 0;

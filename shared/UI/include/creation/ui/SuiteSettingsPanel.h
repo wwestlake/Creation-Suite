@@ -29,7 +29,10 @@ private:
     {
         storage,
         ai,
-        log
+        log,
+#if JUCE_DEBUG
+        vfsBrowser,
+#endif
     };
 
     struct AppSelectionRow
@@ -46,6 +49,53 @@ private:
         juce::TextEditor editor;
         juce::TextButton browseButton { "Browse" };
     };
+
+#if JUCE_DEBUG
+    // Debug-only VFS inspection tool -- see docs/Suite-VFS-Browser-Debug-Tool.md. Reads whatever
+    // the VFS actually contains at runtime (real files under the configured root, plus whatever
+    // entries the VFS service reports) rather than assuming any particular layout, so it stays
+    // correct through future reorganizations of the VFS instead of needing to be rebuilt alongside
+    // one.
+    class VfsFileTreeItem final : public juce::TreeViewItem
+    {
+    public:
+        VfsFileTreeItem(const juce::File& file, std::function<void(const juce::File&)> onSelected);
+        bool mightContainSubItems() override;
+        void itemOpennessChanged(bool isNowOpen) override;
+        void paintItem(juce::Graphics& g, int width, int height) override;
+        void itemClicked(const juce::MouseEvent&) override;
+
+    private:
+        juce::File file_;
+        std::function<void(const juce::File&)> onSelected_;
+    };
+
+    // A synthetic node (not backed by a real directory) whose children are built from a flat
+    // logical-path list -- used for the VFS service's own "suite/" entries, which live inside the
+    // suite root project's container, not as loose OS files.
+    class VfsEntryTreeItem final : public juce::TreeViewItem
+    {
+    public:
+        VfsEntryTreeItem(juce::String displayName, juce::String fullLogicalPath, bool isLeaf,
+                         std::function<void(const juce::String&)> onSelected);
+        void addChildPath(const juce::StringArray& remainingSegments, const juce::String& fullLogicalPath);
+        bool mightContainSubItems() override { return getNumSubItems() > 0; }
+        void paintItem(juce::Graphics& g, int width, int height) override;
+        void itemClicked(const juce::MouseEvent&) override;
+
+    private:
+        VfsEntryTreeItem* findOrCreateChild(const juce::String& segment);
+        juce::String displayName_;
+        juce::String fullLogicalPath_;
+        bool isLeaf_ = false;
+        std::function<void(const juce::String&)> onSelected_;
+    };
+
+    void buildVfsBrowserTree();
+    void showVfsFileContent(const juce::File& file);
+    void showVfsEntryContent(const juce::String& logicalPath);
+    void setVfsContentText(const juce::String& title, const juce::String& rawContent, bool wasParsed, const juce::String& parseNote);
+#endif
 
     void configureRow(PathRow& row, const juce::String& id, const juce::String& labelText);
     void layoutRow(PathRow& row, juce::Rectangle<int>& area);
@@ -69,6 +119,13 @@ private:
     juce::TextButton storageTabButton { "Storage" };
     juce::TextButton aiTabButton { "AI & Routing" };
     juce::TextButton suiteLogTabButton { "Suite Log" };
+#if JUCE_DEBUG
+    juce::TextButton vfsBrowserTabButton { "VFS Browser" };
+    juce::TreeView vfsTreeView;
+    std::unique_ptr<juce::TreeViewItem> vfsTreeRoot;
+    juce::Label vfsContentTitleLabel;
+    juce::TextEditor vfsContentViewer;
+#endif
     juce::Viewport scrollViewport;
     juce::Component scrollContent;
     juce::Label storageIntroLabel;
@@ -106,4 +163,5 @@ private:
     juce::Array<creation::services::SuiteAiProviderPreset> aiProviders;
     int selectedAccountIndex = -1;
     Tab selectedTab = Tab::storage;
+    creation::suite::SuiteSettings currentSettings;
 };

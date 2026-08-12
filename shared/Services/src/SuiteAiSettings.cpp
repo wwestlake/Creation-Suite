@@ -1,6 +1,6 @@
 #include <creation/services/SuiteAiSettings.h>
 #include <creation/services/SuiteAiProviderRuntime.h>
-#include <creation/services/SuiteVfsServiceClient.h>
+#include <creation/services/SuiteVfsJsonStore.h>
 
 namespace
 {
@@ -126,45 +126,16 @@ const SuiteAiProviderPreset* SuiteAiProviderCatalog::findById(const juce::Array<
 
 SuiteAiSettings SuiteAiSettingsStore::load(juce::String& errorMessage) const
 {
-    SuiteVfsServiceClient client;
-    if (! client.discover())
-    {
-        errorMessage = "Could not reach the suite VFS service.";
-        return {};
-    }
-
-    juce::MemoryBlock data;
-    if (! client.readEntry("ai-settings.json", data))
-        return {}; // no entry yet -- same "nothing saved" meaning the old missing-file case had.
-
-    const auto parsed = juce::JSON::parse(juce::String::createStringFromData(data.getData(), static_cast<int>(data.getSize())));
+    const auto parsed = SuiteVfsJsonStore::loadJson("ai-settings.json", errorMessage);
     if (parsed.isVoid())
-    {
-        errorMessage = "Could not parse the suite AI settings entry.";
         return {};
-    }
 
     return fromVar(parsed);
 }
 
 bool SuiteAiSettingsStore::save(const SuiteAiSettings& settings, juce::String& errorMessage) const
 {
-    SuiteVfsServiceClient client;
-    if (! client.discover())
-    {
-        errorMessage = "Could not reach the suite VFS service.";
-        return false;
-    }
-
-    const auto json = juce::JSON::toString(toVar(settings), true);
-    const juce::MemoryBlock data(json.toRawUTF8(), json.getNumBytesAsUTF8());
-    if (! client.writeEntry("ai-settings.json", data))
-    {
-        errorMessage = "Could not save the suite AI settings entry.";
-        return false;
-    }
-
-    return true;
+    return SuiteVfsJsonStore::saveJson("ai-settings.json", toVar(settings), errorMessage);
 }
 
 const SuiteAiAccountSettings* SuiteAiSettingsResolver::findAccountById(const SuiteAiSettings& settings,

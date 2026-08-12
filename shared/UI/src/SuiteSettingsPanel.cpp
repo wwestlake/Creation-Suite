@@ -1,6 +1,10 @@
 #include <creation/ui/SuiteSettingsPanel.h>
 #include <creation/ui/CreationSuiteLogos.h>
 #include <creation/services/SuiteAiProviderRuntime.h>
+#if JUCE_DEBUG
+#include <creation/services/SuiteVfsServiceClient.h>
+#include <creation/suite/SuiteStoragePaths.h>
+#endif
 
 namespace
 {
@@ -68,6 +72,26 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     configureTabButton(storageTabButton, "Storage", Tab::storage);
     configureTabButton(aiTabButton, "AI & Routing", Tab::ai);
     configureTabButton(suiteLogTabButton, "Suite Log", Tab::log);
+#if JUCE_DEBUG
+    configureTabButton(vfsBrowserTabButton, "VFS Browser", Tab::vfsBrowser);
+
+    vfsTreeView.setColour(juce::TreeView::backgroundColourId, juce::Colour(0xff1a2230));
+    vfsTreeView.setColour(juce::TreeView::linesColourId, panelOutline());
+    addChildComponent(vfsTreeView);
+
+    vfsContentTitleLabel.setFont(juce::Font(13.0f).boldened());
+    configureLabel(vfsContentTitleLabel);
+    addChildComponent(vfsContentTitleLabel);
+
+    vfsContentViewer.setMultiLine(true);
+    vfsContentViewer.setReadOnly(true);
+    vfsContentViewer.setScrollbarsShown(true);
+    vfsContentViewer.setCaretVisible(false);
+    vfsContentViewer.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 13.0f, juce::Font::plain));
+    configureEditor(vfsContentViewer);
+    vfsContentViewer.setText("Select a file or entry on the left.", juce::dontSendNotification);
+    addChildComponent(vfsContentViewer);
+#endif
 
     scrollViewport.setViewedComponent(&scrollContent, false);
     scrollViewport.setScrollBarsShown(true, false);
@@ -296,6 +320,10 @@ SuiteSettingsPanel::SuiteSettingsPanel()
 void SuiteSettingsPanel::setSettings(const creation::suite::SuiteSettings& settings)
 {
     suiteVfsRow.editor.setText(settings.suiteVfsRoot, juce::dontSendNotification);
+#if JUCE_DEBUG
+    currentSettings = settings;
+    buildVfsBrowserTree();
+#endif
 }
 
 creation::suite::SuiteSettings SuiteSettingsPanel::getSettings() const
@@ -413,10 +441,22 @@ void SuiteSettingsPanel::resized()
     aiTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth + 20));
     tabArea.removeFromLeft(8);
     suiteLogTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth));
+#if JUCE_DEBUG
+    tabArea.removeFromLeft(8);
+    vfsBrowserTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth + 20));
+#endif
 
     area.removeFromTop(10);
     auto footerArea = area.removeFromBottom(74);
     scrollViewport.setBounds(area);
+#if JUCE_DEBUG
+    auto vfsArea = area;
+    vfsTreeView.setBounds(vfsArea.removeFromLeft(280));
+    vfsArea.removeFromLeft(10);
+    vfsContentTitleLabel.setBounds(vfsArea.removeFromTop(22));
+    vfsArea.removeFromTop(4);
+    vfsContentViewer.setBounds(vfsArea);
+#endif
 
     auto footerButtons = footerArea.removeFromLeft(338);
     applyButton.setBounds(footerButtons.removeFromLeft(180));
@@ -466,6 +506,15 @@ void SuiteSettingsPanel::selectTab(Tab tab)
 {
     selectedTab = tab;
     refreshTabButtons();
+
+#if JUCE_DEBUG
+    const bool isVfsBrowser = (selectedTab == Tab::vfsBrowser);
+    scrollViewport.setVisible(! isVfsBrowser);
+    vfsTreeView.setVisible(isVfsBrowser);
+    vfsContentTitleLabel.setVisible(isVfsBrowser);
+    vfsContentViewer.setVisible(isVfsBrowser);
+#endif
+
     updateScrollContentLayout();
     scrollViewport.setViewPosition(0, 0);
 }
@@ -483,6 +532,9 @@ void SuiteSettingsPanel::refreshTabButtons()
     styleTab(storageTabButton, selectedTab == Tab::storage);
     styleTab(aiTabButton, selectedTab == Tab::ai);
     styleTab(suiteLogTabButton, selectedTab == Tab::log);
+#if JUCE_DEBUG
+    styleTab(vfsBrowserTabButton, selectedTab == Tab::vfsBrowser);
+#endif
 }
 
 void SuiteSettingsPanel::updateScrollContentLayout()
@@ -554,6 +606,9 @@ void SuiteSettingsPanel::updateScrollContentLayout()
         case Tab::storage: layoutStorageTab(area); break;
         case Tab::ai: layoutAiTab(area); break;
         case Tab::log: layoutLogTab(area); break;
+#if JUCE_DEBUG
+        case Tab::vfsBrowser: break; // laid out directly in resized(), not the scrollContent area.
+#endif
     }
 
     const auto usedHeight = 20000 - area.getHeight() + 18;
@@ -779,3 +834,222 @@ juce::String SuiteSettingsPanel::accountIdForCombo(const juce::ComboBox& comboBo
 
     return aiSettings.accounts[accountIndex].accountId;
 }
+
+#if JUCE_DEBUG
+
+SuiteSettingsPanel::VfsFileTreeItem::VfsFileTreeItem(const juce::File& file, std::function<void(const juce::File&)> onSelected)
+    : file_(file), onSelected_(std::move(onSelected))
+{
+}
+
+bool SuiteSettingsPanel::VfsFileTreeItem::mightContainSubItems()
+{
+    return file_.isDirectory();
+}
+
+void SuiteSettingsPanel::VfsFileTreeItem::itemOpennessChanged(bool isNowOpen)
+{
+    if (! isNowOpen || getNumSubItems() > 0)
+        return;
+
+    juce::Array<juce::File> dirs, files;
+    juce::Array<juce::File> children;
+    file_.findChildFiles(children, juce::File::findFilesAndDirectories, false, "*");
+    for (const auto& child : children)
+        (child.isDirectory() ? dirs : files).add(child);
+
+    dirs.sort();
+    files.sort();
+    for (const auto& d : dirs)
+        addSubItem(new VfsFileTreeItem(d, onSelected_));
+    for (const auto& f : files)
+        addSubItem(new VfsFileTreeItem(f, onSelected_));
+}
+
+void SuiteSettingsPanel::VfsFileTreeItem::paintItem(juce::Graphics& g, int width, int height)
+{
+    g.setColour(juce::Colours::white);
+    g.setFont(13.0f);
+    auto name = file_.getFileName();
+    if (name.isEmpty())
+        name = file_.getFullPathName();
+    if (! file_.isDirectory())
+        name << "   (" << juce::String(file_.getSize()) << " bytes)";
+    g.drawText(name, 2, 0, width - 4, height, juce::Justification::centredLeft, true);
+}
+
+void SuiteSettingsPanel::VfsFileTreeItem::itemClicked(const juce::MouseEvent&)
+{
+    if (file_.isDirectory())
+        setOpen(! isOpen());
+    else if (onSelected_)
+        onSelected_(file_);
+}
+
+SuiteSettingsPanel::VfsEntryTreeItem::VfsEntryTreeItem(juce::String displayName, juce::String fullLogicalPath, bool isLeaf,
+                                                       std::function<void(const juce::String&)> onSelected)
+    : displayName_(std::move(displayName)), fullLogicalPath_(std::move(fullLogicalPath)), isLeaf_(isLeaf),
+      onSelected_(std::move(onSelected))
+{
+}
+
+void SuiteSettingsPanel::VfsEntryTreeItem::addChildPath(const juce::StringArray& remainingSegments, const juce::String& fullLogicalPath)
+{
+    if (remainingSegments.isEmpty())
+        return;
+
+    if (remainingSegments.size() == 1)
+    {
+        addSubItem(new VfsEntryTreeItem(remainingSegments[0], fullLogicalPath, true, onSelected_));
+        return;
+    }
+
+    auto* child = findOrCreateChild(remainingSegments[0]);
+    juce::StringArray rest;
+    for (int i = 1; i < remainingSegments.size(); ++i)
+        rest.add(remainingSegments[i]);
+    child->addChildPath(rest, fullLogicalPath);
+}
+
+SuiteSettingsPanel::VfsEntryTreeItem* SuiteSettingsPanel::VfsEntryTreeItem::findOrCreateChild(const juce::String& segment)
+{
+    for (int i = 0; i < getNumSubItems(); ++i)
+    {
+        auto* existing = dynamic_cast<VfsEntryTreeItem*>(getSubItem(i));
+        if (existing != nullptr && existing->displayName_ == segment)
+            return existing;
+    }
+
+    auto* created = new VfsEntryTreeItem(segment, juce::String(), false, onSelected_);
+    addSubItem(created);
+    return created;
+}
+
+void SuiteSettingsPanel::VfsEntryTreeItem::paintItem(juce::Graphics& g, int width, int height)
+{
+    g.setColour(juce::Colours::white);
+    g.setFont(13.0f);
+    g.drawText(displayName_, 2, 0, width - 4, height, juce::Justification::centredLeft, true);
+}
+
+void SuiteSettingsPanel::VfsEntryTreeItem::itemClicked(const juce::MouseEvent&)
+{
+    if (isLeaf_)
+    {
+        if (onSelected_)
+            onSelected_(fullLogicalPath_);
+    }
+    else
+    {
+        setOpen(! isOpen());
+    }
+}
+
+void SuiteSettingsPanel::buildVfsBrowserTree()
+{
+    vfsTreeView.setRootItem(nullptr);
+    vfsTreeRoot.reset();
+
+    auto invisibleRoot = std::make_unique<VfsEntryTreeItem>("root", juce::String(), false, nullptr);
+
+    auto fsRoot = creation::suite::getSuiteRootDirectory(currentSettings);
+    invisibleRoot->addSubItem(new VfsFileTreeItem(fsRoot, [this](const juce::File& file) { showVfsFileContent(file); }));
+
+    auto* entriesRoot = new VfsEntryTreeItem("Suite Entries (via VFS service)", juce::String(), false,
+        [this](const juce::String& path) { showVfsEntryContent(path); });
+
+    creation::services::SuiteVfsServiceClient client;
+    juce::StringArray entryPaths;
+    if (client.discover() && client.listEntries(entryPaths))
+    {
+        for (const auto& path : entryPaths)
+        {
+            auto segments = juce::StringArray::fromTokens(path, "/", "");
+            segments.removeEmptyStrings();
+            if (! segments.isEmpty())
+                entriesRoot->addChildPath(segments, path);
+        }
+    }
+    invisibleRoot->addSubItem(entriesRoot);
+
+    vfsTreeRoot = std::move(invisibleRoot);
+    vfsTreeView.setRootItem(vfsTreeRoot.get());
+    vfsTreeView.setRootItemVisible(false);
+    vfsTreeRoot->setOpen(true);
+}
+
+void SuiteSettingsPanel::showVfsFileContent(const juce::File& file)
+{
+    if (file.hasFileExtension(".csproj"))
+    {
+        setVfsContentText(file.getFullPathName(), {}, false,
+            "Binary project container (" + juce::String(file.getSize()) + " bytes). Browsing "
+            "container internals isn't supported yet -- see docs/Suite-VFS-Browser-Debug-Tool.md.");
+        return;
+    }
+
+    if (! file.existsAsFile())
+    {
+        setVfsContentText(file.getFullPathName(), {}, false, "(a folder -- select a file to view its content)");
+        return;
+    }
+
+    setVfsContentText(file.getFullPathName(), file.loadFileAsString(), true, {});
+}
+
+void SuiteSettingsPanel::showVfsEntryContent(const juce::String& logicalPath)
+{
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
+    {
+        setVfsContentText(logicalPath, {}, false, "Could not reach the suite VFS service.");
+        return;
+    }
+
+    juce::MemoryBlock data;
+    if (! client.readEntry(logicalPath, data))
+    {
+        setVfsContentText(logicalPath, {}, false, "Could not read this entry.");
+        return;
+    }
+
+    setVfsContentText(logicalPath, juce::String::createStringFromData(data.getData(), static_cast<int>(data.getSize())), true, {});
+}
+
+void SuiteSettingsPanel::setVfsContentText(const juce::String& title, const juce::String& rawContent, bool wasParsed, const juce::String& parseNote)
+{
+    vfsContentTitleLabel.setText(title, juce::dontSendNotification);
+
+    if (! wasParsed)
+    {
+        vfsContentViewer.setText(parseNote, juce::dontSendNotification);
+        return;
+    }
+
+    if (title.endsWithIgnoreCase(".json"))
+    {
+        const auto parsed = juce::JSON::parse(rawContent);
+        if (! parsed.isVoid())
+        {
+            vfsContentViewer.setText(juce::JSON::toString(parsed, true), juce::dontSendNotification);
+            return;
+        }
+        vfsContentViewer.setText("(not valid JSON -- showing raw content)\n\n" + rawContent, juce::dontSendNotification);
+        return;
+    }
+
+    if (title.endsWithIgnoreCase(".xml"))
+    {
+        if (auto xml = juce::parseXML(rawContent))
+        {
+            vfsContentViewer.setText(xml->toString(), juce::dontSendNotification);
+            return;
+        }
+        vfsContentViewer.setText("(not valid XML -- showing raw content)\n\n" + rawContent, juce::dontSendNotification);
+        return;
+    }
+
+    vfsContentViewer.setText(rawContent, juce::dontSendNotification);
+}
+
+#endif
