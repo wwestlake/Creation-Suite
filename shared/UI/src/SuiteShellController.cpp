@@ -100,6 +100,11 @@ public:
         refreshButton.onClick = [this] { refresh(); };
         addAndMakeVisible(refreshButton);
 
+        newProjectButton.setButtonText("New Project...");
+        newProjectButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2b7a4b));
+        newProjectButton.onClick = [this] { beginCreateProject(); };
+        addAndMakeVisible(newProjectButton);
+
         listBox.setModel(this);
         listBox.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff121a24));
         listBox.setColour(juce::ListBox::outlineColourId, juce::Colour(0xff253549));
@@ -147,7 +152,7 @@ public:
 
         deleteButton.setButtonText("Delete Project");
         deleteButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff8a2323));
-        deleteButton.setTooltip("Permanently deletes the selected project container (.csproj)");
+        deleteButton.setTooltip("Permanently deletes the selected project's folder from the suite VFS");
         deleteButton.onClick = [this] { confirmAndDeleteSelectedProject(); };
         addAndMakeVisible(deleteButton);
 
@@ -260,6 +265,8 @@ public:
         auto header = area.removeFromTop(32);
         titleLabel.setBounds(header.removeFromLeft(360));
         refreshButton.setBounds(header.removeFromRight(100));
+        header.removeFromRight(8);
+        newProjectButton.setBounds(header.removeFromRight(120));
 
         area.removeFromTop(4);
         subtitleLabel.setBounds(area.removeFromTop(20));
@@ -419,6 +426,42 @@ private:
         }), true);
     }
 
+    void beginCreateProject()
+    {
+        auto* prompt = new juce::AlertWindow("New Project",
+                                             "Enter a name for the new project:",
+                                             juce::MessageBoxIconType::QuestionIcon);
+        prompt->addTextEditor("projectName", "New Project");
+        prompt->addButton("Create Project", 1);
+        prompt->addButton("Cancel", 0);
+
+        auto domainForNewProject = currentDomain;
+        auto options = juce::Component::SafePointer<SuiteProjectBrowserPanel>(this);
+        prompt->enterModalState(true, juce::ModalCallbackFunction::create([options, prompt, domainForNewProject](int result) mutable
+        {
+            std::unique_ptr<juce::AlertWindow> dialog(prompt);
+            if (result != 1 || options == nullptr)
+                return;
+
+            auto projectName = dialog->getTextEditorContents("projectName").trim();
+            if (projectName.isEmpty())
+                return;
+
+            creation::assets::ProjectSession newSession;
+            juce::String err;
+            if (! creation::assets::ProjectContainerService::createProject(options->loadedSettings, domainForNewProject,
+                    projectName, "1.0.0", "1.0.0", newSession, err))
+            {
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Create Project Error", err);
+                return;
+            }
+
+            options->refresh();
+            if (options->onProjectOpenRequested)
+                options->onProjectOpenRequested(newSession.getProjectId());
+        }), true);
+    }
+
     void cloneSelectedProject()
     {
         auto* selected = getSelectedProject();
@@ -524,6 +567,7 @@ private:
     juce::TextEditor searchEditor;
     juce::ComboBox domainCombo;
     juce::TextButton refreshButton;
+    juce::TextButton newProjectButton;
 
     juce::ListBox listBox;
 
