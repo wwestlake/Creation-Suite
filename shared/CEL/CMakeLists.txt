@@ -43,6 +43,10 @@ add_library(creation_suite_cel_nodegen STATIC
     src/nodegen/node_catalog.cpp
     include/lang/nodegen/graph_to_source.h
     src/nodegen/graph_to_source.cpp
+    include/lang/nodegen/foley_node_catalog.h
+    src/nodegen/foley_node_catalog.cpp
+    include/lang/nodegen/foley_graph_to_source.h
+    src/nodegen/foley_graph_to_source.cpp
 )
 
 target_include_directories(creation_suite_cel_nodegen PUBLIC include)
@@ -125,4 +129,18 @@ if(CREATION_SUITE_CEL_ENABLE_JIT AND LLVM_FOUND)
     if(NOT TARGET ce_lang_jit)
         add_library(ce_lang_jit ALIAS creation_suite_cel_jit)
     endif()
+
+    add_executable(creation_suite_cel_foley_smoke
+        tests/FoleyCelSmoke.cpp
+    )
+    target_link_libraries(creation_suite_cel_foley_smoke
+        PRIVATE
+            creation_suite_cel_frontend
+            creation_suite_cel_nodegen
+            creation_suite_cel_jit
+    )
+    add_test(
+        NAME creation_suite_cel_foley_smoke
+        COMMAND creation_suite_cel_foley_smoke
+    )
 endif()

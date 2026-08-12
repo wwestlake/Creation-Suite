@@ -1,0 +1,50 @@
+#ifndef _ofxProperty_h_
+#define _ofxProperty_h_
+
+// See ofxCore.h for provenance/scoping notes - same caveat applies here.
+
+#include "ofxCore.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define kOfxPropertySuite "OfxPropertySuite"
+
+// Key-value property storage backing every plugin parameter, clip, and host context attribute -
+// the ONLY way a plugin and host exchange typed data in OFX; nothing is ever accessed through a
+// raw struct field. Every setter/getter takes the property set handle plus a property name
+// string constant (defined across ofxCore.h/ofxImageEffect.h/ofxParam.h) plus an index (for
+// multi-dimensional properties, e.g. a 2D position's x/y) - N-suffixed variants set/get several
+// indices in one call.
+typedef struct OfxPropertySuiteV1
+{
+    OfxStatus (*propSetPointer)(OfxPropertySetHandle properties, const char* property, int index, void* value);
+    OfxStatus (*propSetString)(OfxPropertySetHandle properties, const char* property, int index, const char* value);
+    OfxStatus (*propSetDouble)(OfxPropertySetHandle properties, const char* property, int index, double value);
+    OfxStatus (*propSetInt)(OfxPropertySetHandle properties, const char* property, int index, int value);
+
+    OfxStatus (*propSetPointerN)(OfxPropertySetHandle properties, const char* property, int count, void* const* value);
+    OfxStatus (*propSetStringN)(OfxPropertySetHandle properties, const char* property, int count, const char* const* value);
+    OfxStatus (*propSetDoubleN)(OfxPropertySetHandle properties, const char* property, int count, const double* value);
+    OfxStatus (*propSetIntN)(OfxPropertySetHandle properties, const char* property, int count, const int* value);
+
+    OfxStatus (*propGetPointer)(OfxPropertySetHandle properties, const char* property, int index, void** value);
+    OfxStatus (*propGetString)(OfxPropertySetHandle properties, const char* property, int index, char** value);
+    OfxStatus (*propGetDouble)(OfxPropertySetHandle properties, const char* property, int index, double* value);
+    OfxStatus (*propGetInt)(OfxPropertySetHandle properties, const char* property, int index, int* value);
+
+    OfxStatus (*propGetPointerN)(OfxPropertySetHandle properties, const char* property, int count, void** value);
+    OfxStatus (*propGetStringN)(OfxPropertySetHandle properties, const char* property, int count, char** value);
+    OfxStatus (*propGetDoubleN)(OfxPropertySetHandle properties, const char* property, int count, double* value);
+    OfxStatus (*propGetIntN)(OfxPropertySetHandle properties, const char* property, int count, int* value);
+
+    OfxStatus (*propReset)(OfxPropertySetHandle properties, const char* property);
+    OfxStatus (*propGetDimension)(OfxPropertySetHandle properties, const char* property, int* count);
+} OfxPropertySuiteV1;
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
