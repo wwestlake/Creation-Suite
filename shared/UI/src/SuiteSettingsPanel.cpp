@@ -1031,7 +1031,7 @@ void SuiteSettingsPanel::setVfsContentText(const juce::String& title, const juce
         const auto parsed = juce::JSON::parse(rawContent);
         if (! parsed.isVoid())
         {
-            vfsContentViewer.setText(juce::JSON::toString(parsed, true), juce::dontSendNotification);
+            vfsContentViewer.setText(juce::JSON::toString(parsed, false), juce::dontSendNotification);
             return;
         }
         vfsContentViewer.setText("(not valid JSON -- showing raw content)\n\n" + rawContent, juce::dontSendNotification);
