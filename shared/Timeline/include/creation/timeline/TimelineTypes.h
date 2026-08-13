@@ -116,6 +116,10 @@ struct TimelineTrack
     // Write). Higher captures faster moves more precisely but bloats the curve with points a
     // human's own motion couldn't have made that finely; lower keeps the curve editable by hand.
     int automationRecordingPointsPerSecond = 10;
+    // Per-track lane height in the Tracker UI, drag-to-resize (Reaper-style) rather than the
+    // old suite-wide Compact/Comfort/Tall preset buttons. Clamped 64-156 wherever it's set,
+    // matching the range the old preset buttons used.
+    int heightPixels = 100;
 };
 
 struct TimelineMarker
