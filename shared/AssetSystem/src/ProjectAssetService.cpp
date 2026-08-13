@@ -88,6 +88,63 @@ bool ProjectAssetService::importFile(ProjectSession& session,
     return true;
 }
 
+bool ProjectAssetService::saveGeneratedAsset(ProjectSession& session,
+                                             const juce::MemoryBlock& data,
+                                             const ImportOptions& options,
+                                             AssetDescriptor& outDescriptor,
+                                             juce::String& errorMessage)
+{
+    if (options.logicalPath.isEmpty())
+    {
+        errorMessage = "saveGeneratedAsset requires an explicit logicalPath.";
+        return false;
+    }
+
+    AssetDescriptor descriptor;
+    for (const auto& existing : session.getManifest().assetCatalog.query({}))
+    {
+        if (existing.logicalPath == options.logicalPath)
+        {
+            descriptor = existing;
+            break;
+        }
+    }
+
+    if (descriptor.id.isEmpty())
+    {
+        descriptor.id = "asset:" + juce::Uuid().toString();
+        descriptor.version = "1";
+    }
+    descriptor.versionId = descriptor.id + "@" + descriptor.version;
+
+    descriptor.kind = options.kind;
+    descriptor.displayName = options.displayName.isNotEmpty() ? options.displayName : descriptor.displayName;
+    descriptor.logicalPath = options.logicalPath;
+    descriptor.category = options.category;
+    descriptor.description = options.description;
+    descriptor.mediaType = options.mediaType;
+    descriptor.sourceApp = options.sourceApp;
+    descriptor.sourceTool = options.sourceTool;
+    descriptor.tags = options.tags;
+    descriptor.originalAssetId = options.originalAssetId;
+    descriptor.derivedFromVersionId = options.derivedFromVersionId;
+    descriptor.fileSizeBytes = static_cast<int64_t>(data.getSize());
+    descriptor.modifiedAt = juce::Time::getCurrentTime();
+    if (descriptor.createdAt == juce::Time())
+        descriptor.createdAt = descriptor.modifiedAt;
+    descriptor.revision = juce::jmax(1, descriptor.revision + 1);
+
+    if (! session.writeEntry(options.logicalPath, data, descriptor.modifiedAt, options.compressionLevel))
+    {
+        errorMessage = "Could not write the generated asset into the project.";
+        return false;
+    }
+
+    session.upsertAssetDescriptor(descriptor);
+    outDescriptor = descriptor;
+    return true;
+}
+
 bool ProjectAssetService::createNewVersion(ProjectSession& session,
                                            const AssetDescriptor& existingAsset,
                                            const juce::File& sourceFile,
