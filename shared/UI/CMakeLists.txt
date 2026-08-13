@@ -8,6 +8,7 @@ add_library(creation_suite_ui STATIC
     src/SuiteSettingsPanel.cpp
     src/SuiteAiChatPanel.cpp
     src/SuiteAssetManagerPanel.cpp
+    src/NamedAssetSaveLoadMenu.cpp
 )
 
 juce_add_binary_data(creation_suite_ui_assets
