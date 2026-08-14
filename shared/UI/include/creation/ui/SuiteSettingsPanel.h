@@ -36,11 +36,19 @@ private:
 #endif
     };
 
-    struct AppSelectionRow
+    // Renders the full list of suite AI accounts at once (not a single-selection dropdown you have
+    // to page through) - each row shows the account's own name/provider/cached-model-count so the
+    // whole set is visible at a glance. Selecting a row is what Edit/Remove/Test act on.
+    class AccountListBoxModel final : public juce::ListBoxModel
     {
-        juce::Label label;
-        juce::ComboBox accountCombo;
-        juce::TextEditor modelOverrideEditor;
+    public:
+        explicit AccountListBoxModel(SuiteSettingsPanel& ownerRef) : owner(ownerRef) {}
+        int getNumRows() override;
+        void paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected) override;
+        void selectedRowsChanged(int lastRowSelected) override;
+
+    private:
+        SuiteSettingsPanel& owner;
     };
 
     struct PathRow
@@ -109,15 +117,13 @@ private:
     void layoutLogTab(juce::Rectangle<int>& area);
     void appendLogLine(const juce::String& text);
     void refreshAiAccountUi();
-    void refreshAccountSelectors();
     void refreshSelectedAccountSummary();
-    juce::String accountIdForCombo(const juce::ComboBox& comboBox) const;
 
     juce::Label titleLabel;
     juce::Label subTitleLabel;
     juce::Image suiteLogo;
     juce::TextButton storageTabButton { "Storage" };
-    juce::TextButton aiTabButton { "AI & Routing" };
+    juce::TextButton aiTabButton { "Suite AI Accounts" };
     juce::TextButton suiteLogTabButton { "Suite Log" };
 #if JUCE_DEBUG
     juce::TextButton vfsBrowserTabButton { "VFS Browser" };
@@ -133,20 +139,15 @@ private:
     PathRow suiteVfsRow;
     juce::Label aiIntroLabel;
     juce::Label aiSectionLabel;
-    juce::ComboBox accountSelectorCombo;
+    AccountListBoxModel accountListBoxModel { *this };
+    juce::ListBox accountListBox { "Suite AI Accounts", &accountListBoxModel };
     juce::TextButton addAccountButton { "+ Account" };
     juce::TextButton editAccountButton { "Edit" };
     juce::TextButton removeAccountButton { "Remove" };
     juce::TextButton testAccountButton { "Test Account" };
-    // Read-only summary of the selected account (provider/model/cached-model-count) - account
-    // details are only ever edited through the Add/Edit Account dialog now, not inline here.
+    // Read-only summary of the selected account (provider/endpoint/model/cached-model-count) -
+    // account details are only ever edited through the Add/Edit Account dialog now, not inline here.
     juce::Label accountSummaryLabel;
-    juce::Label defaultAccountLabel;
-    juce::ComboBox defaultAccountCombo;
-    AppSelectionRow stationSelectionRow;
-    AppSelectionRow engineSelectionRow;
-    AppSelectionRow movieSelectionRow;
-    AppSelectionRow liveSelectionRow;
     juce::Label logSectionLabel;
     juce::Label logIntroLabel;
     juce::TextEditor suiteLogEditor;

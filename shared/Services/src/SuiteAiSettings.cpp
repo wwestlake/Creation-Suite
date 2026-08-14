@@ -1,5 +1,6 @@
 #include <creation/services/SuiteAiSettings.h>
 #include <creation/services/SuiteAiProviderRuntime.h>
+#include <creation/services/SuiteAiModelCatalogClient.h>
 #include <creation/services/SuiteVfsJsonStore.h>
 
 namespace
@@ -147,6 +148,36 @@ SuiteAiSettings SuiteAiSettingsStore::load(juce::String& errorMessage) const
 bool SuiteAiSettingsStore::save(const SuiteAiSettings& settings, juce::String& errorMessage) const
 {
     return SuiteVfsJsonStore::saveJson("ai-settings.json", toVar(settings), errorMessage);
+}
+
+SuiteAiSettings SuiteAiSettingsStore::refreshAllAccountModelCaches(juce::String& errorMessage) const
+{
+    auto settings = load(errorMessage);
+
+    SuiteAiModelCatalogClient client;
+    auto anyUpdated = false;
+    for (auto& account : settings.accounts)
+    {
+        const auto profile = SuiteAiProviderRuntime::resolveProfile(account.providerId);
+        if (SuiteAiProviderRuntime::requiresApiKey(profile, account.apiKey))
+            continue;
+
+        juce::StringArray modelIds;
+        juce::String fetchError;
+        if (client.fetchModelIds(account.baseUrl, account.providerId, account.apiKey, modelIds, fetchError))
+        {
+            account.cachedModelIds = modelIds;
+            account.modelsFetchedAt = juce::Time::getCurrentTime().toISO8601(true);
+            anyUpdated = true;
+        }
+        // On failure, leave the existing cache alone - this is a background startup refresh, not
+        // a user action, so a transient network hiccup shouldn't wipe a working cache.
+    }
+
+    if (anyUpdated)
+        save(settings, errorMessage);
+
+    return settings;
 }
 
 const SuiteAiAccountSettings* SuiteAiSettingsResolver::findAccountById(const SuiteAiSettings& settings,

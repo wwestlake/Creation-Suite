@@ -62,22 +62,16 @@ SuiteAiAccountDialog::SuiteAiAccountDialog(juce::Array<creation::services::Suite
     keyEditor.setPasswordCharacter(0x2022);
     addAndMakeVisible(keyEditor);
 
-    refreshButton.onClick = [this] { refreshModels(); };
-    addAndMakeVisible(refreshButton);
+    connectButton.onClick = [this] { connectAndCacheModels(); };
+    addAndMakeVisible(connectButton);
 
     modelStatusLabel.setColour(juce::Label::textColourId, juce::Colour(0xff97a9c1));
     modelStatusLabel.setText(account.cachedModelIds.isEmpty()
-                                  ? "Press Refresh to fetch this account's available models."
-                                  : juce::String(account.cachedModelIds.size()) + " model(s) cached.",
+                                  ? "Press Connect to fetch and cache this account's available models."
+                                  : juce::String(account.cachedModelIds.size())
+                                        + " model(s) cached. Pick one in the tool that uses this account.",
                              juce::dontSendNotification);
     addAndMakeVisible(modelStatusLabel);
-
-    styleLabel(modelLabel);
-    addAndMakeVisible(modelLabel);
-    styleCombo(modelCombo);
-    modelCombo.setTextWhenNoChoicesAvailable("No models fetched yet");
-    updateModelCombo();
-    addAndMakeVisible(modelCombo);
 
     saveButton.onClick = [this] { save(); };
     addAndMakeVisible(saveButton);
@@ -85,25 +79,10 @@ SuiteAiAccountDialog::SuiteAiAccountDialog(juce::Array<creation::services::Suite
     cancelButton.onClick = [this] { if (onCancelled) onCancelled(); };
     addAndMakeVisible(cancelButton);
 
-    setSize(420, 320);
+    setSize(420, 270);
 }
 
-void SuiteAiAccountDialog::updateModelCombo()
-{
-    auto previousText = modelCombo.getText();
-    modelCombo.clear(juce::dontSendNotification);
-    for (int index = 0; index < account.cachedModelIds.size(); ++index)
-        modelCombo.addItem(account.cachedModelIds[index], index + 1);
-
-    if (account.modelName.isNotEmpty())
-        modelCombo.setText(account.modelName, juce::dontSendNotification);
-    else if (previousText.isNotEmpty())
-        modelCombo.setText(previousText, juce::dontSendNotification);
-    else if (! account.cachedModelIds.isEmpty())
-        modelCombo.setSelectedItemIndex(0, juce::dontSendNotification);
-}
-
-void SuiteAiAccountDialog::refreshModels()
+void SuiteAiAccountDialog::connectAndCacheModels()
 {
     const auto providerIndex = providerCombo.getSelectedItemIndex();
     if (! juce::isPositiveAndBelow(providerIndex, providers.size()))
@@ -112,22 +91,23 @@ void SuiteAiAccountDialog::refreshModels()
     const auto& provider = providers.getReference(providerIndex);
     const auto apiKey = keyEditor.getText().trim();
 
-    modelStatusLabel.setText("Fetching models...", juce::dontSendNotification);
+    modelStatusLabel.setText("Connecting...", juce::dontSendNotification);
 
     creation::services::SuiteAiModelCatalogClient client;
     juce::StringArray modelIds;
     juce::String errorMessage;
     if (! client.fetchModelIds(provider.defaultBaseUrl, provider.id, apiKey, modelIds, errorMessage))
     {
-        modelStatusLabel.setText(errorMessage.isNotEmpty() ? errorMessage : "Could not fetch models.",
+        modelStatusLabel.setText(errorMessage.isNotEmpty() ? errorMessage : "Could not connect.",
                                  juce::dontSendNotification);
         return;
     }
 
     account.cachedModelIds = modelIds;
     account.modelsFetchedAt = juce::Time::getCurrentTime().toISO8601(true);
-    modelStatusLabel.setText(juce::String(modelIds.size()) + " model(s) found.", juce::dontSendNotification);
-    updateModelCombo();
+    modelStatusLabel.setText(juce::String(modelIds.size())
+                                  + " model(s) cached. Pick one in the tool that uses this account.",
+                             juce::dontSendNotification);
 }
 
 void SuiteAiAccountDialog::save()
@@ -146,7 +126,6 @@ void SuiteAiAccountDialog::save()
 
     account.accountLabel = nameEditor.getText().trim();
     account.apiKey = keyEditor.getText().trim();
-    account.modelName = modelCombo.getText().trim();
     account.enabled = true;
 
     if (onSaved)
@@ -179,14 +158,10 @@ void SuiteAiAccountDialog::resized()
     keyEditor.setBounds(row(28));
     area.removeFromTop(8);
 
-    auto refreshRow = row(28);
-    refreshButton.setBounds(refreshRow.removeFromLeft(90));
-    refreshRow.removeFromLeft(8);
-    modelStatusLabel.setBounds(refreshRow);
-    area.removeFromTop(8);
-
-    modelLabel.setBounds(row(18));
-    modelCombo.setBounds(row(28));
+    auto connectRow = row(28);
+    connectButton.setBounds(connectRow.removeFromLeft(90));
+    connectRow.removeFromLeft(8);
+    modelStatusLabel.setBounds(connectRow);
     area.removeFromTop(16);
 
     auto buttonsRow = row(30);

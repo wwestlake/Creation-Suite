@@ -64,6 +64,13 @@ class SuiteAiSettingsStore final
 public:
     SuiteAiSettings load(juce::String& errorMessage) const;
     bool save(const SuiteAiSettings& settings, juce::String& errorMessage) const;
+
+    // Reconnects to every account that has what it needs (a key, or a keyless local provider)
+    // and re-caches its model list, then persists the result. Meant to run once per app startup,
+    // not polled continuously - the Add/Edit Account dialog's own Connect button remains the
+    // manual per-account trigger. An account that fails to connect keeps its existing cache
+    // rather than being cleared out by a transient network hiccup.
+    SuiteAiSettings refreshAllAccountModelCaches(juce::String& errorMessage) const;
 };
 
 class SuiteAiProviderCatalog

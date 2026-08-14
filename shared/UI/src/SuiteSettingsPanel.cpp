@@ -17,11 +17,6 @@ juce::Colour textColour() { return juce::Colour(0xffdce6f5); }
 juce::Colour hintColour() { return juce::Colour(0xff97a9c1); }
 juce::Colour accentColour() { return juce::Colour(0xff59dfff); }
 
-int comboItemIdForIndex(int index)
-{
-    return index + 1;
-}
-
 void configureEditor(juce::TextEditor& editor)
 {
     editor.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff1a2230));
@@ -47,12 +42,6 @@ void configureHintLabel(juce::Label& label, const juce::String& text)
     label.setColour(juce::Label::textColourId, hintColour());
 }
 
-void configureCombo(juce::ComboBox& comboBox)
-{
-    comboBox.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff1a2230));
-    comboBox.setColour(juce::ComboBox::outlineColourId, panelOutline());
-    comboBox.setColour(juce::ComboBox::textColourId, juce::Colours::white);
-}
 }
 
 SuiteSettingsPanel::SuiteSettingsPanel()
@@ -65,13 +54,13 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(titleLabel);
 
-    subTitleLabel.setText("Suite-wide storage, routing, accounts, and platform controls live here.",
+    subTitleLabel.setText("Suite-wide storage, AI accounts, and platform controls live here.",
                           juce::dontSendNotification);
     subTitleLabel.setColour(juce::Label::textColourId, hintColour());
     addAndMakeVisible(subTitleLabel);
 
     configureTabButton(storageTabButton, "Storage", Tab::storage);
-    configureTabButton(aiTabButton, "AI & Routing", Tab::ai);
+    configureTabButton(aiTabButton, "Suite AI Accounts", Tab::ai);
     configureTabButton(suiteLogTabButton, "Suite Log", Tab::log);
 #if JUCE_DEBUG
     configureTabButton(vfsBrowserTabButton, "VFS Browser", Tab::vfsBrowser);
@@ -108,19 +97,17 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     configureRow(suiteVfsRow, "suite_vfs_root", "Suite VFS Root");
 
     configureHintLabel(aiIntroLabel,
-                       "Shared accounts and per-app routing live here so every app in the suite can resolve AI behavior from one place.");
+                       "Named accounts live here so every app in the suite can pick one to use. Each app chooses its own account and model itself - nothing is assigned to an app from this screen.");
     scrollContent.addAndMakeVisible(aiIntroLabel);
 
-    configureSectionTitle(aiSectionLabel, "Suite AI Accounts And Routing");
+    configureSectionTitle(aiSectionLabel, "Suite AI Accounts");
     scrollContent.addAndMakeVisible(aiSectionLabel);
 
-    configureCombo(accountSelectorCombo);
-    accountSelectorCombo.onChange = [this]
-    {
-        selectedAccountIndex = accountSelectorCombo.getSelectedItemIndex();
-        refreshSelectedAccountSummary();
-    };
-    scrollContent.addAndMakeVisible(accountSelectorCombo);
+    accountListBox.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff1a2230));
+    accountListBox.setColour(juce::ListBox::outlineColourId, panelOutline());
+    accountListBox.setOutlineThickness(1);
+    accountListBox.setRowHeight(42);
+    scrollContent.addAndMakeVisible(accountListBox);
 
     addAccountButton.onClick = [this]
     {
@@ -208,38 +195,6 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     accountSummaryLabel.setColour(juce::Label::textColourId, hintColour());
     scrollContent.addAndMakeVisible(accountSummaryLabel);
 
-    defaultAccountLabel.setText("Suite Default Account", juce::dontSendNotification);
-    configureLabel(defaultAccountLabel);
-    scrollContent.addAndMakeVisible(defaultAccountLabel);
-    configureCombo(defaultAccountCombo);
-    scrollContent.addAndMakeVisible(defaultAccountCombo);
-
-    auto configureSelectionRow = [](AppSelectionRow& row, const juce::String& labelText)
-    {
-        row.label.setText(labelText, juce::dontSendNotification);
-        configureLabel(row.label);
-        configureCombo(row.accountCombo);
-        configureEditor(row.modelOverrideEditor);
-    };
-
-    configureSelectionRow(stationSelectionRow, "Creation Station");
-    configureSelectionRow(engineSelectionRow, "Creation Engine");
-    configureSelectionRow(movieSelectionRow, "Creation Movie");
-    configureSelectionRow(liveSelectionRow, "Creation Live");
-
-    scrollContent.addAndMakeVisible(stationSelectionRow.label);
-    scrollContent.addAndMakeVisible(stationSelectionRow.accountCombo);
-    scrollContent.addAndMakeVisible(stationSelectionRow.modelOverrideEditor);
-    scrollContent.addAndMakeVisible(engineSelectionRow.label);
-    scrollContent.addAndMakeVisible(engineSelectionRow.accountCombo);
-    scrollContent.addAndMakeVisible(engineSelectionRow.modelOverrideEditor);
-    scrollContent.addAndMakeVisible(movieSelectionRow.label);
-    scrollContent.addAndMakeVisible(movieSelectionRow.accountCombo);
-    scrollContent.addAndMakeVisible(movieSelectionRow.modelOverrideEditor);
-    scrollContent.addAndMakeVisible(liveSelectionRow.label);
-    scrollContent.addAndMakeVisible(liveSelectionRow.accountCombo);
-    scrollContent.addAndMakeVisible(liveSelectionRow.modelOverrideEditor);
-
     configureSectionTitle(logSectionLabel, "Suite Log");
     scrollContent.addAndMakeVisible(logSectionLabel);
 
@@ -277,7 +232,7 @@ SuiteSettingsPanel::SuiteSettingsPanel()
 
     setAiSettings({});
     selectTab(Tab::storage);
-    setStatusText("Suite storage, AI accounts, and app routing are controlled here for every Creation app.");
+    setStatusText("Suite storage and AI accounts are controlled here. Each app picks its own account and model itself.");
 }
 
 SuiteSettingsPanel::~SuiteSettingsPanel()
@@ -330,37 +285,10 @@ void SuiteSettingsPanel::setAiSettings(const creation::services::SuiteAiSettings
 
 creation::services::SuiteAiSettings SuiteSettingsPanel::getAiSettings() const
 {
-    auto settings = aiSettings;
-
-    auto updateSelection = [&](const juce::ComboBox& comboBox,
-                               const juce::TextEditor& editor,
-                               creation::assets::SuiteAppDomain appDomain)
-    {
-        auto* existing = const_cast<creation::services::SuiteAiSettings::AppSelection*>(
-            creation::services::SuiteAiSettingsResolver::findAppSelection(settings, appDomain));
-        if (existing != nullptr)
-        {
-            existing->accountId = accountIdForCombo(comboBox);
-            existing->modelNameOverride = editor.getText().trim();
-            existing->enabled = existing->accountId.isNotEmpty();
-            return;
-        }
-
-        creation::services::SuiteAiSettings::AppSelection selection;
-        selection.appDomain = appDomain;
-        selection.accountId = accountIdForCombo(comboBox);
-        selection.modelNameOverride = editor.getText().trim();
-        selection.enabled = selection.accountId.isNotEmpty();
-        settings.appSelections.add(selection);
-    };
-
-    settings.defaultAccountId = accountIdForCombo(defaultAccountCombo);
-    updateSelection(stationSelectionRow.accountCombo, stationSelectionRow.modelOverrideEditor, creation::assets::SuiteAppDomain::station);
-    updateSelection(engineSelectionRow.accountCombo, engineSelectionRow.modelOverrideEditor, creation::assets::SuiteAppDomain::engine);
-    updateSelection(movieSelectionRow.accountCombo, movieSelectionRow.modelOverrideEditor, creation::assets::SuiteAppDomain::movie);
-    updateSelection(liveSelectionRow.accountCombo, liveSelectionRow.modelOverrideEditor, creation::assets::SuiteAppDomain::live);
-
-    return settings;
+    // This panel only ever manages the account list itself - which account/model each app uses
+    // is chosen by that app, not assigned here, so appSelections/defaultAccountId simply pass
+    // through untouched (whatever the apps themselves have already written into the shared store).
+    return aiSettings;
 }
 
 void SuiteSettingsPanel::setStatusText(const juce::String& text)
@@ -412,7 +340,7 @@ void SuiteSettingsPanel::resized()
     auto tabButtonWidth = 136;
     storageTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth));
     tabArea.removeFromLeft(8);
-    aiTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth + 20));
+    aiTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth + 44));
     tabArea.removeFromLeft(8);
     suiteLogTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth));
 #if JUCE_DEBUG
@@ -534,26 +462,12 @@ void SuiteSettingsPanel::updateScrollContentLayout()
     {
         aiIntroLabel.setVisible(visible);
         aiSectionLabel.setVisible(visible);
-        accountSelectorCombo.setVisible(visible);
+        accountListBox.setVisible(visible);
         addAccountButton.setVisible(visible);
         editAccountButton.setVisible(visible);
         removeAccountButton.setVisible(visible);
         testAccountButton.setVisible(visible);
         accountSummaryLabel.setVisible(visible);
-        defaultAccountLabel.setVisible(visible);
-        defaultAccountCombo.setVisible(visible);
-        stationSelectionRow.label.setVisible(visible);
-        stationSelectionRow.accountCombo.setVisible(visible);
-        stationSelectionRow.modelOverrideEditor.setVisible(visible);
-        engineSelectionRow.label.setVisible(visible);
-        engineSelectionRow.accountCombo.setVisible(visible);
-        engineSelectionRow.modelOverrideEditor.setVisible(visible);
-        movieSelectionRow.label.setVisible(visible);
-        movieSelectionRow.accountCombo.setVisible(visible);
-        movieSelectionRow.modelOverrideEditor.setVisible(visible);
-        liveSelectionRow.label.setVisible(visible);
-        liveSelectionRow.accountCombo.setVisible(visible);
-        liveSelectionRow.modelOverrideEditor.setVisible(visible);
     };
 
     auto setLogVisible = [&](bool visible)
@@ -599,8 +513,6 @@ void SuiteSettingsPanel::layoutAiTab(juce::Rectangle<int>& area)
     area.removeFromTop(12);
 
     auto accountHeaderRow = area.removeFromTop(34);
-    accountSelectorCombo.setBounds(accountHeaderRow.removeFromLeft(260));
-    accountHeaderRow.removeFromLeft(8);
     addAccountButton.setBounds(accountHeaderRow.removeFromLeft(96));
     accountHeaderRow.removeFromLeft(8);
     editAccountButton.setBounds(accountHeaderRow.removeFromLeft(70));
@@ -610,27 +522,11 @@ void SuiteSettingsPanel::layoutAiTab(juce::Rectangle<int>& area)
     testAccountButton.setBounds(accountHeaderRow.removeFromLeft(128));
     area.removeFromTop(10);
 
-    accountSummaryLabel.setBounds(area.removeFromTop(22));
-    area.removeFromTop(14);
-
-    defaultAccountLabel.setBounds(area.removeFromTop(20));
-    defaultAccountCombo.setBounds(area.removeFromTop(32));
+    accountListBox.setBounds(area.removeFromTop(6 * accountListBox.getRowHeight() + 4));
     area.removeFromTop(10);
 
-    auto layoutSelectionRow = [&](AppSelectionRow& row)
-    {
-        row.label.setBounds(area.removeFromTop(20));
-        auto rowArea = area.removeFromTop(32);
-        row.accountCombo.setBounds(rowArea.removeFromLeft(280));
-        rowArea.removeFromLeft(8);
-        row.modelOverrideEditor.setBounds(rowArea);
-        area.removeFromTop(12);
-    };
-
-    layoutSelectionRow(stationSelectionRow);
-    layoutSelectionRow(engineSelectionRow);
-    layoutSelectionRow(movieSelectionRow);
-    layoutSelectionRow(liveSelectionRow);
+    accountSummaryLabel.setBounds(area.removeFromTop(22));
+    area.removeFromTop(14);
 }
 
 void SuiteSettingsPanel::layoutLogTab(juce::Rectangle<int>& area)
@@ -663,75 +559,59 @@ void SuiteSettingsPanel::appendLogLine(const juce::String& text)
 
 void SuiteSettingsPanel::refreshAiAccountUi()
 {
-    accountSelectorCombo.clear(juce::dontSendNotification);
-    for (int index = 0; index < aiSettings.accounts.size(); ++index)
-    {
-        const auto& account = aiSettings.accounts.getReference(index);
-        auto label = account.accountLabel.trim();
-        if (label.isEmpty())
-            label = "Suite Account " + juce::String(index + 1);
-        accountSelectorCombo.addItem(label, comboItemIdForIndex(index));
-    }
-
     if (aiSettings.accounts.isEmpty())
         selectedAccountIndex = -1;
     else if (! juce::isPositiveAndBelow(selectedAccountIndex, aiSettings.accounts.size()))
         selectedAccountIndex = 0;
 
-    accountSelectorCombo.setSelectedItemIndex(selectedAccountIndex, juce::dontSendNotification);
-    removeAccountButton.setEnabled(aiSettings.accounts.size() > 1);
+    accountListBox.updateContent();
+    if (selectedAccountIndex >= 0)
+        accountListBox.selectRow(selectedAccountIndex);
+    else
+        accountListBox.deselectAllRows();
+
+    removeAccountButton.setEnabled(selectedAccountIndex >= 0);
     editAccountButton.setEnabled(selectedAccountIndex >= 0);
-    refreshAccountSelectors();
     refreshSelectedAccountSummary();
 }
 
-void SuiteSettingsPanel::refreshAccountSelectors()
+int SuiteSettingsPanel::AccountListBoxModel::getNumRows()
 {
-    auto fillAccountCombo = [&](juce::ComboBox& comboBox, const juce::String& selectedAccountId)
-    {
-        comboBox.clear(juce::dontSendNotification);
-        comboBox.addItem("(Use Suite Default)", 1);
-        for (int index = 0; index < aiSettings.accounts.size(); ++index)
-        {
-            const auto& account = aiSettings.accounts.getReference(index);
-            auto label = account.accountLabel.trim();
-            if (label.isEmpty())
-                label = "Suite Account " + juce::String(index + 1);
-            comboBox.addItem(label, index + 2);
-            if (account.accountId == selectedAccountId)
-                comboBox.setSelectedId(index + 2, juce::dontSendNotification);
-        }
+    return owner.aiSettings.accounts.size();
+}
 
-        if (selectedAccountId.isEmpty())
-            comboBox.setSelectedId(1, juce::dontSendNotification);
-    };
+void SuiteSettingsPanel::AccountListBoxModel::paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected)
+{
+    if (! juce::isPositiveAndBelow(rowNumber, owner.aiSettings.accounts.size()))
+        return;
 
-    defaultAccountCombo.clear(juce::dontSendNotification);
-    for (int index = 0; index < aiSettings.accounts.size(); ++index)
-    {
-        const auto& account = aiSettings.accounts.getReference(index);
-        auto label = account.accountLabel.trim();
-        if (label.isEmpty())
-            label = "Suite Account " + juce::String(index + 1);
-        defaultAccountCombo.addItem(label, comboItemIdForIndex(index));
-        if (account.accountId == aiSettings.defaultAccountId)
-            defaultAccountCombo.setSelectedId(comboItemIdForIndex(index), juce::dontSendNotification);
-    }
-    if (defaultAccountCombo.getSelectedId() == 0 && aiSettings.accounts.size() > 0)
-        defaultAccountCombo.setSelectedId(1, juce::dontSendNotification);
+    if (rowIsSelected)
+        g.fillAll(accentColour().withAlpha(0.16f));
 
-    auto applySelection = [&](AppSelectionRow& row, creation::assets::SuiteAppDomain domain)
-    {
-        const auto* selection = creation::services::SuiteAiSettingsResolver::findAppSelection(aiSettings, domain);
-        fillAccountCombo(row.accountCombo, selection != nullptr ? selection->accountId : juce::String());
-        row.modelOverrideEditor.setText(selection != nullptr ? selection->modelNameOverride : juce::String(),
-                                        juce::dontSendNotification);
-    };
+    const auto& account = owner.aiSettings.accounts.getReference(rowNumber);
+    auto label = account.accountLabel.trim();
+    if (label.isEmpty())
+        label = "Suite Account " + juce::String(rowNumber + 1);
+    const auto providerDisplayName = creation::services::SuiteAiProviderRuntime::resolveProfile(account.providerId).displayName;
 
-    applySelection(stationSelectionRow, creation::assets::SuiteAppDomain::station);
-    applySelection(engineSelectionRow, creation::assets::SuiteAppDomain::engine);
-    applySelection(movieSelectionRow, creation::assets::SuiteAppDomain::movie);
-    applySelection(liveSelectionRow, creation::assets::SuiteAppDomain::live);
+    auto area = juce::Rectangle<int>(0, 0, width, height).reduced(10, 2);
+
+    g.setColour(juce::Colours::white);
+    g.setFont(juce::Font(15.0f).boldened());
+    g.drawText(label, area.removeFromTop(height / 2), juce::Justification::centredLeft, true);
+
+    g.setColour(hintColour());
+    g.setFont(juce::Font(12.0f));
+    const auto detail = providerDisplayName + "  \xe2\x80\xa2  " + juce::String(account.cachedModelIds.size()) + " model(s) cached";
+    g.drawText(detail, area, juce::Justification::centredLeft, true);
+}
+
+void SuiteSettingsPanel::AccountListBoxModel::selectedRowsChanged(int lastRowSelected)
+{
+    owner.selectedAccountIndex = lastRowSelected;
+    owner.editAccountButton.setEnabled(lastRowSelected >= 0);
+    owner.removeAccountButton.setEnabled(lastRowSelected >= 0);
+    owner.refreshSelectedAccountSummary();
 }
 
 void SuiteSettingsPanel::refreshSelectedAccountSummary()
@@ -747,22 +627,9 @@ void SuiteSettingsPanel::refreshSelectedAccountSummary()
 
     juce::String summary = providerDisplayName;
     summary << "  \xe2\x80\xa2  " << account.baseUrl;
-    summary << "  \xe2\x80\xa2  " << (account.modelName.isNotEmpty() ? account.modelName : juce::String("(no model selected)"));
     summary << "  \xe2\x80\xa2  " << account.cachedModelIds.size() << " model(s) cached";
+    summary << "  \xe2\x80\xa2  each tool picks its own model from this account's cached list";
     accountSummaryLabel.setText(summary, juce::dontSendNotification);
-}
-
-juce::String SuiteSettingsPanel::accountIdForCombo(const juce::ComboBox& comboBox) const
-{
-    const auto selectedId = comboBox.getSelectedId();
-    if (selectedId <= 1)
-        return {};
-
-    const auto accountIndex = selectedId - 2;
-    if (! juce::isPositiveAndBelow(accountIndex, aiSettings.accounts.size()))
-        return {};
-
-    return aiSettings.accounts[accountIndex].accountId;
 }
 
 #if JUCE_DEBUG

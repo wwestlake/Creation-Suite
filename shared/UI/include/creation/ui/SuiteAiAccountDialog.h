@@ -7,9 +7,11 @@
 namespace creation::ui
 {
 // The "Add Account" / "Edit Account" popup for the Suite AI Accounts tab. Pick a provider, enter
-// a key, press Refresh to call that provider's real model-list API and cache the result on the
-// account (so every app reads the same list instead of re-querying) - the account is only
-// committed to the caller's settings when Save is pressed.
+// a key, press Connect to call that provider's real model-list API and cache the result on the
+// account (so every app/tool reads the same list instead of re-querying) - the account is only
+// committed to the caller's settings when Save is pressed. No model is picked here - which model
+// to use is chosen at the tool/app level from the account's cached list, not baked into the
+// account itself.
 class SuiteAiAccountDialog final : public juce::Component
 {
 public:
@@ -24,8 +26,7 @@ public:
     void paint(juce::Graphics& g) override;
 
 private:
-    void refreshModels();
-    void updateModelCombo();
+    void connectAndCacheModels();
     void save();
 
     juce::Label providerLabel { {}, "Provider" };
@@ -34,10 +35,8 @@ private:
     juce::TextEditor nameEditor;
     juce::Label keyLabel { {}, "API Key / Token" };
     juce::TextEditor keyEditor;
-    juce::TextButton refreshButton { "Refresh" };
+    juce::TextButton connectButton { "Connect" };
     juce::Label modelStatusLabel;
-    juce::Label modelLabel { {}, "Model" };
-    juce::ComboBox modelCombo;
     juce::TextButton saveButton { "Save" };
     juce::TextButton cancelButton { "Cancel" };
 
