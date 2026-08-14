@@ -317,6 +317,18 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     setStatusText("Suite storage, AI accounts, and app routing are controlled here for every Creation app.");
 }
 
+SuiteSettingsPanel::~SuiteSettingsPanel()
+{
+#if JUCE_DEBUG
+    // vfsTreeView is declared before vfsTreeRoot, so implicit member destruction would tear
+    // down vfsTreeRoot (the actual TreeViewItem tree) first, leaving vfsTreeView holding a
+    // dangling root-item pointer for the moment before its own destructor runs - a real crash
+    // on close, not hypothetical (reported live 2026-08-13). Detach explicitly, in the right
+    // order, before either member is destroyed.
+    vfsTreeView.setRootItem(nullptr);
+#endif
+}
+
 void SuiteSettingsPanel::setSettings(const creation::suite::SuiteSettings& settings)
 {
     suiteVfsRow.editor.setText(settings.suiteVfsRoot, juce::dontSendNotification);

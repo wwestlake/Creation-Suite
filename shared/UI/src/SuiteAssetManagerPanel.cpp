@@ -500,7 +500,7 @@ private:
 
 SuiteAssetManagerPanel::SuiteAssetManagerPanel(SuiteAssetManagerCapability capability)
 {
-    tabs.addTab("Projects", juce::Colour(0xff10161f), new SuiteAssetExplorerTab(std::move(capability)), true);
+    tabs.addTab("Project Assets", juce::Colour(0xff10161f), new SuiteAssetExplorerTab(std::move(capability)), true);
     tabs.addTab("Asset Store",
                 juce::Colour(0xff10161f),
                 new SuiteAssetManagerPlaceholderTab("Coming soon -- LagDaemon.com asset store"),

@@ -8,6 +8,7 @@ class SuiteSettingsPanel final : public juce::Component
 {
 public:
     SuiteSettingsPanel();
+    ~SuiteSettingsPanel() override;
 
     std::function<void(const juce::String& fieldId)> onBrowseRequested;
     std::function<void(const creation::suite::SuiteSettings& settings)> onApplyRequested;
