@@ -21,8 +21,44 @@ listed at the bottom.
   apps, plus `onProjectOpenRequested` wiring so their Open Project button actually
   works.
 
-`apps/CreationEngine` and `apps/CreationLive` were **not** touched this stretch —
-still on their own `master`/`main` branches respectively, nothing to merge there.
+`apps/CreationEngine` and `apps/CreationLive` don't have open PRs — their work this
+stretch (Engine's real-folder VFS project storage migration; Live's suite-shell
+wiring: header, settings, Open/New Project) was already committed directly to
+their own default branches (`master`/`main`) by an earlier session, not to
+`claude/development`, so it's already merged as of this push - nothing pending
+review there.
+
+**Note for whoever pulls this repo next**: those two submodules' commits existed
+only in this local checkout until this session pushed them (see "Dangling
+submodule gitlinks" below) - if you'd tried `git pull --ff-only` before this push,
+you'd have hit `upload-pack: not our ref` for both. That's fixed now; if you see
+it again, the fix is: `cd apps/<app>; git push origin <its-default-branch>`.
+
+## Dangling submodule gitlinks (found and fixed this session)
+
+The superproject's tree can reference a submodule commit that only exists in
+*someone's local checkout* if that commit was never pushed - `git submodule
+update`/`git pull --ff-only` on any other clone then fails with
+`upload-pack: not our ref <sha>` for that submodule, since the remote genuinely
+doesn't have it. Found and fixed two instances this session (pre-existing, not
+introduced this stretch): `apps/CreationEngine`'s `master` and
+`apps/CreationLive`'s `main` were both sitting one commit (Engine) or two commits
+(Live) ahead of their own remotes, unpushed, and the superproject already
+referenced those local-only SHAs. Fixed by pushing both (clean fast-forwards,
+verified via `git merge-base --is-ancestor` before pushing - no force needed).
+
+Also found and removed a genuinely broken, unrelated gitlink:
+`third_party/asio-sdk` was a `160000` tree entry with **no corresponding
+`.gitmodules` entry, ever** (checked full history) and an empty directory on
+disk - a dangling reference from some earlier accidental `git add` of a nested
+repo, not a real submodule. Removed via `git rm --cached`.
+
+If you hit `upload-pack: not our ref` or `no submodule mapping found in
+.gitmodules` again: `git ls-tree HEAD <path>` to see what commit the superproject
+expects, then in that submodule check `git merge-base --is-ancestor <that-sha>
+origin/<branch>` - if it says NO, someone has unpushed local work the superproject
+already depends on; push it (after confirming it's a real fast-forward, not
+diverged history).
 
 ## What landed, by area
 
