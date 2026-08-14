@@ -47,16 +47,29 @@ introduced this stretch): `apps/CreationEngine`'s `master` and
 referenced those local-only SHAs. Fixed by pushing both (clean fast-forwards,
 verified via `git merge-base --is-ancestor` before pushing - no force needed).
 
-Also found and removed a genuinely broken, unrelated gitlink:
-`third_party/asio-sdk` was a `160000` tree entry with **no corresponding
-`.gitmodules` entry, ever** (checked full history) and an empty directory on
-disk - a dangling reference from some earlier accidental `git add` of a nested
-repo, not a real submodule. Removed via `git rm --cached`.
+**`third_party/asio-sdk` is not broken - leave it alone.** It's a `160000` gitlink
+with no `.gitmodules` entry and nothing checked out under it in a plain clone, by
+design: it's the commit pin for Codex's local Steinberg ASIO SDK checkout
+(`496a0765b8bb9c26f764f22f9a9712a937177db2`, committed 2026-08-07 in `2889ea2
+"chore: sync codex workspace updates"`). Steinberg's SDK has no public git URL to
+put in `.gitmodules` - it's only resolvable by whoever already has the real,
+licensed SDK on disk (Codex). An earlier pass in this session misread the "no
+`.gitmodules` mapping + nothing checked out here" pattern as an orphaned/broken
+reference and removed it (`git rm --cached`) - that was wrong and has been
+reverted (`248d9c4`). Don't remove this gitlink; it represents real,
+hours-of-setup work that just happens to be invisible to a normal clone.
 
-If you hit `upload-pack: not our ref` or `no submodule mapping found in
-.gitmodules` again: `git ls-tree HEAD <path>` to see what commit the superproject
-expects, then in that submodule check `git merge-base --is-ancestor <that-sha>
-origin/<branch>` - if it says NO, someone has unpushed local work the superproject
+If you hit `no submodule mapping found in .gitmodules for path
+'third_party/asio-sdk'`: that error is expected and harmless on a plain clone -
+`git submodule update --init --recursive` will skip it (no URL to fetch from) and
+correctly initialize the other six real submodules regardless. It's only a real
+problem if you're Codex and your own local `third_party/asio-sdk` checkout isn't
+at `496a0765b8bb9c26f764f22f9a9712a937177db2`.
+
+If you hit `upload-pack: not our ref` again: `git ls-tree HEAD <path>` to see what
+commit the superproject expects, then in that submodule check `git merge-base
+--is-ancestor <that-sha> origin/<branch>` - if it says NO, someone has unpushed
+local work the superproject
 already depends on; push it (after confirming it's a real fast-forward, not
 diverged history).
 
