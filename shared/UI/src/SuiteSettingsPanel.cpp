@@ -120,6 +120,7 @@ SuiteSettingsPanel::SuiteSettingsPanel()
                 aiSettings.accounts.add(account);
                 selectedAccountIndex = aiSettings.accounts.size() - 1;
                 refreshAiAccountUi();
+                persistAiSettings();
                 appendLogLine("Added suite AI account \"" + account.accountLabel + "\".");
             });
     };
@@ -139,6 +140,7 @@ SuiteSettingsPanel::SuiteSettingsPanel()
 
                 aiSettings.accounts.getReference(accountIndex) = account;
                 refreshAiAccountUi();
+                persistAiSettings();
                 appendLogLine("Updated suite AI account \"" + account.accountLabel + "\".");
             });
     };
@@ -164,6 +166,7 @@ SuiteSettingsPanel::SuiteSettingsPanel()
             selectedAccountIndex = -1;
 
         refreshAiAccountUi();
+        persistAiSettings();
         appendLogLine("Removed a suite AI account.");
     };
     scrollContent.addAndMakeVisible(removeAccountButton);
@@ -612,6 +615,12 @@ void SuiteSettingsPanel::AccountListBoxModel::selectedRowsChanged(int lastRowSel
     owner.editAccountButton.setEnabled(lastRowSelected >= 0);
     owner.removeAccountButton.setEnabled(lastRowSelected >= 0);
     owner.refreshSelectedAccountSummary();
+}
+
+void SuiteSettingsPanel::persistAiSettings()
+{
+    if (onApplyAiSettingsRequested)
+        onApplyAiSettingsRequested(aiSettings);
 }
 
 void SuiteSettingsPanel::refreshSelectedAccountSummary()

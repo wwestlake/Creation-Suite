@@ -118,6 +118,11 @@ private:
     void appendLogLine(const juce::String& text);
     void refreshAiAccountUi();
     void refreshSelectedAccountSummary();
+    // Add/Edit/Remove Account are each a complete, terminal action (like Connect already is) -
+    // persist immediately via onApplyAiSettingsRequested rather than waiting for a separate
+    // "Apply Suite Settings" click, so the account list on disk never silently diverges from
+    // what the list shows on screen.
+    void persistAiSettings();
 
     juce::Label titleLabel;
     juce::Label subTitleLabel;
