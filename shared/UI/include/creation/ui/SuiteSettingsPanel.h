@@ -110,8 +110,7 @@ private:
     void appendLogLine(const juce::String& text);
     void refreshAiAccountUi();
     void refreshAccountSelectors();
-    void pushCurrentEditorToSelectedAccount();
-    void pullSelectedAccountIntoEditor();
+    void refreshSelectedAccountSummary();
     juce::String accountIdForCombo(const juce::ComboBox& comboBox) const;
 
     juce::Label titleLabel;
@@ -136,18 +135,12 @@ private:
     juce::Label aiSectionLabel;
     juce::ComboBox accountSelectorCombo;
     juce::TextButton addAccountButton { "+ Account" };
+    juce::TextButton editAccountButton { "Edit" };
     juce::TextButton removeAccountButton { "Remove" };
     juce::TextButton testAccountButton { "Test Account" };
-    juce::Label providerLabel;
-    juce::ComboBox providerCombo;
-    juce::Label accountLabelLabel;
-    juce::TextEditor accountLabelEditor;
-    juce::Label endpointLabel;
-    juce::TextEditor endpointEditor;
-    juce::Label modelLabel;
-    juce::TextEditor modelEditor;
-    juce::Label apiKeyLabel;
-    juce::TextEditor apiKeyEditor;
+    // Read-only summary of the selected account (provider/model/cached-model-count) - account
+    // details are only ever edited through the Add/Edit Account dialog now, not inline here.
+    juce::Label accountSummaryLabel;
     juce::Label defaultAccountLabel;
     juce::ComboBox defaultAccountCombo;
     AppSelectionRow stationSelectionRow;

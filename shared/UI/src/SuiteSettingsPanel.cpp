@@ -1,5 +1,6 @@
 #include <creation/ui/SuiteSettingsPanel.h>
 #include <creation/ui/CreationSuiteLogos.h>
+#include <creation/ui/SuiteAiAccountDialog.h>
 #include <creation/services/SuiteAiProviderRuntime.h>
 #if JUCE_DEBUG
 #include <creation/services/SuiteVfsServiceClient.h>
@@ -116,32 +117,45 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     configureCombo(accountSelectorCombo);
     accountSelectorCombo.onChange = [this]
     {
-        pushCurrentEditorToSelectedAccount();
         selectedAccountIndex = accountSelectorCombo.getSelectedItemIndex();
-        pullSelectedAccountIntoEditor();
-        refreshAiAccountUi();
+        refreshSelectedAccountSummary();
     };
     scrollContent.addAndMakeVisible(accountSelectorCombo);
 
     addAccountButton.onClick = [this]
     {
-        pushCurrentEditorToSelectedAccount();
+        creation::ui::showAddOrEditAiAccountDialog(aiProviders, {},
+            [this](bool saved, const creation::services::SuiteAiAccountSettings& account)
+            {
+                if (! saved)
+                    return;
 
-        creation::services::SuiteAiAccountSettings account;
-        account.accountId = "suite-account-" + juce::Uuid().toString();
-        account.providerId = "openai";
-        account.accountLabel = "New Suite Account";
-        account.baseUrl = "https://api.openai.com/v1";
-        account.modelName = "gpt-4.1-mini";
-        account.enabled = true;
-        aiSettings.accounts.add(account);
-
-        selectedAccountIndex = aiSettings.accounts.size() - 1;
-        refreshAiAccountUi();
-        pullSelectedAccountIntoEditor();
-        appendLogLine("Added a new suite AI account slot.");
+                aiSettings.accounts.add(account);
+                selectedAccountIndex = aiSettings.accounts.size() - 1;
+                refreshAiAccountUi();
+                appendLogLine("Added suite AI account \"" + account.accountLabel + "\".");
+            });
     };
     scrollContent.addAndMakeVisible(addAccountButton);
+
+    editAccountButton.onClick = [this]
+    {
+        if (! juce::isPositiveAndBelow(selectedAccountIndex, aiSettings.accounts.size()))
+            return;
+
+        const auto accountIndex = selectedAccountIndex;
+        creation::ui::showAddOrEditAiAccountDialog(aiProviders, aiSettings.accounts.getReference(accountIndex),
+            [this, accountIndex](bool saved, const creation::services::SuiteAiAccountSettings& account)
+            {
+                if (! saved || ! juce::isPositiveAndBelow(accountIndex, aiSettings.accounts.size()))
+                    return;
+
+                aiSettings.accounts.getReference(accountIndex) = account;
+                refreshAiAccountUi();
+                appendLogLine("Updated suite AI account \"" + account.accountLabel + "\".");
+            });
+    };
+    scrollContent.addAndMakeVisible(editAccountButton);
 
     removeAccountButton.onClick = [this]
     {
@@ -163,14 +177,12 @@ SuiteSettingsPanel::SuiteSettingsPanel()
             selectedAccountIndex = -1;
 
         refreshAiAccountUi();
-        pullSelectedAccountIntoEditor();
-        appendLogLine("Removed a suite AI account slot.");
+        appendLogLine("Removed a suite AI account.");
     };
     scrollContent.addAndMakeVisible(removeAccountButton);
 
     testAccountButton.onClick = [this]
     {
-        pushCurrentEditorToSelectedAccount();
         if (! juce::isPositiveAndBelow(selectedAccountIndex, aiSettings.accounts.size()))
         {
             setStatusText("Select an AI account first.");
@@ -192,57 +204,9 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     };
     scrollContent.addAndMakeVisible(testAccountButton);
 
-    providerLabel.setText("Provider", juce::dontSendNotification);
-    configureLabel(providerLabel);
-    scrollContent.addAndMakeVisible(providerLabel);
-
-    configureCombo(providerCombo);
-    for (int index = 0; index < aiProviders.size(); ++index)
-        providerCombo.addItem(aiProviders[index].displayName, comboItemIdForIndex(index));
-    providerCombo.onChange = [this]
-    {
-        if (! juce::isPositiveAndBelow(selectedAccountIndex, aiSettings.accounts.size()))
-            return;
-
-        const auto providerIndex = providerCombo.getSelectedItemIndex();
-        if (! juce::isPositiveAndBelow(providerIndex, aiProviders.size()))
-            return;
-
-        auto& account = aiSettings.accounts.getReference(selectedAccountIndex);
-        const auto& provider = aiProviders.getReference(providerIndex);
-        account.providerId = provider.id;
-        if (account.baseUrl.trim().isEmpty())
-            account.baseUrl = provider.defaultBaseUrl;
-        if ((account.providerId == "ollama" || account.providerId == "lm-studio") && account.modelName.trim().isEmpty())
-            account.modelName = account.providerId == "ollama" ? "llama3.1" : "local-model";
-        pullSelectedAccountIntoEditor();
-    };
-    scrollContent.addAndMakeVisible(providerCombo);
-
-    accountLabelLabel.setText("Account Label", juce::dontSendNotification);
-    configureLabel(accountLabelLabel);
-    scrollContent.addAndMakeVisible(accountLabelLabel);
-    configureEditor(accountLabelEditor);
-    scrollContent.addAndMakeVisible(accountLabelEditor);
-
-    endpointLabel.setText("Endpoint", juce::dontSendNotification);
-    configureLabel(endpointLabel);
-    scrollContent.addAndMakeVisible(endpointLabel);
-    configureEditor(endpointEditor);
-    scrollContent.addAndMakeVisible(endpointEditor);
-
-    modelLabel.setText("Default Model", juce::dontSendNotification);
-    configureLabel(modelLabel);
-    scrollContent.addAndMakeVisible(modelLabel);
-    configureEditor(modelEditor);
-    scrollContent.addAndMakeVisible(modelEditor);
-
-    apiKeyLabel.setText("API Key / Token", juce::dontSendNotification);
-    configureLabel(apiKeyLabel);
-    scrollContent.addAndMakeVisible(apiKeyLabel);
-    configureEditor(apiKeyEditor);
-    apiKeyEditor.setPasswordCharacter(0x2022);
-    scrollContent.addAndMakeVisible(apiKeyEditor);
+    configureLabel(accountSummaryLabel);
+    accountSummaryLabel.setColour(juce::Label::textColourId, hintColour());
+    scrollContent.addAndMakeVisible(accountSummaryLabel);
 
     defaultAccountLabel.setText("Suite Default Account", juce::dontSendNotification);
     configureLabel(defaultAccountLabel);
@@ -294,7 +258,6 @@ SuiteSettingsPanel::SuiteSettingsPanel()
 
     applyButton.onClick = [this]
     {
-        pushCurrentEditorToSelectedAccount();
         if (onApplyRequested)
             onApplyRequested(getSettings());
         if (onApplyAiSettingsRequested)
@@ -363,7 +326,6 @@ void SuiteSettingsPanel::setAiSettings(const creation::services::SuiteAiSettings
 
     selectedAccountIndex = juce::jlimit(0, aiSettings.accounts.size() - 1, 0);
     refreshAiAccountUi();
-    pullSelectedAccountIntoEditor();
 }
 
 creation::services::SuiteAiSettings SuiteSettingsPanel::getAiSettings() const
@@ -574,18 +536,10 @@ void SuiteSettingsPanel::updateScrollContentLayout()
         aiSectionLabel.setVisible(visible);
         accountSelectorCombo.setVisible(visible);
         addAccountButton.setVisible(visible);
+        editAccountButton.setVisible(visible);
         removeAccountButton.setVisible(visible);
         testAccountButton.setVisible(visible);
-        providerLabel.setVisible(visible);
-        providerCombo.setVisible(visible);
-        accountLabelLabel.setVisible(visible);
-        accountLabelEditor.setVisible(visible);
-        endpointLabel.setVisible(visible);
-        endpointEditor.setVisible(visible);
-        modelLabel.setVisible(visible);
-        modelEditor.setVisible(visible);
-        apiKeyLabel.setVisible(visible);
-        apiKeyEditor.setVisible(visible);
+        accountSummaryLabel.setVisible(visible);
         defaultAccountLabel.setVisible(visible);
         defaultAccountCombo.setVisible(visible);
         stationSelectionRow.label.setVisible(visible);
@@ -645,33 +599,18 @@ void SuiteSettingsPanel::layoutAiTab(juce::Rectangle<int>& area)
     area.removeFromTop(12);
 
     auto accountHeaderRow = area.removeFromTop(34);
-    accountSelectorCombo.setBounds(accountHeaderRow.removeFromLeft(280));
+    accountSelectorCombo.setBounds(accountHeaderRow.removeFromLeft(260));
     accountHeaderRow.removeFromLeft(8);
-    addAccountButton.setBounds(accountHeaderRow.removeFromLeft(118));
+    addAccountButton.setBounds(accountHeaderRow.removeFromLeft(96));
     accountHeaderRow.removeFromLeft(8);
-    removeAccountButton.setBounds(accountHeaderRow.removeFromLeft(96));
+    editAccountButton.setBounds(accountHeaderRow.removeFromLeft(70));
+    accountHeaderRow.removeFromLeft(8);
+    removeAccountButton.setBounds(accountHeaderRow.removeFromLeft(90));
     accountHeaderRow.removeFromLeft(8);
     testAccountButton.setBounds(accountHeaderRow.removeFromLeft(128));
-    area.removeFromTop(12);
-
-    providerLabel.setBounds(area.removeFromTop(20));
-    providerCombo.setBounds(area.removeFromTop(32));
     area.removeFromTop(10);
 
-    accountLabelLabel.setBounds(area.removeFromTop(20));
-    accountLabelEditor.setBounds(area.removeFromTop(32));
-    area.removeFromTop(10);
-
-    endpointLabel.setBounds(area.removeFromTop(20));
-    endpointEditor.setBounds(area.removeFromTop(32));
-    area.removeFromTop(10);
-
-    modelLabel.setBounds(area.removeFromTop(20));
-    modelEditor.setBounds(area.removeFromTop(32));
-    area.removeFromTop(10);
-
-    apiKeyLabel.setBounds(area.removeFromTop(20));
-    apiKeyEditor.setBounds(area.removeFromTop(32));
+    accountSummaryLabel.setBounds(area.removeFromTop(22));
     area.removeFromTop(14);
 
     defaultAccountLabel.setBounds(area.removeFromTop(20));
@@ -741,7 +680,9 @@ void SuiteSettingsPanel::refreshAiAccountUi()
 
     accountSelectorCombo.setSelectedItemIndex(selectedAccountIndex, juce::dontSendNotification);
     removeAccountButton.setEnabled(aiSettings.accounts.size() > 1);
+    editAccountButton.setEnabled(selectedAccountIndex >= 0);
     refreshAccountSelectors();
+    refreshSelectedAccountSummary();
 }
 
 void SuiteSettingsPanel::refreshAccountSelectors()
@@ -793,45 +734,22 @@ void SuiteSettingsPanel::refreshAccountSelectors()
     applySelection(liveSelectionRow, creation::assets::SuiteAppDomain::live);
 }
 
-void SuiteSettingsPanel::pushCurrentEditorToSelectedAccount()
-{
-    if (! juce::isPositiveAndBelow(selectedAccountIndex, aiSettings.accounts.size()))
-        return;
-
-    auto& account = aiSettings.accounts.getReference(selectedAccountIndex);
-    account.accountLabel = accountLabelEditor.getText().trim();
-    account.baseUrl = endpointEditor.getText().trim();
-    account.modelName = modelEditor.getText().trim();
-    account.apiKey = apiKeyEditor.getText();
-
-    const auto providerIndex = providerCombo.getSelectedItemIndex();
-    if (juce::isPositiveAndBelow(providerIndex, aiProviders.size()))
-        account.providerId = aiProviders.getReference(providerIndex).id;
-}
-
-void SuiteSettingsPanel::pullSelectedAccountIntoEditor()
+void SuiteSettingsPanel::refreshSelectedAccountSummary()
 {
     if (! juce::isPositiveAndBelow(selectedAccountIndex, aiSettings.accounts.size()))
     {
-        providerCombo.setSelectedId(0, juce::dontSendNotification);
-        accountLabelEditor.clear();
-        endpointEditor.clear();
-        modelEditor.clear();
-        apiKeyEditor.clear();
+        accountSummaryLabel.setText("No AI accounts configured yet. Use + Account to add one.", juce::dontSendNotification);
         return;
     }
 
     const auto& account = aiSettings.accounts.getReference(selectedAccountIndex);
-    accountLabelEditor.setText(account.accountLabel, juce::dontSendNotification);
-    endpointEditor.setText(account.baseUrl, juce::dontSendNotification);
-    modelEditor.setText(account.modelName, juce::dontSendNotification);
-    apiKeyEditor.setText(account.apiKey, juce::dontSendNotification);
+    const auto providerDisplayName = creation::services::SuiteAiProviderRuntime::resolveProfile(account.providerId).displayName;
 
-    auto providerIndex = 0;
-    for (int index = 0; index < aiProviders.size(); ++index)
-        if (aiProviders[index].id == account.providerId)
-            providerIndex = index;
-    providerCombo.setSelectedId(comboItemIdForIndex(providerIndex), juce::dontSendNotification);
+    juce::String summary = providerDisplayName;
+    summary << "  \xe2\x80\xa2  " << account.baseUrl;
+    summary << "  \xe2\x80\xa2  " << (account.modelName.isNotEmpty() ? account.modelName : juce::String("(no model selected)"));
+    summary << "  \xe2\x80\xa2  " << account.cachedModelIds.size() << " model(s) cached";
+    accountSummaryLabel.setText(summary, juce::dontSendNotification);
 }
 
 juce::String SuiteSettingsPanel::accountIdForCombo(const juce::ComboBox& comboBox) const

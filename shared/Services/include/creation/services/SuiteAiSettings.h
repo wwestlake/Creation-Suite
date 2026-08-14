@@ -24,6 +24,12 @@ struct SuiteAiAccountSettings
     juce::String modelName;
     juce::String apiKey;
     bool enabled = true;
+
+    // Populated by "Refresh" in the Add/Edit Account dialog (SuiteSettingsPanel), which calls the
+    // provider's real model-list API for this account's key. Cached here, per account, so every
+    // app in the suite reads the same list instead of re-querying the provider itself.
+    juce::StringArray cachedModelIds;
+    juce::String modelsFetchedAt;
 };
 
 struct SuiteAiSettings
@@ -88,5 +94,13 @@ public:
                                             const SuiteAiResolvedRuntimeSettings& runtimeSettings,
                                             const juce::String& accountLabel,
                                             bool setAsDefaultIfEmpty = true);
+
+    // Points an app at an already-configured suite account - never creates or edits an account.
+    // Accounts are only ever created/edited at the suite level (SuiteSettingsPanel's Add Account
+    // dialog); every app just selects among them via this.
+    static void selectAccountForApp(SuiteAiSettings& settings,
+                                    creation::assets::SuiteAppDomain appDomain,
+                                    const juce::String& accountId,
+                                    const juce::String& modelNameOverride = {});
 };
 }

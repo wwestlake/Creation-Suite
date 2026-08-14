@@ -20,6 +20,13 @@ juce::var toVar(const creation::services::SuiteAiSettings& settings)
         accountObject->setProperty("modelName", account.modelName);
         accountObject->setProperty("apiKey", account.apiKey);
         accountObject->setProperty("enabled", account.enabled);
+
+        juce::Array<juce::var> modelIds;
+        for (const auto& modelId : account.cachedModelIds)
+            modelIds.add(modelId);
+        accountObject->setProperty("cachedModelIds", modelIds);
+        accountObject->setProperty("modelsFetchedAt", account.modelsFetchedAt);
+
         accounts.add(juce::var(accountObject));
     }
 
@@ -64,6 +71,10 @@ creation::services::SuiteAiSettings fromVar(const juce::var& value)
             account.modelName = accountObject->getProperty("modelName").toString();
             account.apiKey = accountObject->getProperty("apiKey").toString();
             account.enabled = static_cast<bool>(accountObject->getProperty("enabled"));
+            if (const auto* modelIds = accountObject->getProperty("cachedModelIds").getArray())
+                for (const auto& modelId : *modelIds)
+                    account.cachedModelIds.add(modelId.toString());
+            account.modelsFetchedAt = accountObject->getProperty("modelsFetchedAt").toString();
             settings.accounts.add(account);
         }
     }
@@ -278,5 +289,24 @@ void SuiteAiSettingsResolver::upsertRuntimeSettingsForApp(SuiteAiSettings& setti
 
     if (setAsDefaultIfEmpty && settings.defaultAccountId.trim().isEmpty())
         settings.defaultAccountId = accountId;
+}
+
+void SuiteAiSettingsResolver::selectAccountForApp(SuiteAiSettings& settings,
+                                                  creation::assets::SuiteAppDomain appDomain,
+                                                  const juce::String& accountId,
+                                                  const juce::String& modelNameOverride)
+{
+    for (auto& selection : settings.appSelections)
+    {
+        if (selection.appDomain == appDomain)
+        {
+            selection.accountId = accountId;
+            selection.modelNameOverride = modelNameOverride;
+            selection.enabled = true;
+            return;
+        }
+    }
+
+    settings.appSelections.add({ appDomain, accountId, modelNameOverride, true });
 }
 }

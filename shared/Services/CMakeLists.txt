@@ -6,6 +6,7 @@ add_library(creation_suite_services STATIC
     src/SuiteEula.cpp
     src/SuiteLegalSettings.cpp
     src/SuiteAiSettings.cpp
+    src/SuiteAiModelCatalogClient.cpp
     src/SuiteProjectHandoff.cpp
     src/SuiteVfsJsonStore.cpp
     src/SuiteContextEngine.cpp
