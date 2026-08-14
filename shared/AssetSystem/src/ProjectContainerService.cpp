@@ -1,15 +1,5 @@
 #include "creation/assets/ProjectContainerService.h"
-
-namespace
-{
-juce::Array<juce::File> findContainerFiles(const juce::File& domainDirectory)
-{
-    juce::Array<juce::File> files;
-    if (domainDirectory.isDirectory())
-        domainDirectory.findChildFiles(files, juce::File::findFiles, false, "*.csproj");
-    return files;
-}
-}
+#include "creation/services/SuiteVfsServiceClient.h"
 
 namespace creation::assets
 {
@@ -25,45 +15,46 @@ bool ProjectContainerService::createProject(const creation::suite::SuiteSettings
     if (! ProjectSession::createNew(settings, appDomain, projectName, suiteVersion, appVersion, session, errorMessage))
         return false;
 
-    if (! session.commit(errorMessage))
-        return false;
-
     outSession = std::move(session);
     return true;
 }
 
-bool ProjectContainerService::openProject(const juce::File& containerFile,
+bool ProjectContainerService::openProject(const creation::suite::SuiteSettings& settings,
+                                          const juce::String& projectId,
                                           ProjectSession& outSession,
                                           juce::String& errorMessage)
 {
-    return ProjectSession::open(containerFile, outSession, errorMessage);
+    return ProjectSession::open(settings, projectId, outSession, errorMessage);
 }
 
-juce::Array<ProjectContainerService::ProjectSummary> ProjectContainerService::listProjects(const creation::suite::SuiteSettings& settings,
+juce::Array<ProjectContainerService::ProjectSummary> ProjectContainerService::listProjects(const creation::suite::SuiteSettings&,
                                                                                            SuiteAppDomain appDomain,
                                                                                            juce::String& errorMessage)
 {
     juce::Array<ProjectSummary> results;
     errorMessage.clear();
 
-    const auto domainDirectory = creation::suite::getProjectContainerDirectory(settings)
-                                     .getChildFile(creation::suite::appDomainFolderName(appDomain));
-
-    for (const auto& containerFile : findContainerFiles(domainDirectory))
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
     {
-        ProjectManifest manifest;
-        juce::String manifestError;
-        if (! ProjectSession::peekManifest(containerFile, manifest, manifestError))
-        {
-            if (errorMessage.isEmpty())
-                errorMessage = "Some project containers could not be read.";
-            continue;
-        }
+        errorMessage = "Could not reach the suite VFS service.";
+        return results;
+    }
 
-        ProjectSummary summary;
-        summary.containerFile = containerFile;
-        summary.manifest = std::move(manifest);
-        results.add(std::move(summary));
+    juce::Array<creation::services::SuiteVfsServiceClient::ProjectSummary> summaries;
+    if (! client.listProjects(appDomain, summaries))
+    {
+        errorMessage = "Could not list projects for that domain.";
+        return results;
+    }
+
+    for (const auto& summary : summaries)
+    {
+        ProjectSummary result;
+        result.projectId = summary.projectId;
+        result.manifest = summary.manifest;
+        result.totalSizeBytes = summary.totalSizeBytes;
+        results.add(std::move(result));
     }
 
     std::sort(results.begin(), results.end(), [](const ProjectSummary& left, const ProjectSummary& right)
@@ -107,37 +98,59 @@ juce::Array<ProjectContainerService::ProjectSummary> ProjectContainerService::li
     return results;
 }
 
-bool ProjectContainerService::findProjectById(const creation::suite::SuiteSettings& settings,
+bool ProjectContainerService::findProjectById(const creation::suite::SuiteSettings&,
                                               const juce::String& projectId,
                                               ProjectSummary& outProject,
                                               juce::String& errorMessage)
 {
     errorMessage.clear();
 
-    for (const auto domain : { SuiteAppDomain::station,
-                               SuiteAppDomain::engine,
-                               SuiteAppDomain::movie,
-                               SuiteAppDomain::live,
-                               SuiteAppDomain::texture,
-                               SuiteAppDomain::modeler })
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
     {
-        juce::String listError;
-        const auto projects = listProjects(settings, domain, listError);
-        for (const auto& project : projects)
-        {
-            if (project.manifest.projectId == projectId)
-            {
-                outProject = project;
-                return true;
-            }
-        }
-
-        if (errorMessage.isEmpty() && listError.isNotEmpty())
-            errorMessage = listError;
+        errorMessage = "Could not reach the suite VFS service.";
+        return false;
     }
 
-    if (errorMessage.isEmpty())
+    ProjectManifest manifest;
+    if (! client.readManifest(projectId, manifest))
+    {
         errorMessage = "The requested suite project container was not found.";
-    return false;
+        return false;
+    }
+
+    outProject.projectId = projectId;
+    outProject.manifest = std::move(manifest);
+    return true;
+}
+
+bool ProjectContainerService::cloneProject(const creation::suite::SuiteSettings&,
+                                           const juce::String& sourceProjectId,
+                                           const juce::String& newProjectName,
+                                           juce::String& outNewProjectId,
+                                           juce::String& errorMessage)
+{
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
+    {
+        errorMessage = "Could not reach the suite VFS service.";
+        return false;
+    }
+
+    return client.cloneProject(sourceProjectId, newProjectName, outNewProjectId, errorMessage);
+}
+
+bool ProjectContainerService::deleteProject(const creation::suite::SuiteSettings&,
+                                            const juce::String& projectId,
+                                            juce::String& errorMessage)
+{
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
+    {
+        errorMessage = "Could not reach the suite VFS service.";
+        return false;
+    }
+
+    return client.deleteProject(projectId, errorMessage);
 }
 }

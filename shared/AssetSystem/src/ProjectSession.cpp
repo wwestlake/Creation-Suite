@@ -1,27 +1,20 @@
 #include "creation/assets/ProjectSession.h"
+#include "creation/services/SuiteVfsServiceClient.h"
 
 namespace
 {
-// Reserved logical size for a freshly created container. The backing file
-// is an NTFS sparse file, so this costs no real disk space up front --
-// FatFs just needs a fixed volume size to format against. Containers are
-// formatted exFAT (VFS-M3), which has no meaningful per-file size cap, so
-// this is sized for real project assets (multi-GB video/audio) rather than
-// FAT32's old 4GB ceiling.
-constexpr juce::int64 kDefaultContainerSizeBytes = 64LL * 1024 * 1024 * 1024;
-}
-
-namespace creation::assets
-{
-juce::String ProjectSession::normalizeLogicalPath(const juce::String& logicalPath)
+juce::String normalizeLogicalPath(const juce::String& logicalPath)
 {
     auto normalized = logicalPath.replaceCharacter('\\', '/').trim();
     while (normalized.startsWithChar('/'))
         normalized = normalized.substring(1);
     return normalized;
 }
+}
 
-bool ProjectSession::createNew(const creation::suite::SuiteSettings& settings,
+namespace creation::assets
+{
+bool ProjectSession::createNew(const creation::suite::SuiteSettings&,
                                SuiteAppDomain appDomain,
                                const juce::String& projectName,
                                const juce::String& suiteVersion,
@@ -29,96 +22,76 @@ bool ProjectSession::createNew(const creation::suite::SuiteSettings& settings,
                                ProjectSession& outSession,
                                juce::String& errorMessage)
 {
-    if (outSession.volume.isOpen())
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
     {
-        errorMessage = "This ProjectSession is already open.";
+        errorMessage = "Could not reach the suite VFS service.";
         return false;
     }
 
-    const auto containerPath = creation::suite::getProjectContainerPath(settings, appDomain, projectName);
-    const auto parentDirectory = containerPath.getParentDirectory();
-    if (! parentDirectory.exists() && ! parentDirectory.createDirectory())
-    {
-        errorMessage = "Could not create the target project container directory.";
-        return false;
-    }
-
-    if (! outSession.volume.createAndFormat(containerPath, kDefaultContainerSizeBytes, errorMessage))
-        return false;
-
-    outSession.containerFile = containerPath;
-    outSession.manifest = creation::suite::createDefaultManifest(projectName, appDomain, suiteVersion, appVersion);
-    return true;
+    return client.createProject(appDomain, projectName, suiteVersion, appVersion,
+                                outSession.projectId, outSession.manifest, errorMessage);
 }
 
-bool ProjectSession::open(const juce::File& containerFileToOpen,
+bool ProjectSession::open(const creation::suite::SuiteSettings&,
+                          const juce::String& projectIdToOpen,
                           ProjectSession& outSession,
                           juce::String& errorMessage)
 {
-    if (outSession.volume.isOpen())
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
     {
-        errorMessage = "This ProjectSession is already open.";
+        errorMessage = "Could not reach the suite VFS service.";
         return false;
     }
 
-    if (! outSession.volume.open(containerFileToOpen, errorMessage))
-        return false;
-
-    juce::MemoryBlock manifestData;
-    if (! outSession.volume.readFile(ProjectContainerPaths::manifestPath, manifestData, errorMessage))
-    {
-        errorMessage = "The suite project container does not contain a project manifest.";
-        outSession.volume.close();
-        return false;
-    }
-
-    const auto manifestText = juce::String::fromUTF8(static_cast<const char*>(manifestData.getData()),
-                                                      static_cast<int>(manifestData.getSize()));
     ProjectManifest loadedManifest;
-    if (! deserializeManifest(manifestText, loadedManifest, errorMessage))
+    if (! client.readManifest(projectIdToOpen, loadedManifest))
     {
-        outSession.volume.close();
+        errorMessage = "The requested suite project could not be found.";
         return false;
     }
 
-    outSession.containerFile = containerFileToOpen;
+    outSession.projectId = projectIdToOpen;
     outSession.manifest = std::move(loadedManifest);
     return true;
 }
 
-bool ProjectSession::peekManifest(const juce::File& containerFile,
+bool ProjectSession::peekManifest(const creation::suite::SuiteSettings&,
+                                  const juce::String& projectIdToPeek,
                                   ProjectManifest& outManifest,
                                   juce::String& errorMessage)
 {
-    creation::vfs::SuiteVolume volume;
-    if (! volume.open(containerFile, errorMessage))
-        return false;
-
-    juce::MemoryBlock manifestData;
-    if (! volume.readFile(ProjectContainerPaths::manifestPath, manifestData, errorMessage))
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
     {
-        errorMessage = "The suite project container does not contain a project manifest.";
+        errorMessage = "Could not reach the suite VFS service.";
         return false;
     }
 
-    const auto manifestText = juce::String::fromUTF8(static_cast<const char*>(manifestData.getData()),
-                                                      static_cast<int>(manifestData.getSize()));
-    return deserializeManifest(manifestText, outManifest, errorMessage);
+    if (! client.readManifest(projectIdToPeek, outManifest))
+    {
+        errorMessage = "The requested suite project could not be found.";
+        return false;
+    }
+
+    return true;
 }
 
 void ProjectSession::close()
 {
-    volume.close();
+    // No mount to release -- every operation is already a discrete HTTP round-trip. Kept so
+    // existing call sites that pair open()/close() don't need to change.
 }
 
 bool ProjectSession::isValid() const noexcept
 {
-    return volume.isOpen() && manifest.projectId.isNotEmpty();
+    return projectId.isNotEmpty() && manifest.projectId.isNotEmpty();
 }
 
-const juce::File& ProjectSession::getContainerFile() const noexcept
+const juce::String& ProjectSession::getProjectId() const noexcept
 {
-    return containerFile;
+    return projectId;
 }
 
 const ProjectManifest& ProjectSession::getManifest() const noexcept
@@ -133,20 +106,24 @@ ProjectManifest& ProjectSession::getManifest() noexcept
 
 juce::StringArray ProjectSession::listEntryPaths() const
 {
-    auto paths = volume.listFiles();
-    paths.removeString(ProjectContainerPaths::manifestPath);
+    creation::services::SuiteVfsServiceClient client;
+    juce::StringArray paths;
+    if (client.discover())
+        client.listProjectEntries(projectId, paths);
     return paths;
 }
 
 bool ProjectSession::containsEntry(const juce::String& logicalPath) const
 {
-    return volume.fileExists(normalizeLogicalPath(logicalPath));
+    return listEntryPaths().contains(normalizeLogicalPath(logicalPath));
 }
 
 bool ProjectSession::readEntry(const juce::String& logicalPath, juce::MemoryBlock& outData) const
 {
-    juce::String errorMessage;
-    return volume.readFile(normalizeLogicalPath(logicalPath), outData, errorMessage);
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
+        return false;
+    return client.readProjectEntry(projectId, normalizeLogicalPath(logicalPath), outData);
 }
 
 bool ProjectSession::writeEntry(const juce::String& logicalPath,
@@ -160,8 +137,11 @@ bool ProjectSession::writeEntry(const juce::String& logicalPath,
     if (normalized.isEmpty() || normalized == ProjectContainerPaths::manifestPath)
         return false;
 
-    juce::String errorMessage;
-    if (! volume.writeFile(normalized, data, errorMessage))
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
+        return false;
+
+    if (! client.writeProjectEntry(projectId, normalized, data))
         return false;
 
     manifest.modifiedAt = juce::Time::getCurrentTime();
@@ -176,20 +156,20 @@ bool ProjectSession::writeEntryFromFile(const juce::String& logicalPath,
 {
     if (! sourceFile.existsAsFile())
     {
-        errorMessage = "The source file for the project container entry does not exist.";
+        errorMessage = "The source file for the project entry does not exist.";
         return false;
     }
 
     juce::MemoryBlock data;
     if (! sourceFile.loadFileAsData(data))
     {
-        errorMessage = "Could not load the source file into memory for container staging.";
+        errorMessage = "Could not load the source file into memory for upload.";
         return false;
     }
 
     if (! writeEntry(logicalPath, data, sourceFile.getLastModificationTime(), compressionLevel))
     {
-        errorMessage = "Could not write the entry into the project container.";
+        errorMessage = "Could not write the entry into the project.";
         return false;
     }
 
@@ -199,11 +179,11 @@ bool ProjectSession::writeEntryFromFile(const juce::String& logicalPath,
 bool ProjectSession::removeEntry(const juce::String& logicalPath)
 {
     const auto normalized = normalizeLogicalPath(logicalPath);
-    if (! volume.fileExists(normalized))
-        return false;
 
-    juce::String errorMessage;
-    if (! volume.deleteFile(normalized, errorMessage))
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
+        return false;
+    if (! client.removeProjectEntry(projectId, normalized))
         return false;
 
     manifest.modifiedAt = juce::Time::getCurrentTime();
@@ -255,8 +235,7 @@ bool ProjectSession::materializeEntry(const creation::suite::SuiteSettings& sett
     }
 
     return AssetMaterializer::materializeEntry(settings,
-                                               volume,
-                                               manifest.projectId,
+                                               projectId,
                                                logicalPath,
                                                access,
                                                outLease,
@@ -329,9 +308,20 @@ bool ProjectSession::commit(juce::String& errorMessage)
     }
 
     manifest.modifiedAt = juce::Time::getCurrentTime();
-    const auto manifestText = serializeManifest(manifest, true);
-    const juce::MemoryBlock manifestData(manifestText.toRawUTF8(), manifestText.getNumBytesAsUTF8());
 
-    return volume.writeFile(ProjectContainerPaths::manifestPath, manifestData, errorMessage);
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
+    {
+        errorMessage = "Could not reach the suite VFS service.";
+        return false;
+    }
+
+    if (! client.writeManifest(projectId, manifest))
+    {
+        errorMessage = "Could not save the project manifest.";
+        return false;
+    }
+
+    return true;
 }
 }

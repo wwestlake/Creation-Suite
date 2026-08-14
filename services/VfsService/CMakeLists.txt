@@ -29,6 +29,7 @@ juce_generate_juce_header(CreationSuiteVfsService)
 
 target_sources(CreationSuiteVfsService PRIVATE
     Source/Main.cpp
+    Source/VfsProjectStore.cpp
 )
 
 target_compile_definitions(CreationSuiteVfsService PRIVATE

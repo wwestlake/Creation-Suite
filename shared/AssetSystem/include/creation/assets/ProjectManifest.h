@@ -15,11 +15,11 @@ enum class SuiteAppDomain
     live,
     texture,
     modeler,
-    // Reserved for the suite's own root project (suite-wide data: AI
-    // settings, auth session, etc. -- see SuiteRootProject.h). Never
-    // included in listProjects/listAllProjects/findProjectById's per-app
-    // domain iteration, so it never appears in any app's own project
-    // browser by construction, not by special-case filtering.
+    // Reserved for the suite's own root data (AI settings, auth session, etc.), stored
+    // directly under the VFS root's "suite/" folder by services/VfsService::VfsProjectStore
+    // -- not a project folder at all, so this domain value exists only to keep
+    // SuiteAppDomain exhaustive elsewhere; it's never passed to listProjects/
+    // listAllProjects/findProjectById.
     suite
 };
 

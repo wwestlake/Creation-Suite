@@ -6,12 +6,15 @@ add_library(creation_suite_services STATIC
     src/SuiteEula.cpp
     src/SuiteLegalSettings.cpp
     src/SuiteAiSettings.cpp
-    src/SuiteProcessRegistry.cpp
+    src/SuiteAiModelCatalogClient.cpp
     src/SuiteProjectHandoff.cpp
-    src/SuiteVfsServiceClient.cpp
+    src/SuiteVfsJsonStore.cpp
     src/SuiteContextEngine.cpp
     src/SuiteAiChatClient.cpp
     src/SuiteUndoService.cpp
+    # SuiteVfsServiceClient/SuiteProcessRegistry moved to shared/AssetSystem to break a
+    # dependency cycle (this library already depends PUBLIC on creation_suite_asset_system) --
+    # still reachable at their existing #include <creation/services/...> paths via that link.
 )
 
 target_include_directories(creation_suite_services PUBLIC include)

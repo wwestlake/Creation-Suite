@@ -60,47 +60,40 @@ juce::File getSuiteRootDirectory(const SuiteSettings& settings)
 
 juce::File getSharedResourcesDirectory(const SuiteSettings& settings)
 {
-    juce::ignoreUnused(settings);
-    return getInternalSuiteDataDirectory().getChildFile("Shared");
+    return getSuiteRootDirectory(settings).getChildFile("Shared");
 }
 
 juce::File getContentDirectory(const SuiteSettings& settings)
 {
-    juce::ignoreUnused(settings);
-    return getInternalSuiteDataDirectory().getChildFile("Content");
+    return getSuiteRootDirectory(settings).getChildFile("Content");
 }
 
 juce::File getTutorialsDirectory(const SuiteSettings& settings)
 {
-    juce::ignoreUnused(settings);
-    return getInternalSuiteDataDirectory().getChildFile("Tutorials");
+    return getSuiteRootDirectory(settings).getChildFile("Tutorials");
 }
 
 juce::File getTemplatesDirectory(const SuiteSettings& settings)
 {
-    juce::ignoreUnused(settings);
-    return getInternalSuiteDataDirectory().getChildFile("Templates");
+    return getSuiteRootDirectory(settings).getChildFile("Templates");
 }
 
 juce::File getCacheDirectory(const SuiteSettings& settings)
 {
-    juce::ignoreUnused(settings);
-    return getInternalSuiteDataDirectory().getChildFile("Cache");
+    return getSuiteRootDirectory(settings).getChildFile("Cache");
 }
 
 juce::File getAppProjectsDirectory(const SuiteSettings& settings,
                                    creation::assets::SuiteAppDomain domain)
 {
-    juce::ignoreUnused(settings);
-    return getInternalSuiteDataDirectory()
+    return getSuiteRootDirectory(settings)
         .getChildFile("Projects")
         .getChildFile(appDomainFolderName(domain));
 }
 
 juce::File getProjectContainerDirectory(const SuiteSettings& settings)
 {
-    juce::ignoreUnused(settings);
-    return getInternalSuiteDataDirectory().getChildFile("Project Containers");
+    return getSuiteRootDirectory(settings).getChildFile("Project Containers");
 }
 
 juce::File getProjectContainerPath(const SuiteSettings& settings,

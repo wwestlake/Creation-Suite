@@ -1,6 +1,11 @@
 #include <creation/ui/SuiteSettingsPanel.h>
 #include <creation/ui/CreationSuiteLogos.h>
+#include <creation/ui/SuiteAiAccountDialog.h>
 #include <creation/services/SuiteAiProviderRuntime.h>
+#if JUCE_DEBUG
+#include <creation/services/SuiteVfsServiceClient.h>
+#include <creation/suite/SuiteStoragePaths.h>
+#endif
 
 namespace
 {
@@ -11,11 +16,6 @@ juce::Colour contentFill() { return juce::Colour(0xff141c27); }
 juce::Colour textColour() { return juce::Colour(0xffdce6f5); }
 juce::Colour hintColour() { return juce::Colour(0xff97a9c1); }
 juce::Colour accentColour() { return juce::Colour(0xff59dfff); }
-
-int comboItemIdForIndex(int index)
-{
-    return index + 1;
-}
 
 void configureEditor(juce::TextEditor& editor)
 {
@@ -42,12 +42,6 @@ void configureHintLabel(juce::Label& label, const juce::String& text)
     label.setColour(juce::Label::textColourId, hintColour());
 }
 
-void configureCombo(juce::ComboBox& comboBox)
-{
-    comboBox.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff1a2230));
-    comboBox.setColour(juce::ComboBox::outlineColourId, panelOutline());
-    comboBox.setColour(juce::ComboBox::textColourId, juce::Colours::white);
-}
 }
 
 SuiteSettingsPanel::SuiteSettingsPanel()
@@ -60,14 +54,34 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(titleLabel);
 
-    subTitleLabel.setText("Suite-wide storage, routing, accounts, and platform controls live here.",
+    subTitleLabel.setText("Suite-wide storage, AI accounts, and platform controls live here.",
                           juce::dontSendNotification);
     subTitleLabel.setColour(juce::Label::textColourId, hintColour());
     addAndMakeVisible(subTitleLabel);
 
     configureTabButton(storageTabButton, "Storage", Tab::storage);
-    configureTabButton(aiTabButton, "AI & Routing", Tab::ai);
+    configureTabButton(aiTabButton, "Suite AI Accounts", Tab::ai);
     configureTabButton(suiteLogTabButton, "Suite Log", Tab::log);
+#if JUCE_DEBUG
+    configureTabButton(vfsBrowserTabButton, "VFS Browser", Tab::vfsBrowser);
+
+    vfsTreeView.setColour(juce::TreeView::backgroundColourId, juce::Colour(0xff1a2230));
+    vfsTreeView.setColour(juce::TreeView::linesColourId, panelOutline());
+    addChildComponent(vfsTreeView);
+
+    vfsContentTitleLabel.setFont(juce::Font(13.0f).boldened());
+    configureLabel(vfsContentTitleLabel);
+    addChildComponent(vfsContentTitleLabel);
+
+    vfsContentViewer.setMultiLine(true);
+    vfsContentViewer.setReadOnly(true);
+    vfsContentViewer.setScrollbarsShown(true);
+    vfsContentViewer.setCaretVisible(false);
+    vfsContentViewer.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 13.0f, juce::Font::plain));
+    configureEditor(vfsContentViewer);
+    vfsContentViewer.setText("Select a file or entry on the left.", juce::dontSendNotification);
+    addChildComponent(vfsContentViewer);
+#endif
 
     scrollViewport.setViewedComponent(&scrollContent, false);
     scrollViewport.setScrollBarsShown(true, false);
@@ -83,41 +97,54 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     configureRow(suiteVfsRow, "suite_vfs_root", "Suite VFS Root");
 
     configureHintLabel(aiIntroLabel,
-                       "Shared accounts and per-app routing live here so every app in the suite can resolve AI behavior from one place.");
+                       "Named accounts live here so every app in the suite can pick one to use. Each app chooses its own account and model itself - nothing is assigned to an app from this screen.");
     scrollContent.addAndMakeVisible(aiIntroLabel);
 
-    configureSectionTitle(aiSectionLabel, "Suite AI Accounts And Routing");
+    configureSectionTitle(aiSectionLabel, "Suite AI Accounts");
     scrollContent.addAndMakeVisible(aiSectionLabel);
 
-    configureCombo(accountSelectorCombo);
-    accountSelectorCombo.onChange = [this]
-    {
-        pushCurrentEditorToSelectedAccount();
-        selectedAccountIndex = accountSelectorCombo.getSelectedItemIndex();
-        pullSelectedAccountIntoEditor();
-        refreshAiAccountUi();
-    };
-    scrollContent.addAndMakeVisible(accountSelectorCombo);
+    accountListBox.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff1a2230));
+    accountListBox.setColour(juce::ListBox::outlineColourId, panelOutline());
+    accountListBox.setOutlineThickness(1);
+    accountListBox.setRowHeight(42);
+    scrollContent.addAndMakeVisible(accountListBox);
 
     addAccountButton.onClick = [this]
     {
-        pushCurrentEditorToSelectedAccount();
+        creation::ui::showAddOrEditAiAccountDialog(aiProviders, {},
+            [this](bool saved, const creation::services::SuiteAiAccountSettings& account)
+            {
+                if (! saved)
+                    return;
 
-        creation::services::SuiteAiAccountSettings account;
-        account.accountId = "suite-account-" + juce::Uuid().toString();
-        account.providerId = "openai";
-        account.accountLabel = "New Suite Account";
-        account.baseUrl = "https://api.openai.com/v1";
-        account.modelName = "gpt-4.1-mini";
-        account.enabled = true;
-        aiSettings.accounts.add(account);
-
-        selectedAccountIndex = aiSettings.accounts.size() - 1;
-        refreshAiAccountUi();
-        pullSelectedAccountIntoEditor();
-        appendLogLine("Added a new suite AI account slot.");
+                aiSettings.accounts.add(account);
+                selectedAccountIndex = aiSettings.accounts.size() - 1;
+                refreshAiAccountUi();
+                persistAiSettings();
+                appendLogLine("Added suite AI account \"" + account.accountLabel + "\".");
+            });
     };
     scrollContent.addAndMakeVisible(addAccountButton);
+
+    editAccountButton.onClick = [this]
+    {
+        if (! juce::isPositiveAndBelow(selectedAccountIndex, aiSettings.accounts.size()))
+            return;
+
+        const auto accountIndex = selectedAccountIndex;
+        creation::ui::showAddOrEditAiAccountDialog(aiProviders, aiSettings.accounts.getReference(accountIndex),
+            [this, accountIndex](bool saved, const creation::services::SuiteAiAccountSettings& account)
+            {
+                if (! saved || ! juce::isPositiveAndBelow(accountIndex, aiSettings.accounts.size()))
+                    return;
+
+                aiSettings.accounts.getReference(accountIndex) = account;
+                refreshAiAccountUi();
+                persistAiSettings();
+                appendLogLine("Updated suite AI account \"" + account.accountLabel + "\".");
+            });
+    };
+    scrollContent.addAndMakeVisible(editAccountButton);
 
     removeAccountButton.onClick = [this]
     {
@@ -139,14 +166,13 @@ SuiteSettingsPanel::SuiteSettingsPanel()
             selectedAccountIndex = -1;
 
         refreshAiAccountUi();
-        pullSelectedAccountIntoEditor();
-        appendLogLine("Removed a suite AI account slot.");
+        persistAiSettings();
+        appendLogLine("Removed a suite AI account.");
     };
     scrollContent.addAndMakeVisible(removeAccountButton);
 
     testAccountButton.onClick = [this]
     {
-        pushCurrentEditorToSelectedAccount();
         if (! juce::isPositiveAndBelow(selectedAccountIndex, aiSettings.accounts.size()))
         {
             setStatusText("Select an AI account first.");
@@ -168,89 +194,9 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     };
     scrollContent.addAndMakeVisible(testAccountButton);
 
-    providerLabel.setText("Provider", juce::dontSendNotification);
-    configureLabel(providerLabel);
-    scrollContent.addAndMakeVisible(providerLabel);
-
-    configureCombo(providerCombo);
-    for (int index = 0; index < aiProviders.size(); ++index)
-        providerCombo.addItem(aiProviders[index].displayName, comboItemIdForIndex(index));
-    providerCombo.onChange = [this]
-    {
-        if (! juce::isPositiveAndBelow(selectedAccountIndex, aiSettings.accounts.size()))
-            return;
-
-        const auto providerIndex = providerCombo.getSelectedItemIndex();
-        if (! juce::isPositiveAndBelow(providerIndex, aiProviders.size()))
-            return;
-
-        auto& account = aiSettings.accounts.getReference(selectedAccountIndex);
-        const auto& provider = aiProviders.getReference(providerIndex);
-        account.providerId = provider.id;
-        if (account.baseUrl.trim().isEmpty())
-            account.baseUrl = provider.defaultBaseUrl;
-        if ((account.providerId == "ollama" || account.providerId == "lm-studio") && account.modelName.trim().isEmpty())
-            account.modelName = account.providerId == "ollama" ? "llama3.1" : "local-model";
-        pullSelectedAccountIntoEditor();
-    };
-    scrollContent.addAndMakeVisible(providerCombo);
-
-    accountLabelLabel.setText("Account Label", juce::dontSendNotification);
-    configureLabel(accountLabelLabel);
-    scrollContent.addAndMakeVisible(accountLabelLabel);
-    configureEditor(accountLabelEditor);
-    scrollContent.addAndMakeVisible(accountLabelEditor);
-
-    endpointLabel.setText("Endpoint", juce::dontSendNotification);
-    configureLabel(endpointLabel);
-    scrollContent.addAndMakeVisible(endpointLabel);
-    configureEditor(endpointEditor);
-    scrollContent.addAndMakeVisible(endpointEditor);
-
-    modelLabel.setText("Default Model", juce::dontSendNotification);
-    configureLabel(modelLabel);
-    scrollContent.addAndMakeVisible(modelLabel);
-    configureEditor(modelEditor);
-    scrollContent.addAndMakeVisible(modelEditor);
-
-    apiKeyLabel.setText("API Key / Token", juce::dontSendNotification);
-    configureLabel(apiKeyLabel);
-    scrollContent.addAndMakeVisible(apiKeyLabel);
-    configureEditor(apiKeyEditor);
-    apiKeyEditor.setPasswordCharacter(0x2022);
-    scrollContent.addAndMakeVisible(apiKeyEditor);
-
-    defaultAccountLabel.setText("Suite Default Account", juce::dontSendNotification);
-    configureLabel(defaultAccountLabel);
-    scrollContent.addAndMakeVisible(defaultAccountLabel);
-    configureCombo(defaultAccountCombo);
-    scrollContent.addAndMakeVisible(defaultAccountCombo);
-
-    auto configureSelectionRow = [](AppSelectionRow& row, const juce::String& labelText)
-    {
-        row.label.setText(labelText, juce::dontSendNotification);
-        configureLabel(row.label);
-        configureCombo(row.accountCombo);
-        configureEditor(row.modelOverrideEditor);
-    };
-
-    configureSelectionRow(stationSelectionRow, "Creation Station");
-    configureSelectionRow(engineSelectionRow, "Creation Engine");
-    configureSelectionRow(movieSelectionRow, "Creation Movie");
-    configureSelectionRow(liveSelectionRow, "Creation Live");
-
-    scrollContent.addAndMakeVisible(stationSelectionRow.label);
-    scrollContent.addAndMakeVisible(stationSelectionRow.accountCombo);
-    scrollContent.addAndMakeVisible(stationSelectionRow.modelOverrideEditor);
-    scrollContent.addAndMakeVisible(engineSelectionRow.label);
-    scrollContent.addAndMakeVisible(engineSelectionRow.accountCombo);
-    scrollContent.addAndMakeVisible(engineSelectionRow.modelOverrideEditor);
-    scrollContent.addAndMakeVisible(movieSelectionRow.label);
-    scrollContent.addAndMakeVisible(movieSelectionRow.accountCombo);
-    scrollContent.addAndMakeVisible(movieSelectionRow.modelOverrideEditor);
-    scrollContent.addAndMakeVisible(liveSelectionRow.label);
-    scrollContent.addAndMakeVisible(liveSelectionRow.accountCombo);
-    scrollContent.addAndMakeVisible(liveSelectionRow.modelOverrideEditor);
+    configureLabel(accountSummaryLabel);
+    accountSummaryLabel.setColour(juce::Label::textColourId, hintColour());
+    scrollContent.addAndMakeVisible(accountSummaryLabel);
 
     configureSectionTitle(logSectionLabel, "Suite Log");
     scrollContent.addAndMakeVisible(logSectionLabel);
@@ -270,7 +216,6 @@ SuiteSettingsPanel::SuiteSettingsPanel()
 
     applyButton.onClick = [this]
     {
-        pushCurrentEditorToSelectedAccount();
         if (onApplyRequested)
             onApplyRequested(getSettings());
         if (onApplyAiSettingsRequested)
@@ -290,12 +235,28 @@ SuiteSettingsPanel::SuiteSettingsPanel()
 
     setAiSettings({});
     selectTab(Tab::storage);
-    setStatusText("Suite storage, AI accounts, and app routing are controlled here for every Creation app.");
+    setStatusText("Suite storage and AI accounts are controlled here. Each app picks its own account and model itself.");
+}
+
+SuiteSettingsPanel::~SuiteSettingsPanel()
+{
+#if JUCE_DEBUG
+    // vfsTreeView is declared before vfsTreeRoot, so implicit member destruction would tear
+    // down vfsTreeRoot (the actual TreeViewItem tree) first, leaving vfsTreeView holding a
+    // dangling root-item pointer for the moment before its own destructor runs - a real crash
+    // on close, not hypothetical (reported live 2026-08-13). Detach explicitly, in the right
+    // order, before either member is destroyed.
+    vfsTreeView.setRootItem(nullptr);
+#endif
 }
 
 void SuiteSettingsPanel::setSettings(const creation::suite::SuiteSettings& settings)
 {
     suiteVfsRow.editor.setText(settings.suiteVfsRoot, juce::dontSendNotification);
+#if JUCE_DEBUG
+    currentSettings = settings;
+    buildVfsBrowserTree();
+#endif
 }
 
 creation::suite::SuiteSettings SuiteSettingsPanel::getSettings() const
@@ -323,42 +284,14 @@ void SuiteSettingsPanel::setAiSettings(const creation::services::SuiteAiSettings
 
     selectedAccountIndex = juce::jlimit(0, aiSettings.accounts.size() - 1, 0);
     refreshAiAccountUi();
-    pullSelectedAccountIntoEditor();
 }
 
 creation::services::SuiteAiSettings SuiteSettingsPanel::getAiSettings() const
 {
-    auto settings = aiSettings;
-
-    auto updateSelection = [&](const juce::ComboBox& comboBox,
-                               const juce::TextEditor& editor,
-                               creation::assets::SuiteAppDomain appDomain)
-    {
-        auto* existing = const_cast<creation::services::SuiteAiSettings::AppSelection*>(
-            creation::services::SuiteAiSettingsResolver::findAppSelection(settings, appDomain));
-        if (existing != nullptr)
-        {
-            existing->accountId = accountIdForCombo(comboBox);
-            existing->modelNameOverride = editor.getText().trim();
-            existing->enabled = existing->accountId.isNotEmpty();
-            return;
-        }
-
-        creation::services::SuiteAiSettings::AppSelection selection;
-        selection.appDomain = appDomain;
-        selection.accountId = accountIdForCombo(comboBox);
-        selection.modelNameOverride = editor.getText().trim();
-        selection.enabled = selection.accountId.isNotEmpty();
-        settings.appSelections.add(selection);
-    };
-
-    settings.defaultAccountId = accountIdForCombo(defaultAccountCombo);
-    updateSelection(stationSelectionRow.accountCombo, stationSelectionRow.modelOverrideEditor, creation::assets::SuiteAppDomain::station);
-    updateSelection(engineSelectionRow.accountCombo, engineSelectionRow.modelOverrideEditor, creation::assets::SuiteAppDomain::engine);
-    updateSelection(movieSelectionRow.accountCombo, movieSelectionRow.modelOverrideEditor, creation::assets::SuiteAppDomain::movie);
-    updateSelection(liveSelectionRow.accountCombo, liveSelectionRow.modelOverrideEditor, creation::assets::SuiteAppDomain::live);
-
-    return settings;
+    // This panel only ever manages the account list itself - which account/model each app uses
+    // is chosen by that app, not assigned here, so appSelections/defaultAccountId simply pass
+    // through untouched (whatever the apps themselves have already written into the shared store).
+    return aiSettings;
 }
 
 void SuiteSettingsPanel::setStatusText(const juce::String& text)
@@ -410,13 +343,25 @@ void SuiteSettingsPanel::resized()
     auto tabButtonWidth = 136;
     storageTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth));
     tabArea.removeFromLeft(8);
-    aiTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth + 20));
+    aiTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth + 44));
     tabArea.removeFromLeft(8);
     suiteLogTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth));
+#if JUCE_DEBUG
+    tabArea.removeFromLeft(8);
+    vfsBrowserTabButton.setBounds(tabArea.removeFromLeft(tabButtonWidth + 20));
+#endif
 
     area.removeFromTop(10);
     auto footerArea = area.removeFromBottom(74);
     scrollViewport.setBounds(area);
+#if JUCE_DEBUG
+    auto vfsArea = area;
+    vfsTreeView.setBounds(vfsArea.removeFromLeft(280));
+    vfsArea.removeFromLeft(10);
+    vfsContentTitleLabel.setBounds(vfsArea.removeFromTop(22));
+    vfsArea.removeFromTop(4);
+    vfsContentViewer.setBounds(vfsArea);
+#endif
 
     auto footerButtons = footerArea.removeFromLeft(338);
     applyButton.setBounds(footerButtons.removeFromLeft(180));
@@ -466,6 +411,15 @@ void SuiteSettingsPanel::selectTab(Tab tab)
 {
     selectedTab = tab;
     refreshTabButtons();
+
+#if JUCE_DEBUG
+    const bool isVfsBrowser = (selectedTab == Tab::vfsBrowser);
+    scrollViewport.setVisible(! isVfsBrowser);
+    vfsTreeView.setVisible(isVfsBrowser);
+    vfsContentTitleLabel.setVisible(isVfsBrowser);
+    vfsContentViewer.setVisible(isVfsBrowser);
+#endif
+
     updateScrollContentLayout();
     scrollViewport.setViewPosition(0, 0);
 }
@@ -483,6 +437,9 @@ void SuiteSettingsPanel::refreshTabButtons()
     styleTab(storageTabButton, selectedTab == Tab::storage);
     styleTab(aiTabButton, selectedTab == Tab::ai);
     styleTab(suiteLogTabButton, selectedTab == Tab::log);
+#if JUCE_DEBUG
+    styleTab(vfsBrowserTabButton, selectedTab == Tab::vfsBrowser);
+#endif
 }
 
 void SuiteSettingsPanel::updateScrollContentLayout()
@@ -508,34 +465,12 @@ void SuiteSettingsPanel::updateScrollContentLayout()
     {
         aiIntroLabel.setVisible(visible);
         aiSectionLabel.setVisible(visible);
-        accountSelectorCombo.setVisible(visible);
+        accountListBox.setVisible(visible);
         addAccountButton.setVisible(visible);
+        editAccountButton.setVisible(visible);
         removeAccountButton.setVisible(visible);
         testAccountButton.setVisible(visible);
-        providerLabel.setVisible(visible);
-        providerCombo.setVisible(visible);
-        accountLabelLabel.setVisible(visible);
-        accountLabelEditor.setVisible(visible);
-        endpointLabel.setVisible(visible);
-        endpointEditor.setVisible(visible);
-        modelLabel.setVisible(visible);
-        modelEditor.setVisible(visible);
-        apiKeyLabel.setVisible(visible);
-        apiKeyEditor.setVisible(visible);
-        defaultAccountLabel.setVisible(visible);
-        defaultAccountCombo.setVisible(visible);
-        stationSelectionRow.label.setVisible(visible);
-        stationSelectionRow.accountCombo.setVisible(visible);
-        stationSelectionRow.modelOverrideEditor.setVisible(visible);
-        engineSelectionRow.label.setVisible(visible);
-        engineSelectionRow.accountCombo.setVisible(visible);
-        engineSelectionRow.modelOverrideEditor.setVisible(visible);
-        movieSelectionRow.label.setVisible(visible);
-        movieSelectionRow.accountCombo.setVisible(visible);
-        movieSelectionRow.modelOverrideEditor.setVisible(visible);
-        liveSelectionRow.label.setVisible(visible);
-        liveSelectionRow.accountCombo.setVisible(visible);
-        liveSelectionRow.modelOverrideEditor.setVisible(visible);
+        accountSummaryLabel.setVisible(visible);
     };
 
     auto setLogVisible = [&](bool visible)
@@ -554,6 +489,9 @@ void SuiteSettingsPanel::updateScrollContentLayout()
         case Tab::storage: layoutStorageTab(area); break;
         case Tab::ai: layoutAiTab(area); break;
         case Tab::log: layoutLogTab(area); break;
+#if JUCE_DEBUG
+        case Tab::vfsBrowser: break; // laid out directly in resized(), not the scrollContent area.
+#endif
     }
 
     const auto usedHeight = 20000 - area.getHeight() + 18;
@@ -578,53 +516,20 @@ void SuiteSettingsPanel::layoutAiTab(juce::Rectangle<int>& area)
     area.removeFromTop(12);
 
     auto accountHeaderRow = area.removeFromTop(34);
-    accountSelectorCombo.setBounds(accountHeaderRow.removeFromLeft(280));
+    addAccountButton.setBounds(accountHeaderRow.removeFromLeft(96));
     accountHeaderRow.removeFromLeft(8);
-    addAccountButton.setBounds(accountHeaderRow.removeFromLeft(118));
+    editAccountButton.setBounds(accountHeaderRow.removeFromLeft(70));
     accountHeaderRow.removeFromLeft(8);
-    removeAccountButton.setBounds(accountHeaderRow.removeFromLeft(96));
+    removeAccountButton.setBounds(accountHeaderRow.removeFromLeft(90));
     accountHeaderRow.removeFromLeft(8);
     testAccountButton.setBounds(accountHeaderRow.removeFromLeft(128));
-    area.removeFromTop(12);
-
-    providerLabel.setBounds(area.removeFromTop(20));
-    providerCombo.setBounds(area.removeFromTop(32));
     area.removeFromTop(10);
 
-    accountLabelLabel.setBounds(area.removeFromTop(20));
-    accountLabelEditor.setBounds(area.removeFromTop(32));
+    accountListBox.setBounds(area.removeFromTop(6 * accountListBox.getRowHeight() + 4));
     area.removeFromTop(10);
 
-    endpointLabel.setBounds(area.removeFromTop(20));
-    endpointEditor.setBounds(area.removeFromTop(32));
-    area.removeFromTop(10);
-
-    modelLabel.setBounds(area.removeFromTop(20));
-    modelEditor.setBounds(area.removeFromTop(32));
-    area.removeFromTop(10);
-
-    apiKeyLabel.setBounds(area.removeFromTop(20));
-    apiKeyEditor.setBounds(area.removeFromTop(32));
+    accountSummaryLabel.setBounds(area.removeFromTop(22));
     area.removeFromTop(14);
-
-    defaultAccountLabel.setBounds(area.removeFromTop(20));
-    defaultAccountCombo.setBounds(area.removeFromTop(32));
-    area.removeFromTop(10);
-
-    auto layoutSelectionRow = [&](AppSelectionRow& row)
-    {
-        row.label.setBounds(area.removeFromTop(20));
-        auto rowArea = area.removeFromTop(32);
-        row.accountCombo.setBounds(rowArea.removeFromLeft(280));
-        rowArea.removeFromLeft(8);
-        row.modelOverrideEditor.setBounds(rowArea);
-        area.removeFromTop(12);
-    };
-
-    layoutSelectionRow(stationSelectionRow);
-    layoutSelectionRow(engineSelectionRow);
-    layoutSelectionRow(movieSelectionRow);
-    layoutSelectionRow(liveSelectionRow);
 }
 
 void SuiteSettingsPanel::layoutLogTab(juce::Rectangle<int>& area)
@@ -657,125 +562,300 @@ void SuiteSettingsPanel::appendLogLine(const juce::String& text)
 
 void SuiteSettingsPanel::refreshAiAccountUi()
 {
-    accountSelectorCombo.clear(juce::dontSendNotification);
-    for (int index = 0; index < aiSettings.accounts.size(); ++index)
-    {
-        const auto& account = aiSettings.accounts.getReference(index);
-        auto label = account.accountLabel.trim();
-        if (label.isEmpty())
-            label = "Suite Account " + juce::String(index + 1);
-        accountSelectorCombo.addItem(label, comboItemIdForIndex(index));
-    }
-
     if (aiSettings.accounts.isEmpty())
         selectedAccountIndex = -1;
     else if (! juce::isPositiveAndBelow(selectedAccountIndex, aiSettings.accounts.size()))
         selectedAccountIndex = 0;
 
-    accountSelectorCombo.setSelectedItemIndex(selectedAccountIndex, juce::dontSendNotification);
-    removeAccountButton.setEnabled(aiSettings.accounts.size() > 1);
-    refreshAccountSelectors();
+    accountListBox.updateContent();
+    if (selectedAccountIndex >= 0)
+        accountListBox.selectRow(selectedAccountIndex);
+    else
+        accountListBox.deselectAllRows();
+
+    removeAccountButton.setEnabled(selectedAccountIndex >= 0);
+    editAccountButton.setEnabled(selectedAccountIndex >= 0);
+    refreshSelectedAccountSummary();
 }
 
-void SuiteSettingsPanel::refreshAccountSelectors()
+int SuiteSettingsPanel::AccountListBoxModel::getNumRows()
 {
-    auto fillAccountCombo = [&](juce::ComboBox& comboBox, const juce::String& selectedAccountId)
-    {
-        comboBox.clear(juce::dontSendNotification);
-        comboBox.addItem("(Use Suite Default)", 1);
-        for (int index = 0; index < aiSettings.accounts.size(); ++index)
-        {
-            const auto& account = aiSettings.accounts.getReference(index);
-            auto label = account.accountLabel.trim();
-            if (label.isEmpty())
-                label = "Suite Account " + juce::String(index + 1);
-            comboBox.addItem(label, index + 2);
-            if (account.accountId == selectedAccountId)
-                comboBox.setSelectedId(index + 2, juce::dontSendNotification);
-        }
-
-        if (selectedAccountId.isEmpty())
-            comboBox.setSelectedId(1, juce::dontSendNotification);
-    };
-
-    defaultAccountCombo.clear(juce::dontSendNotification);
-    for (int index = 0; index < aiSettings.accounts.size(); ++index)
-    {
-        const auto& account = aiSettings.accounts.getReference(index);
-        auto label = account.accountLabel.trim();
-        if (label.isEmpty())
-            label = "Suite Account " + juce::String(index + 1);
-        defaultAccountCombo.addItem(label, comboItemIdForIndex(index));
-        if (account.accountId == aiSettings.defaultAccountId)
-            defaultAccountCombo.setSelectedId(comboItemIdForIndex(index), juce::dontSendNotification);
-    }
-    if (defaultAccountCombo.getSelectedId() == 0 && aiSettings.accounts.size() > 0)
-        defaultAccountCombo.setSelectedId(1, juce::dontSendNotification);
-
-    auto applySelection = [&](AppSelectionRow& row, creation::assets::SuiteAppDomain domain)
-    {
-        const auto* selection = creation::services::SuiteAiSettingsResolver::findAppSelection(aiSettings, domain);
-        fillAccountCombo(row.accountCombo, selection != nullptr ? selection->accountId : juce::String());
-        row.modelOverrideEditor.setText(selection != nullptr ? selection->modelNameOverride : juce::String(),
-                                        juce::dontSendNotification);
-    };
-
-    applySelection(stationSelectionRow, creation::assets::SuiteAppDomain::station);
-    applySelection(engineSelectionRow, creation::assets::SuiteAppDomain::engine);
-    applySelection(movieSelectionRow, creation::assets::SuiteAppDomain::movie);
-    applySelection(liveSelectionRow, creation::assets::SuiteAppDomain::live);
+    return owner.aiSettings.accounts.size();
 }
 
-void SuiteSettingsPanel::pushCurrentEditorToSelectedAccount()
+void SuiteSettingsPanel::AccountListBoxModel::paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected)
 {
-    if (! juce::isPositiveAndBelow(selectedAccountIndex, aiSettings.accounts.size()))
+    if (! juce::isPositiveAndBelow(rowNumber, owner.aiSettings.accounts.size()))
         return;
 
-    auto& account = aiSettings.accounts.getReference(selectedAccountIndex);
-    account.accountLabel = accountLabelEditor.getText().trim();
-    account.baseUrl = endpointEditor.getText().trim();
-    account.modelName = modelEditor.getText().trim();
-    account.apiKey = apiKeyEditor.getText();
+    if (rowIsSelected)
+        g.fillAll(accentColour().withAlpha(0.16f));
 
-    const auto providerIndex = providerCombo.getSelectedItemIndex();
-    if (juce::isPositiveAndBelow(providerIndex, aiProviders.size()))
-        account.providerId = aiProviders.getReference(providerIndex).id;
+    const auto& account = owner.aiSettings.accounts.getReference(rowNumber);
+    auto label = account.accountLabel.trim();
+    if (label.isEmpty())
+        label = "Suite Account " + juce::String(rowNumber + 1);
+    const auto providerDisplayName = creation::services::SuiteAiProviderRuntime::resolveProfile(account.providerId).displayName;
+
+    auto area = juce::Rectangle<int>(0, 0, width, height).reduced(10, 2);
+
+    g.setColour(juce::Colours::white);
+    g.setFont(juce::Font(15.0f).boldened());
+    g.drawText(label, area.removeFromTop(height / 2), juce::Justification::centredLeft, true);
+
+    g.setColour(hintColour());
+    g.setFont(juce::Font(12.0f));
+    const auto detail = providerDisplayName + "  \xe2\x80\xa2  " + juce::String(account.cachedModelIds.size()) + " model(s) cached";
+    g.drawText(detail, area, juce::Justification::centredLeft, true);
 }
 
-void SuiteSettingsPanel::pullSelectedAccountIntoEditor()
+void SuiteSettingsPanel::AccountListBoxModel::selectedRowsChanged(int lastRowSelected)
+{
+    owner.selectedAccountIndex = lastRowSelected;
+    owner.editAccountButton.setEnabled(lastRowSelected >= 0);
+    owner.removeAccountButton.setEnabled(lastRowSelected >= 0);
+    owner.refreshSelectedAccountSummary();
+}
+
+void SuiteSettingsPanel::persistAiSettings()
+{
+    if (onApplyAiSettingsRequested)
+        onApplyAiSettingsRequested(aiSettings);
+}
+
+void SuiteSettingsPanel::refreshSelectedAccountSummary()
 {
     if (! juce::isPositiveAndBelow(selectedAccountIndex, aiSettings.accounts.size()))
     {
-        providerCombo.setSelectedId(0, juce::dontSendNotification);
-        accountLabelEditor.clear();
-        endpointEditor.clear();
-        modelEditor.clear();
-        apiKeyEditor.clear();
+        accountSummaryLabel.setText("No AI accounts configured yet. Use + Account to add one.", juce::dontSendNotification);
         return;
     }
 
     const auto& account = aiSettings.accounts.getReference(selectedAccountIndex);
-    accountLabelEditor.setText(account.accountLabel, juce::dontSendNotification);
-    endpointEditor.setText(account.baseUrl, juce::dontSendNotification);
-    modelEditor.setText(account.modelName, juce::dontSendNotification);
-    apiKeyEditor.setText(account.apiKey, juce::dontSendNotification);
+    const auto providerDisplayName = creation::services::SuiteAiProviderRuntime::resolveProfile(account.providerId).displayName;
 
-    auto providerIndex = 0;
-    for (int index = 0; index < aiProviders.size(); ++index)
-        if (aiProviders[index].id == account.providerId)
-            providerIndex = index;
-    providerCombo.setSelectedId(comboItemIdForIndex(providerIndex), juce::dontSendNotification);
+    juce::String summary = providerDisplayName;
+    summary << "  \xe2\x80\xa2  " << account.baseUrl;
+    summary << "  \xe2\x80\xa2  " << account.cachedModelIds.size() << " model(s) cached";
+    summary << "  \xe2\x80\xa2  each tool picks its own model from this account's cached list";
+    accountSummaryLabel.setText(summary, juce::dontSendNotification);
 }
 
-juce::String SuiteSettingsPanel::accountIdForCombo(const juce::ComboBox& comboBox) const
+#if JUCE_DEBUG
+
+SuiteSettingsPanel::VfsFileTreeItem::VfsFileTreeItem(const juce::File& file, std::function<void(const juce::File&)> onSelected)
+    : file_(file), onSelected_(std::move(onSelected))
 {
-    const auto selectedId = comboBox.getSelectedId();
-    if (selectedId <= 1)
-        return {};
-
-    const auto accountIndex = selectedId - 2;
-    if (! juce::isPositiveAndBelow(accountIndex, aiSettings.accounts.size()))
-        return {};
-
-    return aiSettings.accounts[accountIndex].accountId;
 }
+
+bool SuiteSettingsPanel::VfsFileTreeItem::mightContainSubItems()
+{
+    return file_.isDirectory();
+}
+
+void SuiteSettingsPanel::VfsFileTreeItem::itemOpennessChanged(bool isNowOpen)
+{
+    if (! isNowOpen || getNumSubItems() > 0)
+        return;
+
+    juce::Array<juce::File> dirs, files;
+    juce::Array<juce::File> children;
+    file_.findChildFiles(children, juce::File::findFilesAndDirectories, false, "*");
+    for (const auto& child : children)
+        (child.isDirectory() ? dirs : files).add(child);
+
+    dirs.sort();
+    files.sort();
+    for (const auto& d : dirs)
+        addSubItem(new VfsFileTreeItem(d, onSelected_));
+    for (const auto& f : files)
+        addSubItem(new VfsFileTreeItem(f, onSelected_));
+}
+
+void SuiteSettingsPanel::VfsFileTreeItem::paintItem(juce::Graphics& g, int width, int height)
+{
+    g.setColour(juce::Colours::white);
+    g.setFont(13.0f);
+    auto name = file_.getFileName();
+    if (name.isEmpty())
+        name = file_.getFullPathName();
+    if (! file_.isDirectory())
+        name << "   (" << juce::String(file_.getSize()) << " bytes)";
+    g.drawText(name, 2, 0, width - 4, height, juce::Justification::centredLeft, true);
+}
+
+void SuiteSettingsPanel::VfsFileTreeItem::itemClicked(const juce::MouseEvent&)
+{
+    if (file_.isDirectory())
+        setOpen(! isOpen());
+    else if (onSelected_)
+        onSelected_(file_);
+}
+
+SuiteSettingsPanel::VfsEntryTreeItem::VfsEntryTreeItem(juce::String displayName, juce::String fullLogicalPath, bool isLeaf,
+                                                       std::function<void(const juce::String&)> onSelected)
+    : displayName_(std::move(displayName)), fullLogicalPath_(std::move(fullLogicalPath)), isLeaf_(isLeaf),
+      onSelected_(std::move(onSelected))
+{
+}
+
+void SuiteSettingsPanel::VfsEntryTreeItem::addChildPath(const juce::StringArray& remainingSegments, const juce::String& fullLogicalPath)
+{
+    if (remainingSegments.isEmpty())
+        return;
+
+    if (remainingSegments.size() == 1)
+    {
+        addSubItem(new VfsEntryTreeItem(remainingSegments[0], fullLogicalPath, true, onSelected_));
+        return;
+    }
+
+    auto* child = findOrCreateChild(remainingSegments[0]);
+    juce::StringArray rest;
+    for (int i = 1; i < remainingSegments.size(); ++i)
+        rest.add(remainingSegments[i]);
+    child->addChildPath(rest, fullLogicalPath);
+}
+
+SuiteSettingsPanel::VfsEntryTreeItem* SuiteSettingsPanel::VfsEntryTreeItem::findOrCreateChild(const juce::String& segment)
+{
+    for (int i = 0; i < getNumSubItems(); ++i)
+    {
+        auto* existing = dynamic_cast<VfsEntryTreeItem*>(getSubItem(i));
+        if (existing != nullptr && existing->displayName_ == segment)
+            return existing;
+    }
+
+    auto* created = new VfsEntryTreeItem(segment, juce::String(), false, onSelected_);
+    addSubItem(created);
+    return created;
+}
+
+void SuiteSettingsPanel::VfsEntryTreeItem::paintItem(juce::Graphics& g, int width, int height)
+{
+    g.setColour(juce::Colours::white);
+    g.setFont(13.0f);
+    g.drawText(displayName_, 2, 0, width - 4, height, juce::Justification::centredLeft, true);
+}
+
+void SuiteSettingsPanel::VfsEntryTreeItem::itemClicked(const juce::MouseEvent&)
+{
+    if (isLeaf_)
+    {
+        if (onSelected_)
+            onSelected_(fullLogicalPath_);
+    }
+    else
+    {
+        setOpen(! isOpen());
+    }
+}
+
+void SuiteSettingsPanel::buildVfsBrowserTree()
+{
+    vfsTreeView.setRootItem(nullptr);
+    vfsTreeRoot.reset();
+
+    auto invisibleRoot = std::make_unique<VfsEntryTreeItem>("root", juce::String(), false, nullptr);
+
+    auto fsRoot = creation::suite::getSuiteRootDirectory(currentSettings);
+    invisibleRoot->addSubItem(new VfsFileTreeItem(fsRoot, [this](const juce::File& file) { showVfsFileContent(file); }));
+
+    auto* entriesRoot = new VfsEntryTreeItem("Suite Entries (via VFS service)", juce::String(), false,
+        [this](const juce::String& path) { showVfsEntryContent(path); });
+
+    creation::services::SuiteVfsServiceClient client;
+    juce::StringArray entryPaths;
+    if (client.discover() && client.listEntries(entryPaths))
+    {
+        for (const auto& path : entryPaths)
+        {
+            auto segments = juce::StringArray::fromTokens(path, "/", "");
+            segments.removeEmptyStrings();
+            if (! segments.isEmpty())
+                entriesRoot->addChildPath(segments, path);
+        }
+    }
+    invisibleRoot->addSubItem(entriesRoot);
+
+    vfsTreeRoot = std::move(invisibleRoot);
+    vfsTreeView.setRootItem(vfsTreeRoot.get());
+    vfsTreeView.setRootItemVisible(false);
+    vfsTreeRoot->setOpen(true);
+}
+
+void SuiteSettingsPanel::showVfsFileContent(const juce::File& file)
+{
+    if (file.hasFileExtension(".csproj"))
+    {
+        setVfsContentText(file.getFullPathName(), {}, false,
+            "Binary project container (" + juce::String(file.getSize()) + " bytes). Browsing "
+            "container internals isn't supported yet -- see docs/Suite-VFS-Browser-Debug-Tool.md.");
+        return;
+    }
+
+    if (! file.existsAsFile())
+    {
+        setVfsContentText(file.getFullPathName(), {}, false, "(a folder -- select a file to view its content)");
+        return;
+    }
+
+    setVfsContentText(file.getFullPathName(), file.loadFileAsString(), true, {});
+}
+
+void SuiteSettingsPanel::showVfsEntryContent(const juce::String& logicalPath)
+{
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
+    {
+        setVfsContentText(logicalPath, {}, false, "Could not reach the suite VFS service.");
+        return;
+    }
+
+    juce::MemoryBlock data;
+    if (! client.readEntry(logicalPath, data))
+    {
+        setVfsContentText(logicalPath, {}, false, "Could not read this entry.");
+        return;
+    }
+
+    setVfsContentText(logicalPath, juce::String::createStringFromData(data.getData(), static_cast<int>(data.getSize())), true, {});
+}
+
+void SuiteSettingsPanel::setVfsContentText(const juce::String& title, const juce::String& rawContent, bool wasParsed, const juce::String& parseNote)
+{
+    vfsContentTitleLabel.setText(title, juce::dontSendNotification);
+
+    if (! wasParsed)
+    {
+        vfsContentViewer.setText(parseNote, juce::dontSendNotification);
+        return;
+    }
+
+    if (title.endsWithIgnoreCase(".json"))
+    {
+        const auto parsed = juce::JSON::parse(rawContent);
+        if (! parsed.isVoid())
+        {
+            vfsContentViewer.setText(juce::JSON::toString(parsed, false), juce::dontSendNotification);
+            return;
+        }
+        vfsContentViewer.setText("(not valid JSON -- showing raw content)\n\n" + rawContent, juce::dontSendNotification);
+        return;
+    }
+
+    if (title.endsWithIgnoreCase(".xml"))
+    {
+        if (auto xml = juce::parseXML(rawContent))
+        {
+            vfsContentViewer.setText(xml->toString(), juce::dontSendNotification);
+            return;
+        }
+        vfsContentViewer.setText("(not valid XML -- showing raw content)\n\n" + rawContent, juce::dontSendNotification);
+        return;
+    }
+
+    vfsContentViewer.setText(rawContent, juce::dontSendNotification);
+}
+
+#endif

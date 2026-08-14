@@ -1,5 +1,6 @@
 #include "creation/assets/AssetMaterializer.h"
 
+#include "creation/services/SuiteVfsServiceClient.h"
 #include "creation/suite/SuiteStoragePaths.h"
 
 namespace creation::assets
@@ -16,7 +17,6 @@ juce::String normalizeLogicalPath(const juce::String& logicalPath)
 }
 
 bool AssetMaterializer::materializeEntry(const creation::suite::SuiteSettings& settings,
-                                         const creation::vfs::SuiteVolume& volume,
                                          const juce::String& projectId,
                                          const juce::String& logicalPath,
                                          MaterializationAccess access,
@@ -25,9 +25,19 @@ bool AssetMaterializer::materializeEntry(const creation::suite::SuiteSettings& s
 {
     const auto normalized = normalizeLogicalPath(logicalPath);
 
-    juce::MemoryBlock data;
-    if (! volume.readFile(normalized, data, errorMessage))
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
+    {
+        errorMessage = "Could not reach the suite VFS service.";
         return false;
+    }
+
+    juce::MemoryBlock data;
+    if (! client.readProjectEntry(projectId, normalized, data))
+    {
+        errorMessage = "Could not read the entry from the suite VFS service.";
+        return false;
+    }
 
     const auto materializedRoot = creation::suite::getMaterializedFilesDirectory(settings, projectId);
     if (! materializedRoot.exists() && ! materializedRoot.createDirectory())

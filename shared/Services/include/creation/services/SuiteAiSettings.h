@@ -24,6 +24,12 @@ struct SuiteAiAccountSettings
     juce::String modelName;
     juce::String apiKey;
     bool enabled = true;
+
+    // Populated by "Refresh" in the Add/Edit Account dialog (SuiteSettingsPanel), which calls the
+    // provider's real model-list API for this account's key. Cached here, per account, so every
+    // app in the suite reads the same list instead of re-querying the provider itself.
+    juce::StringArray cachedModelIds;
+    juce::String modelsFetchedAt;
 };
 
 struct SuiteAiSettings
@@ -58,6 +64,13 @@ class SuiteAiSettingsStore final
 public:
     SuiteAiSettings load(juce::String& errorMessage) const;
     bool save(const SuiteAiSettings& settings, juce::String& errorMessage) const;
+
+    // Reconnects to every account that has what it needs (a key, or a keyless local provider)
+    // and re-caches its model list, then persists the result. Meant to run once per app startup,
+    // not polled continuously - the Add/Edit Account dialog's own Connect button remains the
+    // manual per-account trigger. An account that fails to connect keeps its existing cache
+    // rather than being cleared out by a transient network hiccup.
+    SuiteAiSettings refreshAllAccountModelCaches(juce::String& errorMessage) const;
 };
 
 class SuiteAiProviderCatalog
@@ -88,5 +101,13 @@ public:
                                             const SuiteAiResolvedRuntimeSettings& runtimeSettings,
                                             const juce::String& accountLabel,
                                             bool setAsDefaultIfEmpty = true);
+
+    // Points an app at an already-configured suite account - never creates or edits an account.
+    // Accounts are only ever created/edited at the suite level (SuiteSettingsPanel's Add Account
+    // dialog); every app just selects among them via this.
+    static void selectAccountForApp(SuiteAiSettings& settings,
+                                    creation::assets::SuiteAppDomain appDomain,
+                                    const juce::String& accountId,
+                                    const juce::String& modelNameOverride = {});
 };
 }
