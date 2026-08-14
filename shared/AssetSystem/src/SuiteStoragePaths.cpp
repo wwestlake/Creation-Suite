@@ -84,8 +84,7 @@ juce::File getTemplatesDirectory(const SuiteSettings& settings)
 
 juce::File getCacheDirectory(const SuiteSettings& settings)
 {
-    juce::ignoreUnused(settings);
-    return getInternalSuiteDataDirectory().getChildFile("Cache");
+    return getSuiteRootDirectory(settings).getChildFile("Cache");
 }
 
 juce::File getAppProjectsDirectory(const SuiteSettings& settings,
