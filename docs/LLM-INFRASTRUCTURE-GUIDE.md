@@ -53,6 +53,13 @@ Do not:
 - treat a project folder as the source of truth
 - bypass `ProjectWorkspaceService` or `ProjectContainerService` for new suite-level workflows
 
+Important boundary:
+
+- canonical project save/load and suite settings persistence must go through the suite-managed VFS/service path
+- user-directed external import/export may use direct filesystem I/O where appropriate
+
+Do not "service-wrap" a simple external export path just for ideological consistency if the user is explicitly exporting a file to an external disk location. The service is for suite-managed truth, not for every possible file write.
+
 ### Shared UI Shell
 
 Primary location:

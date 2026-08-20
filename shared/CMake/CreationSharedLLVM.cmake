@@ -1,4 +1,8 @@
+include_guard(GLOBAL)
+include("${CMAKE_CURRENT_LIST_DIR}/CreationSuiteBuildSettings.cmake")
+
 function(configure_creation_shared_llvm APP_PREFIX APP_DISPLAY_NAME)
+    creation_suite_init_build_settings()
     option(${APP_PREFIX}_ENABLE_SCRIPTING "Build ${APP_DISPLAY_NAME}'s LLVM-backed language host layer" ON)
 
     if(NOT ${APP_PREFIX}_ENABLE_SCRIPTING)
@@ -7,7 +11,7 @@ function(configure_creation_shared_llvm APP_PREFIX APP_DISPLAY_NAME)
 
     set(_local_vcpkg_dir "${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows")
     set(_apps_engine_vcpkg_dir "${CMAKE_SOURCE_DIR}/../CreationEngine/vcpkg_installed/x64-windows")
-    set(_suite_apps_engine_vcpkg_dir "${CMAKE_CURRENT_LIST_DIR}/../../apps/CreationEngine/vcpkg_installed/x64-windows")
+    set(_suite_apps_engine_vcpkg_dir "${CREATION_SUITE_REPO_ROOT}/apps/CreationEngine/vcpkg_installed/x64-windows")
 
     if(DEFINED CE_LLVM_VCPKG_DIR AND EXISTS "${CE_LLVM_VCPKG_DIR}")
         set(_llvm_root "${CE_LLVM_VCPKG_DIR}")

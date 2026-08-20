@@ -1,3 +1,6 @@
+include("${CMAKE_CURRENT_LIST_DIR}/../CMake/CreationSuiteBuildSettings.cmake")
+creation_suite_init_build_settings()
+
 add_library(creation_suite_asset_system STATIC
     src/AssetTypes.cpp
     src/AssetCatalog.cpp
@@ -24,6 +27,9 @@ add_library(creation_suite_asset_system STATIC
 target_include_directories(creation_suite_asset_system PUBLIC include)
 target_link_libraries(creation_suite_asset_system PUBLIC juce::juce_core creation_suite_vfs)
 target_compile_features(creation_suite_asset_system PUBLIC cxx_std_20)
+creation_suite_get_shared_bin_dir(CREATION_SUITE_ASSET_SYSTEM_BIN_DIR)
+target_compile_definitions(creation_suite_asset_system PRIVATE
+    CREATION_SUITE_SHARED_BIN_DIR="${CREATION_SUITE_ASSET_SYSTEM_BIN_DIR}")
 
 add_executable(creation_suite_asset_system_smoke
     tests/AssetSystemSmoke.cpp

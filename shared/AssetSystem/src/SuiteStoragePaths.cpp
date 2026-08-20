@@ -38,6 +38,7 @@ juce::String appDomainFolderName(creation::assets::SuiteAppDomain domain)
     {
         case creation::assets::SuiteAppDomain::station: return "Creation Station";
         case creation::assets::SuiteAppDomain::engine: return "Creation Engine";
+        case creation::assets::SuiteAppDomain::engineer: return "Creation Engineer";
         case creation::assets::SuiteAppDomain::movie: return "Creation Movie";
         case creation::assets::SuiteAppDomain::live: return "Creation Live";
         case creation::assets::SuiteAppDomain::texture: return "Creation Texture";

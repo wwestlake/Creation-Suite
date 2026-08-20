@@ -28,15 +28,6 @@ public:
     void resized() override;
 
 private:
-    struct HighlightArea
-    {
-        float x = 0.0f;
-        float y = 0.0f;
-        float width = 0.0f;
-        float height = 0.0f;
-    };
-
-    HighlightArea getHighlightArea() const noexcept;
     juce::Rectangle<float> getImageBounds() const;
     juce::Rectangle<float> getBottomBarBounds() const;
     void configureActionButton(juce::TextButton& button);

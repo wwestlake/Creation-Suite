@@ -20,6 +20,7 @@ juce::String toStorageToken(SuiteAppDomain domain)
     {
         case SuiteAppDomain::station: return "station";
         case SuiteAppDomain::engine: return "engine";
+        case SuiteAppDomain::engineer: return "engineer";
         case SuiteAppDomain::movie: return "movie";
         case SuiteAppDomain::live: return "live";
         case SuiteAppDomain::texture: return "texture";
@@ -36,6 +37,7 @@ SuiteAppDomain suiteAppDomainFromStorageToken(const juce::String& token)
     const auto normalized = token.trim().toLowerCase();
     if (normalized == "station") return SuiteAppDomain::station;
     if (normalized == "engine") return SuiteAppDomain::engine;
+    if (normalized == "engineer") return SuiteAppDomain::engineer;
     if (normalized == "movie") return SuiteAppDomain::movie;
     if (normalized == "live") return SuiteAppDomain::live;
     if (normalized == "texture") return SuiteAppDomain::texture;
@@ -50,6 +52,7 @@ juce::String toDisplayName(SuiteAppDomain domain)
     {
         case SuiteAppDomain::station: return "Creation Station";
         case SuiteAppDomain::engine: return "Creation Engine";
+        case SuiteAppDomain::engineer: return "Creation Engineer";
         case SuiteAppDomain::movie: return "Creation Movie";
         case SuiteAppDomain::live: return "Creation Live";
         case SuiteAppDomain::texture: return "Creation Texture";

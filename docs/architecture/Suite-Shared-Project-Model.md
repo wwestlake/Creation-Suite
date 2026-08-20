@@ -28,15 +28,40 @@ A project is a real folder tree in the VFS — plain files and subdirectories on
 
 **Status of this correction**: documented now (2026-08-11) after being stated more than once and not landing in this doc previously — see the root `AGENTS.md`'s Storage Boundary Rule and "No false backward-compat" precedent (memory: `feedback-no-false-backward-compat`) for the same underlying pattern: don't preserve an implementation choice just because it already exists and works, in a suite that is still under construction. The actual migration off the packed-container format to plain folders has not been implemented yet — tracked as follow-up work.
 
-## Mechanism: a suite-owned background VFS service, sole owner of the entire VFS
+## Mechanism: a suite-owned background VFS service, sole owner of suite-managed storage
 
 Decided 2026-08-03; project storage explicitly folded into it above.
 
-A single background process — `CreationSuiteVfsService`, not any app process — owns the entire VFS exclusively: settings entries and project folders alike, the whole tree, one owner, by construction. No app ever touches VFS files directly, on any part of the tree, ever. Every app is a client of this service. There is no handoff model and no concurrent ownership between apps: every app just talks to the service, for every read/write, whenever it needs to, regardless of focus state — it stores/reads files in whatever project it has open, through the service, same as any other VFS access.
+A single background process — `CreationSuiteVfsService`, not any app process — owns suite-managed storage exclusively: settings entries and project folders alike, the whole VFS tree, one owner, by construction. Every app is a client of this service for canonical suite save/load. There is no handoff model and no concurrent ownership between apps for suite-managed project data: every app just talks to the service, for every project/settings read/write, whenever it needs to, regardless of focus state — it stores/reads files in whatever project it has open, through the service, same as any other VFS access.
 
 This removes the multi-writer problem at the root: there is only ever one writer, by construction, not by cooperation between apps. It also gives a natural place to push "asset changed" notifications from, since the service already sees every write.
 
 VFS-M4's per-container app-held exclusive lock mechanism (shipped in Movie) does not carry forward under this model — it assumed an app itself could hold a lock on a container file, and under the service-owns-everything model no app ever holds a lock on anything. Not an open question to resolve; a superseded mechanism to retire, not preserve as a parallel path.
+
+### Boundary: suite save/load vs external import/export
+
+The VFS service is the authority for suite-managed persistence:
+
+- opening projects
+- saving projects
+- loading projects
+- reading/writing canonical project assets
+- reading/writing suite-level settings and metadata
+
+That rule does **not** mean every external file interaction must be funneled back through a service API.
+
+User-directed import/export with tools outside the suite may use direct filesystem access at the app level when that is the simplest, most correct implementation:
+
+- importing from a user-picked external file on disk
+- exporting a render, asset, or interchange file to a user-picked destination on disk
+- writing a one-off external deliverable such as WAV, glTF, image sequences, or similar
+
+The boundary is:
+
+- if the data is canonical suite/project state, it belongs in the VFS service
+- if the data is an external interchange/export artifact chosen by the user, direct filesystem I/O is allowed
+
+External exports are not canonical project truth just because they were written by the app. They are deliverables or interchange artifacts, not the authoritative saved project state.
 
 ### Transport: HTTP + WebSocket on localhost
 

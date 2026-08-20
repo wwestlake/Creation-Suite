@@ -16,3 +16,7 @@
 [submodule "apps/CreationModeler"]
 	path = apps/CreationModeler
 	url = https://github.com/wwestlake/Creation-Modeler.git
+[submodule "apps/CreationEngineer"]
+	path = apps/CreationEngineer
+	url = https://github.com/wwestlake/Creation-Engineer.git
+	branch = main

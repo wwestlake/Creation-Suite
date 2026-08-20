@@ -1,15 +1,22 @@
 #include <creation/ui/SuiteCommonSpacePanel.h>
 #include <BinaryData.h>
+#include <algorithm>
+#include <vector>
 
 namespace
 {
-struct HighlightGeometry
+std::vector<creation::ui::SuiteLogoId> getAppLogoIds()
 {
-    float x = 0.0f;
-    float y = 0.0f;
-    float width = 0.0f;
-    float height = 0.0f;
-};
+    return {
+        creation::ui::SuiteLogoId::texture,
+        creation::ui::SuiteLogoId::modeler,
+        creation::ui::SuiteLogoId::station,
+        creation::ui::SuiteLogoId::engine,
+        creation::ui::SuiteLogoId::engineer,
+        creation::ui::SuiteLogoId::movie,
+        creation::ui::SuiteLogoId::live
+    };
+}
 
 juce::Image loadBannerFromRepository()
 {
@@ -43,47 +50,161 @@ juce::Image loadBackgroundImage()
     return loadBannerFromRepository();
 }
 
-juce::Rectangle<float> scaleNormalizedRect(juce::Rectangle<float> bounds,
-                                           float x,
-                                           float y,
-                                           float width,
-                                           float height)
+juce::Rectangle<float> getSuiteHeroBounds(juce::Rectangle<float> imageBounds)
 {
-    return { bounds.getX() + bounds.getWidth() * x,
-             bounds.getY() + bounds.getHeight() * y,
-             bounds.getWidth() * width,
-             bounds.getHeight() * height };
+    auto width = juce::jmin(imageBounds.getWidth() * 0.34f, 320.0f);
+    auto height = juce::jmin(imageBounds.getHeight() * 0.34f, 220.0f);
+    auto x = imageBounds.getCentreX() - width * 0.5f;
+    auto y = imageBounds.getY() + imageBounds.getHeight() * 0.055f;
+    return { x, y, width, height };
 }
 
-constexpr float kAppHighlightXPadding = 0.010f;
-constexpr float kAppHighlightYPadding = 0.010f;
-constexpr float kAppHighlightWidth = 0.292f;
-constexpr float kAppHighlightHeight = 0.236f;
-
-HighlightGeometry makeAppHighlight(float x, float y)
+juce::Rectangle<float> getAppGridBounds(juce::Rectangle<float> imageBounds)
 {
-    return { x - kAppHighlightXPadding,
-             y - kAppHighlightYPadding,
-             kAppHighlightWidth,
-             kAppHighlightHeight };
+    auto top = getSuiteHeroBounds(imageBounds).getBottom() + imageBounds.getHeight() * 0.045f;
+    auto bottomPadding = imageBounds.getHeight() * 0.045f;
+    return imageBounds.withTrimmedTop(top - imageBounds.getY())
+                      .withTrimmedBottom(bottomPadding);
 }
 
-HighlightGeometry getAppHighlightGeometry(creation::ui::SuiteLogoId logoId) noexcept
+juce::Rectangle<float> getLogoCardBounds(creation::ui::SuiteLogoId logoId,
+                                         juce::Rectangle<float> imageBounds) noexcept
 {
-    switch (logoId)
+    if (logoId == creation::ui::SuiteLogoId::suite)
+        return getSuiteHeroBounds(imageBounds);
+
+    const auto logos = getAppLogoIds();
+    const auto found = std::find(logos.begin(), logos.end(), logoId);
+    if (found == logos.end())
+        return {};
+
+    auto grid = getAppGridBounds(imageBounds);
+    constexpr int columns = 4;
+    constexpr float gap = 18.0f;
+
+    const auto index = static_cast<int>(std::distance(logos.begin(), found));
+    const auto rows = static_cast<int>((logos.size() + columns - 1) / columns);
+    const auto row = index / columns;
+    const auto indexInRow = index % columns;
+    const auto itemsInRow = row == rows - 1 ? static_cast<int>(logos.size()) - row * columns : columns;
+
+    auto cardWidth = (grid.getWidth() - gap * (columns - 1)) / static_cast<float>(columns);
+    auto cardHeight = (grid.getHeight() - gap * juce::jmax(0, rows - 1)) / static_cast<float>(rows);
+    auto rowWidth = cardWidth * itemsInRow + gap * juce::jmax(0, itemsInRow - 1);
+    auto rowStartX = grid.getCentreX() - rowWidth * 0.5f;
+    auto x = rowStartX + indexInRow * (cardWidth + gap);
+    auto y = grid.getY() + row * (cardHeight + gap);
+    return { x, y, cardWidth, cardHeight };
+}
+
+juce::Rectangle<float> getIconBounds(juce::Rectangle<float> cardBounds)
+{
+    auto iconSize = juce::jmin(cardBounds.getHeight() * 0.66f, cardBounds.getWidth() * 0.26f);
+    auto x = cardBounds.getX() + 18.0f;
+    auto y = cardBounds.getCentreY() - iconSize * 0.5f;
+    return { x, y, iconSize, iconSize };
+}
+
+void drawCard(juce::Graphics& g,
+              juce::Rectangle<float> bounds,
+              creation::ui::SuiteLogoId logoId,
+              bool selected)
+{
+    auto accent = creation::ui::getSuiteLogoAccentColour(logoId);
+    const auto cardAlpha = selected ? 1.0f : 0.5f;
+    auto panelColour = juce::Colour(0xd9151c27).withMultipliedAlpha(cardAlpha);
+
+    if (selected)
     {
-        case creation::ui::SuiteLogoId::texture: return makeAppHighlight(0.042f, 0.505f);
-        case creation::ui::SuiteLogoId::modeler: return makeAppHighlight(0.356f, 0.505f);
-        case creation::ui::SuiteLogoId::station: return makeAppHighlight(0.646f, 0.505f);
-        case creation::ui::SuiteLogoId::engine: return makeAppHighlight(0.042f, 0.748f);
-        case creation::ui::SuiteLogoId::movie: return makeAppHighlight(0.356f, 0.748f);
-        case creation::ui::SuiteLogoId::live: return makeAppHighlight(0.646f, 0.748f);
-        case creation::ui::SuiteLogoId::suite: break;
+        juce::DropShadow glow(accent.withAlpha(0.34f), 18, { 0, 0 });
+        glow.drawForRectangle(g, bounds.expanded(8.0f, 6.0f).toNearestInt());
     }
 
-    return {};
+    g.setColour(panelColour);
+    g.fillRoundedRectangle(bounds, 16.0f);
+    g.setColour(selected ? accent.withAlpha(0.80f)
+                         : juce::Colour(0x55394b61).withMultipliedAlpha(0.5f));
+    g.drawRoundedRectangle(bounds, 16.0f, selected ? 2.0f : 1.0f);
+
+    auto iconBounds = getIconBounds(bounds);
+    auto icon = creation::ui::getSuiteLogoImage(logoId);
+    if (icon.isValid())
+    {
+        g.setOpacity(cardAlpha);
+        g.drawImageWithin(icon,
+                          juce::roundToInt(iconBounds.getX()),
+                          juce::roundToInt(iconBounds.getY()),
+                          juce::roundToInt(iconBounds.getWidth()),
+                          juce::roundToInt(iconBounds.getHeight()),
+                          juce::RectanglePlacement::centred,
+                          false);
+        g.setOpacity(1.0f);
+    }
+
+    auto textArea = bounds;
+    textArea.removeFromLeft(iconBounds.getRight() - bounds.getX() + 16.0f);
+    textArea.reduce(0.0f, 14.0f);
+
+    g.setColour(juce::Colour(0xfff4f7fb).withMultipliedAlpha(cardAlpha));
+    g.setFont(juce::Font(13.0f).boldened());
+    g.drawText("CREATION",
+               textArea.removeFromTop(20.0f).toNearestInt(),
+               juce::Justification::centredLeft,
+               true);
+
+    g.setColour((selected ? accent.brighter(0.05f) : accent.withMultipliedSaturation(0.85f))
+                    .withMultipliedAlpha(cardAlpha));
+    g.setFont(juce::Font(22.0f).boldened());
+
+    auto name = creation::ui::getSuiteLogoDisplayName(logoId);
+    auto shortName = name.fromFirstOccurrenceOf("Creation ", false, false).toUpperCase();
+    g.drawText(shortName,
+               textArea.toNearestInt(),
+               juce::Justification::centredLeft,
+               true);
 }
 
+void drawSuiteHero(juce::Graphics& g,
+                   juce::Rectangle<float> bounds,
+                   bool selected)
+{
+    auto accent = creation::ui::getSuiteLogoAccentColour(creation::ui::SuiteLogoId::suite);
+
+    juce::DropShadow heroGlow(accent.withAlpha(selected ? 0.36f : 0.24f), 24, { 0, 0 });
+    heroGlow.drawForRectangle(g, bounds.expanded(10.0f, 10.0f).toNearestInt());
+
+    g.setGradientFill(juce::ColourGradient(juce::Colour(0xbf111824), bounds.getX(), bounds.getY(),
+                                           juce::Colour(0x8c0c1018), bounds.getRight(), bounds.getBottom(), false));
+    g.fillRoundedRectangle(bounds, 24.0f);
+    g.setColour(selected ? accent.withAlpha(0.75f) : juce::Colour(0x55394b61));
+    g.drawRoundedRectangle(bounds, 24.0f, selected ? 2.0f : 1.0f);
+
+    auto content = bounds.reduced(22.0f, 16.0f);
+    auto iconArea = content.removeFromTop(content.getHeight() * 0.63f);
+    auto icon = creation::ui::getSuiteLogoImage(creation::ui::SuiteLogoId::suite);
+    if (icon.isValid())
+        g.drawImageWithin(icon,
+                          juce::roundToInt(iconArea.getX()),
+                          juce::roundToInt(iconArea.getY()),
+                          juce::roundToInt(iconArea.getWidth()),
+                          juce::roundToInt(iconArea.getHeight()),
+                          juce::RectanglePlacement::centred,
+                          false);
+
+    g.setColour(juce::Colours::white);
+    g.setFont(juce::Font(17.0f).boldened());
+    g.drawText("CREATION",
+               content.removeFromTop(24.0f).toNearestInt(),
+               juce::Justification::centred,
+               true);
+
+    g.setColour(accent);
+    g.setFont(juce::Font(28.0f).boldened());
+    g.drawText("SUITE",
+               content.toNearestInt(),
+               juce::Justification::centred,
+               true);
+}
 }
 
 namespace creation::ui
@@ -161,22 +282,27 @@ void SuiteCommonSpacePanel::paint(juce::Graphics& g)
                           false);
     }
 
-    auto accent = getSuiteLogoAccentColour(selectedLogoId);
-    auto highlight = getHighlightArea();
-    auto selectedArea = scaleNormalizedRect(imageBounds,
-                                            highlight.x,
-                                            highlight.y,
-                                            highlight.width,
-                                            highlight.height);
+    g.setGradientFill(juce::ColourGradient(juce::Colour(0x46050a10), imageBounds.getCentreX(), imageBounds.getY(),
+                                           juce::Colour(0xb0141921), imageBounds.getCentreX(), imageBounds.getBottom(), false));
+    g.fillRect(imageBounds);
 
-    juce::DropShadow glow(accent.withAlpha(0.22f), 16, { 0, 0 });
-    glow.drawForRectangle(g, selectedArea.expanded(8.0f, 5.0f).toNearestInt());
-    g.setColour(accent.withAlpha(0.015f));
-    g.fillRoundedRectangle(selectedArea.expanded(3.0f, 2.0f), 12.0f);
-    g.setColour(accent.withAlpha(0.16f));
-    g.drawRoundedRectangle(selectedArea.expanded(1.0f, 1.0f), 11.0f, 1.0f);
+    auto suiteBounds = getLogoCardBounds(SuiteLogoId::suite, imageBounds);
+    drawSuiteHero(g, suiteBounds, selectedLogoId == SuiteLogoId::suite);
+
+    for (auto logoId : getAppLogoIds())
+        drawCard(g, getLogoCardBounds(logoId, imageBounds), logoId, selectedLogoId == logoId);
+
+    auto taglineBounds = imageBounds.withTrimmedTop(imageBounds.getHeight() * 0.90f)
+                                   .reduced(24.0f, 0.0f);
+    g.setColour(juce::Colour(0x99f6d79c));
+    g.setFont(juce::Font(20.0f, juce::Font::italic));
+    g.drawFittedText("Beyond here there be dragons.",
+                     taglineBounds.toNearestInt(),
+                     juce::Justification::centred,
+                     1);
 
     auto bottomBar = getBottomBarBounds();
+    auto accent = getSuiteLogoAccentColour(selectedLogoId);
     g.setGradientFill(juce::ColourGradient(juce::Colour(0xdd081018), bottomBar.getX(), bottomBar.getY(),
                                            juce::Colour(0xf0151b24), bottomBar.getX(), bottomBar.getBottom(), false));
     g.fillRoundedRectangle(bottomBar, 18.0f);
@@ -246,26 +372,6 @@ void SuiteCommonSpacePanel::resized()
     primaryActionButton.setBounds(right.removeFromTop(34));
     right.removeFromTop(8);
     secondaryActionButton.setBounds(right.removeFromTop(30));
-}
-
-SuiteCommonSpacePanel::HighlightArea SuiteCommonSpacePanel::getHighlightArea() const noexcept
-{
-    switch (selectedLogoId)
-    {
-        case SuiteLogoId::suite: return { 0.404f, 0.050f, 0.192f, 0.255f };
-        case SuiteLogoId::texture:
-        case SuiteLogoId::modeler:
-        case SuiteLogoId::station:
-        case SuiteLogoId::engine:
-        case SuiteLogoId::movie:
-        case SuiteLogoId::live:
-        {
-            const auto highlight = getAppHighlightGeometry(selectedLogoId);
-            return { highlight.x, highlight.y, highlight.width, highlight.height };
-        }
-    }
-
-    return {};
 }
 
 juce::Rectangle<float> SuiteCommonSpacePanel::getImageBounds() const
