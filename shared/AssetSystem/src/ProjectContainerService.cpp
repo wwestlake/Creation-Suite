@@ -75,6 +75,7 @@ juce::Array<ProjectContainerService::ProjectSummary> ProjectContainerService::li
 
     for (const auto domain : { SuiteAppDomain::station,
                                SuiteAppDomain::engine,
+                               SuiteAppDomain::engineer,
                                SuiteAppDomain::movie,
                                SuiteAppDomain::live,
                                SuiteAppDomain::texture,

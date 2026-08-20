@@ -7,9 +7,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-if(NOT DEFINED JUCE_DIR)
-    message(FATAL_ERROR "Set JUCE_DIR to your JUCE root directory before configuring (same JUCE checkout the other Creation apps use).")
-endif()
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../shared/CMake/CreationSuiteBuildSettings.cmake")
+creation_suite_require_juce()
 
 find_package(httplib CONFIG REQUIRED)
 find_package(ixwebsocket CONFIG REQUIRED)
@@ -65,11 +64,11 @@ target_link_libraries(CreationSuiteVfsService PRIVATE
 )
 
 add_custom_command(TARGET CreationSuiteVfsService POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "D:/CreationSuite-Workspaces/codex-$<LOWER_CASE:$<CONFIG>>-bin"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:CreationSuiteVfsService>" "D:/CreationSuite-Workspaces/codex-$<LOWER_CASE:$<CONFIG>>-bin/"
-    COMMAND cmd /c "if exist \"${CREATION_VFS_DLL_COPY_PREFIX}\\bin\\z.dll\" copy /Y \"${CREATION_VFS_DLL_COPY_PREFIX}\\bin\\z.dll\" \"D:\\CreationSuite-Workspaces\\codex-$<LOWER_CASE:$<CONFIG>>-bin\\\" >nul"
-    COMMAND cmd /c "if exist \"${CREATION_VFS_DLL_COPY_PREFIX}\\debug\\bin\\zd.dll\" copy /Y \"${CREATION_VFS_DLL_COPY_PREFIX}\\debug\\bin\\zd.dll\" \"D:\\CreationSuite-Workspaces\\codex-$<LOWER_CASE:$<CONFIG>>-bin\\\" >nul"
-    COMMENT "Copying CreationSuiteVfsService (and its runtime DLLs) to the shared codex bin directory"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CREATION_SUITE_WORKSPACES_ROOT}/${CREATION_SUITE_AGENT_ID}-$<LOWER_CASE:$<CONFIG>>-bin"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:CreationSuiteVfsService>" "${CREATION_SUITE_WORKSPACES_ROOT}/${CREATION_SUITE_AGENT_ID}-$<LOWER_CASE:$<CONFIG>>-bin/"
+    COMMAND cmd /c "if exist \"${CREATION_VFS_DLL_COPY_PREFIX}\\bin\\z.dll\" copy /Y \"${CREATION_VFS_DLL_COPY_PREFIX}\\bin\\z.dll\" \"${CREATION_SUITE_WORKSPACES_ROOT}\\${CREATION_SUITE_AGENT_ID}-$<LOWER_CASE:$<CONFIG>>-bin\\\" >nul"
+    COMMAND cmd /c "if exist \"${CREATION_VFS_DLL_COPY_PREFIX}\\debug\\bin\\zd.dll\" copy /Y \"${CREATION_VFS_DLL_COPY_PREFIX}\\debug\\bin\\zd.dll\" \"${CREATION_SUITE_WORKSPACES_ROOT}\\${CREATION_SUITE_AGENT_ID}-$<LOWER_CASE:$<CONFIG>>-bin\\\" >nul"
+    COMMENT "Copying CreationSuiteVfsService (and its runtime DLLs) to the shared ${CREATION_SUITE_AGENT_ID} bin directory"
 )
 
 install(TARGETS CreationSuiteVfsService

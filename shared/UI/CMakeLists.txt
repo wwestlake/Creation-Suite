@@ -17,6 +17,7 @@ juce_add_binary_data(creation_suite_ui_assets
         assets/creation_suite.png
         assets/creation_station.png
         assets/creation_engine.png
+        assets/creation_engineer.png
         assets/creation_movie.png
         assets/creation_live.png
         assets/creation_texture.png

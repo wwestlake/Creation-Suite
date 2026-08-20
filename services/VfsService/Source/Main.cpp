@@ -31,12 +31,13 @@ constexpr int kLivenessCheckIntervalMs = 5000;
 
 void appendBootLog(const std::string& message)
 {
-    const char* appData = std::getenv("APPDATA");
-    const std::string base = appData != nullptr ? appData : "C:\\Users\\wwestlake\\AppData\\Roaming";
-    const std::string logsDirectory = base + "\\Creation Suite\\Logs";
-    juce::File(logsDirectory).createDirectory();
+    const auto logsDirectory = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                   .getChildFile("Creation Suite")
+                                   .getChildFile("Logs");
+    logsDirectory.createDirectory();
 
-    std::ofstream out(logsDirectory + "\\CreationSuiteVfsService-boot.log", std::ios::app);
+    std::ofstream out(logsDirectory.getChildFile("CreationSuiteVfsService-boot.log").getFullPathName().toStdString(),
+                      std::ios::app);
     if (! out.is_open())
         return;
 

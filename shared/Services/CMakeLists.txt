@@ -21,6 +21,10 @@ target_include_directories(creation_suite_services PUBLIC include)
 target_link_libraries(creation_suite_services PUBLIC creation_suite_asset_system juce::juce_core juce::juce_data_structures)
 target_compile_features(creation_suite_services PUBLIC cxx_std_20)
 
+if(MSVC)
+    target_compile_options(creation_suite_services PRIVATE /FS)
+endif()
+
 add_executable(creation_suite_services_smoke
     tests/ServicesSmoke.cpp
 )

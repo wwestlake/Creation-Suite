@@ -11,6 +11,7 @@ enum class SuiteAppDomain
     unknown,
     station,
     engine,
+    engineer,
     movie,
     live,
     texture,

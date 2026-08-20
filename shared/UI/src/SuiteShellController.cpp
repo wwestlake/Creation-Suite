@@ -23,6 +23,7 @@ juce::String suiteAuthAppSlug(creation::assets::SuiteAppDomain domain)
     {
         case creation::assets::SuiteAppDomain::station: return "creative-workstation";
         case creation::assets::SuiteAppDomain::engine: return "creation-engine";
+        case creation::assets::SuiteAppDomain::engineer: return "creation-engineer";
         case creation::assets::SuiteAppDomain::movie: return "creation-movie";
         case creation::assets::SuiteAppDomain::live: return "creation-live";
         case creation::assets::SuiteAppDomain::texture: return "creation-texture";
@@ -88,10 +89,11 @@ public:
         domainCombo.addItem("All Applications", 1);
         domainCombo.addItem("Creation Station", 2);
         domainCombo.addItem("Creation Engine", 3);
-        domainCombo.addItem("Creation Movie", 4);
-        domainCombo.addItem("Creation Live", 5);
-        domainCombo.addItem("Creation Texture", 6);
-        domainCombo.addItem("Creation Modeler", 7);
+        domainCombo.addItem("Creation Engineer", 4);
+        domainCombo.addItem("Creation Movie", 5);
+        domainCombo.addItem("Creation Live", 6);
+        domainCombo.addItem("Creation Texture", 7);
+        domainCombo.addItem("Creation Modeler", 8);
         domainCombo.setSelectedId(1, juce::dontSendNotification);
         domainCombo.onChange = [this] { filterProjects(); };
         addAndMakeVisible(domainCombo);
@@ -190,7 +192,7 @@ public:
         {
             if (selectedDomainId > 1)
             {
-                auto targetDomain = static_cast<creation::assets::SuiteAppDomain>(selectedDomainId - 2);
+                auto targetDomain = static_cast<creation::assets::SuiteAppDomain>(selectedDomainId - 1);
                 if (project.manifest.appDomain != targetDomain)
                     continue;
             }

@@ -10,14 +10,27 @@ constexpr const char* kServiceAppId = "CreationSuiteVfsService";
 // every suite executable lands in this shared bin directory.
 juce::File findServiceExecutable()
 {
-#if JUCE_DEBUG
-    constexpr const char* kConfigDir = "codex-debug-bin";
-#else
-    constexpr const char* kConfigDir = "codex-release-bin";
-#endif
-    return juce::File("D:/CreationSuite-Workspaces")
-        .getChildFile(kConfigDir)
-        .getChildFile("CreationSuiteVfsService.exe");
+    const auto currentExeDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
+    const auto siblingService = currentExeDir.getChildFile("CreationSuiteVfsService.exe");
+    if (siblingService.existsAsFile())
+        return siblingService;
+
+    if (const auto configuredBinDir = juce::String(CREATION_SUITE_SHARED_BIN_DIR); configuredBinDir.isNotEmpty())
+    {
+        const auto configuredService = juce::File(configuredBinDir).getChildFile("CreationSuiteVfsService.exe");
+        if (configuredService.existsAsFile())
+            return configuredService;
+    }
+
+    if (const auto envBinDir = juce::SystemStats::getEnvironmentVariable("CREATION_SUITE_SHARED_BIN_DIR", {});
+        envBinDir.isNotEmpty())
+    {
+        const auto configuredService = juce::File(envBinDir).getChildFile("CreationSuiteVfsService.exe");
+        if (configuredService.existsAsFile())
+            return configuredService;
+    }
+
+    return {};
 }
 }
 

@@ -282,6 +282,8 @@ A project is a VFS container, not an app-owned silo. Any app can open any projec
 
 ("Import/export" still applies to interchange with tools *outside* the suite — glTF, third-party DCC formats — see section 8. It does not apply between Creation Suite apps.)
 
+Canonical save/load for suite projects and suite settings goes through the VFS service. External import/export to user-picked filesystem locations does not need to route back through a service call just to write a simple deliverable file to disk. Use the VFS service for suite-managed truth; use direct filesystem I/O for user-directed external interchange/export artifacts.
+
 Needed:
 
 - shared project registry (discovery: which projects exist, which domain they originated in)
