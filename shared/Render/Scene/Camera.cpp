@@ -10,6 +10,14 @@ void Camera::SetPerspective(float fovYRadians, float aspectRatio, float nearPlan
     projection_ = juce::Matrix3D<float>::fromFrustum(left, right, bottom, top, nearPlane, farPlane);
 }
 
+void Camera::SetOrthographic(float left, float right, float bottom, float top, float nearPlane, float farPlane) {
+    projection_ = juce::Matrix3D<float>(2.0f / (right - left), 0.0f, 0.0f, 0.0f,
+                                         0.0f, 2.0f / (top - bottom), 0.0f, 0.0f,
+                                         0.0f, 0.0f, -2.0f / (farPlane - nearPlane), 0.0f,
+                                         -(right + left) / (right - left), -(top + bottom) / (top - bottom),
+                                         -(farPlane + nearPlane) / (farPlane - nearPlane), 1.0f);
+}
+
 void Camera::SetLookAt(juce::Vector3D<float> eye, juce::Vector3D<float> target, juce::Vector3D<float> up) {
     eye_ = eye;
 

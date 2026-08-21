@@ -1,0 +1,53 @@
+[
+    {
+        "id": "material:6063-t5",
+        "displayName": "Aluminum 6063-T5",
+        "alloyDesignation": "6063-T5",
+        "densityKgM3": 2700.0,
+        "yieldStrengthMPa": 145.0,
+        "ultimateTensileStrengthMPa": 186.0,
+        "elasticModulusGPa": 68.3,
+        "shearModulusGPa": 25.8,
+        "poissonsRatio": 0.33,
+        "source": {
+            "kind": "builtinGeneric",
+            "manufacturer": "",
+            "partNumber": "",
+            "notes": "Generic published alloy datasheet figures -- the alloy generic/interoperable T-slot extrusion is commonly made from, not tied to any one vendor."
+        }
+    },
+    {
+        "id": "material:6061-t6",
+        "displayName": "Aluminum 6061-T6",
+        "alloyDesignation": "6061-T6",
+        "densityKgM3": 2700.0,
+        "yieldStrengthMPa": 276.0,
+        "ultimateTensileStrengthMPa": 310.0,
+        "elasticModulusGPa": 68.9,
+        "shearModulusGPa": 26.0,
+        "poissonsRatio": 0.33,
+        "source": {
+            "kind": "builtinGeneric",
+            "manufacturer": "",
+            "partNumber": "",
+            "notes": "Generic published alloy datasheet figures -- common structural aluminum, used here as a stronger alternative and connector-bracket default."
+        }
+    },
+    {
+        "id": "material:a36-steel",
+        "displayName": "Mild Steel A36",
+        "alloyDesignation": "A36",
+        "densityKgM3": 7850.0,
+        "yieldStrengthMPa": 250.0,
+        "ultimateTensileStrengthMPa": 400.0,
+        "elasticModulusGPa": 200.0,
+        "shearModulusGPa": 79.3,
+        "poissonsRatio": 0.26,
+        "source": {
+            "kind": "builtinGeneric",
+            "manufacturer": "",
+            "partNumber": "",
+            "notes": "Generic published structural steel datasheet figures -- used as the default material for steel hardware like drop-in T-nuts."
+        }
+    }
+]

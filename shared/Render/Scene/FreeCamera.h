@@ -36,7 +36,12 @@ namespace ce {
 // need the same treatment.
 class FreeCamera final : private juce::MouseListener {
 public:
-    explicit FreeCamera(juce::Component& viewport);
+    // initialPosition lets a caller with a differently-scaled or -placed
+    // scene (e.g. CreationEngineer's real-unit workstation scenes) start
+    // the camera somewhere other than CreationEngine's own default without
+    // needing a separate constructor overload per caller.
+    explicit FreeCamera(juce::Component& viewport,
+                        juce::Vector3D<float> initialPosition = { 0.0f, 1.6f, 5.0f });
     ~FreeCamera() override;
 
     // Call once per frame from the render thread — advances position_
@@ -60,7 +65,7 @@ private:
     // Angled slightly down by default so a scene sitting near the origin
     // (like the seeded demo entity, at ground level) is actually in view
     // on launch — pitch 0 from this height looks dead level, past it.
-    juce::Vector3D<float> position_{ 0.0f, 1.6f, 5.0f };
+    juce::Vector3D<float> position_;
     std::atomic<float> yaw_{ 0.0f };     // radians; 0 looks down -Z.
     std::atomic<float> pitch_{ -0.25f };
     std::atomic<bool> isLooking_{ false };

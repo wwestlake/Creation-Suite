@@ -4,7 +4,8 @@
 
 namespace ce {
 
-FreeCamera::FreeCamera(juce::Component& viewport) : viewport_(viewport) {
+FreeCamera::FreeCamera(juce::Component& viewport, juce::Vector3D<float> initialPosition)
+    : viewport_(viewport), position_(initialPosition) {
     viewport_.addMouseListener(this, false);
 }
 

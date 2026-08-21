@@ -20,4 +20,37 @@ void GenerateUVSphere(int rings, int segments, std::vector<Vertex>& outVertices,
 // layout, same one BoxTextured.gltf itself uses.
 void GenerateCube(std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices);
 
+// Generates a unit cylinder (radius 0.5, extents -0.5..0.5 along Y, centered
+// at origin) — same -0.5..0.5 convention as GenerateCube, so both primitives
+// scale identically via a plain per-axis size factor. Wall vertices carry
+// smooth radial normals (GenerateUVSphere's ring style); the two end caps
+// get their own flat-normal vertex sets (GenerateCube's per-face technique),
+// since a cap vertex and a wall vertex at the same position need different
+// normals.
+void GenerateCylinder(int segments, std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices);
+
+// Extrudes a T-slot aluminum-extrusion-style cross-section (a square bar
+// with one straight-sided channel notched into each of its four faces,
+// centered along Y, extruded along Y by lengthMeters) centered at the
+// origin. NOT a general polygon-with-holes extruder, and NOT a true two-
+// stage narrow-mouth/wide-body T channel -- a single straight notch per
+// side, built by grid-decomposing the solid into non-overlapping boxes (see
+// the .cpp) rather than hand-tracing a boundary polygon. All parameters are
+// meters, already converted from a ProfileSpec's millimeter fields by the
+// caller. slotOpeningWidthMeters is accepted for forward compatibility with
+// a future true-T-profile generator but is not yet used by this one.
+void GenerateTSlotExtrusion(float outerWidthMeters, float slotOpeningWidthMeters,
+                            float slotChannelWidthMeters, float slotDepthMeters,
+                            float lengthMeters, std::vector<Vertex>& outVertices,
+                            std::vector<GLuint>& outIndices);
+
+// Generic connector hardware meshes (ConnectorSpec-backed scene objects),
+// each centered at the origin so a pure translation places the mesh's
+// bounding-box center at the object's position, same convention as every
+// other generator in this file once its output is placed in the scene.
+void GenerateConnectorCornerBracket(float sizeXMeters, float sizeYMeters, float sizeZMeters,
+                                    std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices);
+void GenerateConnectorTNut(float sizeXMeters, float sizeYMeters, float sizeZMeters,
+                           std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices);
+
 } // namespace ce
