@@ -365,4 +365,57 @@ void GenerateConnectorTNut(float sizeXMeters, float sizeYMeters, float sizeZMete
              { sizeXMeters * 0.5f, sizeYMeters * 0.5f, sizeZMeters * 0.5f });
 }
 
+void BuildFlatShadedMeshFromCage(const std::vector<juce::Vector3D<float>>& corners,
+                                 std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices) {
+    outVertices.clear();
+    outIndices.clear();
+
+    if (corners.size() != 8)
+        return;
+
+    // Each row is one face's 4 corner indices, ordered so cross((b-a),(c-a))
+    // already points outward for the standard (undragged) box -- verified
+    // against the fixed bit-order corner scheme documented in the header.
+    static const int faces[6][4] = {
+        { 0, 4, 6, 2 }, // -X
+        { 1, 3, 7, 5 }, // +X
+        { 0, 1, 5, 4 }, // -Y
+        { 2, 6, 7, 3 }, // +Y
+        { 0, 2, 3, 1 }, // -Z
+        { 4, 5, 7, 6 }, // +Z
+    };
+
+    for (const auto& face : faces) {
+        const auto& a = corners[static_cast<size_t>(face[0])];
+        const auto& b = corners[static_cast<size_t>(face[1])];
+        const auto& c = corners[static_cast<size_t>(face[2])];
+        const auto& d = corners[static_cast<size_t>(face[3])];
+
+        const auto normal = ((b - a) ^ (c - a)).normalised();
+        const juce::Vector3D<float> quad[4] = { a, b, c, d };
+        const float uvs[4][2] = { { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f } };
+
+        const auto baseIndex = static_cast<GLuint>(outVertices.size());
+        for (int i = 0; i < 4; ++i) {
+            Vertex vertex{};
+            vertex.position[0] = quad[i].x;
+            vertex.position[1] = quad[i].y;
+            vertex.position[2] = quad[i].z;
+            vertex.normal[0] = normal.x;
+            vertex.normal[1] = normal.y;
+            vertex.normal[2] = normal.z;
+            vertex.uv[0] = uvs[i][0];
+            vertex.uv[1] = uvs[i][1];
+            outVertices.push_back(vertex);
+        }
+
+        outIndices.push_back(baseIndex + 0);
+        outIndices.push_back(baseIndex + 1);
+        outIndices.push_back(baseIndex + 2);
+        outIndices.push_back(baseIndex + 0);
+        outIndices.push_back(baseIndex + 2);
+        outIndices.push_back(baseIndex + 3);
+    }
+}
+
 } // namespace ce

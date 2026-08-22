@@ -53,4 +53,15 @@ void GenerateConnectorCornerBracket(float sizeXMeters, float sizeYMeters, float 
 void GenerateConnectorTNut(float sizeXMeters, float sizeYMeters, float sizeZMeters,
                            std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices);
 
+// Expands an 8-corner editable vertex cage (fixed bit-order: bit0=+X,
+// bit1=+Y, bit2=+Z -- e.g. corner 0 = (-X,-Y,-Z), corner 7 = (+X,+Y,+Z))
+// into a flat-shaded 24-vertex mesh, the same per-face vertex-duplication
+// technique GenerateCube uses, except each face's normal is *computed* from
+// the corners' actual current positions (cross product of two edges) rather
+// than assumed axis-aligned -- so a cage already dragged away from a simple
+// box still gets a reasonable flat-shaded look instead of a wrong hardcoded
+// normal. Requires exactly 8 corners; does nothing otherwise.
+void BuildFlatShadedMeshFromCage(const std::vector<juce::Vector3D<float>>& corners,
+                                 std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices);
+
 } // namespace ce

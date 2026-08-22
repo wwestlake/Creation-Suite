@@ -32,7 +32,16 @@ void FreeCamera::mouseDown(const juce::MouseEvent& event) {
     isLooking_.store(true, std::memory_order_relaxed);
     lastDragScreenPos_ = event.getScreenPosition().toFloat();
     viewport_.setMouseCursor(juce::MouseCursor::NoCursor);
-    event.source.enableUnboundedMouseMovement(true);
+    // keepCursorVisibleUntilOffscreen=true: for an ordinary look-drag that
+    // never reaches the screen edge, JUCE keeps tracking the *real* cursor
+    // (no hide, no warp) -- only a drag that actually runs off-screen falls
+    // into hidden/unbounded mode. Without this, JUCE hides the cursor and
+    // warps it back to the drag-start position the instant the button is
+    // released (documented behavior, not a bug in the release handling
+    // below) -- which reads as "still stuck in nav mode" and then a
+    // suddenly-relocated cursor makes the very next click land somewhere
+    // unexpected ("the viewport jumps").
+    event.source.enableUnboundedMouseMovement(true, true);
 }
 
 void FreeCamera::mouseDrag(const juce::MouseEvent& event) {
