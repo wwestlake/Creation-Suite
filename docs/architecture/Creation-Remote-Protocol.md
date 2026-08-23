@@ -2,7 +2,7 @@
 
 Wire contract between the Android client ([Creation-Remote-Android](https://github.com/wwestlake/Creation-Remote-Android), CR-M5) and the Suite Remote Receiver (`apps/CreationRemoteReceiver`, CR-M1), brokered by lagdaemon.com (CR-M2/M4, lives in the `djehuti` repo, `src/Djehuti.Api/RemotePairingRepository.fs`). Origin: [Epic #65](https://github.com/wwestlake/Creation-Suite/issues/65), reconciled 2026-08-22 — see that issue's session-update comment for the full decision history.
 
-**Implementation status (2026-08-23):** §2 (pairing) is real and built on both ends — server endpoints, receiver check-in/QR display, phone sign-in/scan/approve. §3 (project listing), §4 (signaling), §5/§6 (asset transfer/deposit) are still design-only, not implemented.
+**Implementation status (2026-08-23):** §2 (pairing) and §4 (signaling) are real and built on both ends — server endpoints, receiver check-in/QR display, phone sign-in/scan/approve, and now the WebRTC signaling relay + both native P2P clients (receiver's `WebRTCClient.cpp`, Android's `RemoteWebRtcClient.kt`). §3 (project listing) is implemented server/receiver-side but not yet consumed by the Android client. §5/§6 (asset transfer/deposit) are still design-only, not implemented — the DataChannel connects but nothing is sent over it yet.
 
 ## 1. Hard rule: no captured media ever touches the server
 
@@ -27,11 +27,20 @@ Pairing codes are 8 characters from a Crockford-ish alphabet (ambiguous characte
 - Receiver sources this from its local `ProjectRegistry::discoverProjects` (existing suite infrastructure, not new plumbing) and keeps it current with the server via its check-in connection.
 - Response: array of `{ projectId, displayName }`. The phone shows names; every downstream reference uses `projectId` (avoids name-collision ambiguity).
 
-## 4. WebRTC signaling
+## 4. WebRTC signaling — implemented
 
-- Offer/answer/ICE candidate exchange between phone and the active paired receiver, relayed through lagdaemon.com, authenticated per-account/device-pair.
-- STUN for NAT traversal. **No TURN.** A signaling/negotiation failure is not retried via a relay fallback — it's treated the same as "receiver unreachable," and the phone queues locally per §1.
-- Once a direct `RTCDataChannel` (or equivalent) is established, all further traffic in this contract (§5) flows over it directly — the server is no longer involved for that asset.
+`GET wss://lagdaemon.com/djehuti/ws/remote/signaling?hostSessionId=<id>&role=host|phone&token=<bearer or grantToken>`. Both peers open this same WebSocket (receiver as `role=host`, phone as `role=phone`); `RemoteSignalingManager.fs` relays whatever one side sends verbatim to the other, keyed on `(hostSessionId, role)` — it does not parse or validate message bodies, just brokers connection lifecycle and relay.
+
+Message envelope is plain JSON, `type`-tagged:
+```
+{ "type": "offer" | "answer", "sdp": "..." }
+{ "type": "ice", "candidate": "...", "sdpMid": "..." }
+```
+This resolves §7's "JSON vs. binary framing" question for signaling specifically (still open for §5 asset framing).
+
+- The **phone always creates the DataChannel** (`createDataChannel("creation-remote", ...)`) and initiates the offer once its signaling socket opens; the receiver waits in `onDataChannel` and auto-answers any offer it receives. This is a fixed roles, not negotiated — matches `RemoteWebRtcClient.kt`'s `connect()` and `WebRTCClient.cpp`'s `handleSignalingMessage`.
+- STUN only (`stun:stun.l.google.com:19302` on both ends). **No TURN.** A signaling/negotiation failure is not retried via a relay fallback — it's treated the same as "receiver unreachable," and the phone queues locally per §1.
+- Once the direct `DataChannel` is established, all further traffic in this contract (§5) flows over it directly — the server is no longer involved for that asset. §5's payload framing is not implemented yet; the channel currently just reports connect/disconnect state.
 
 ## 5. Asset payload framing
 
