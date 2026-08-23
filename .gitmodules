@@ -20,3 +20,6 @@
 	path = apps/CreationEngineer
 	url = https://github.com/wwestlake/Creation-Engineer.git
 	branch = main
+[submodule "apps/CreationRemoteReceiver"]
+	path = apps/CreationRemoteReceiver
+	url = https://github.com/wwestlake/Creation-Remote-Receiver.git

@@ -6,15 +6,18 @@ juce::String toStorageToken(ProfileKind kind)
 {
     switch (kind)
     {
+        case ProfileKind::dinRailTopHat: return "dinRailTopHat";
         case ProfileKind::tSlotExtrusion: break;
     }
 
     return "tSlotExtrusion";
 }
 
-ProfileKind profileKindFromStorageToken(const juce::String&)
+ProfileKind profileKindFromStorageToken(const juce::String& token)
 {
-    // Only one profile kind exists today -- see the header comment.
+    if (token.trim().equalsIgnoreCase("dinRailTopHat"))
+        return ProfileKind::dinRailTopHat;
+
     return ProfileKind::tSlotExtrusion;
 }
 

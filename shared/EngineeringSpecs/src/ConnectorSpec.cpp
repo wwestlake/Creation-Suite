@@ -7,6 +7,7 @@ juce::String toStorageToken(ConnectorKind kind)
     switch (kind)
     {
         case ConnectorKind::tNut: return "tNut";
+        case ConnectorKind::dinModule: return "dinModule";
         case ConnectorKind::cornerBracket: break;
     }
 
@@ -17,6 +18,8 @@ ConnectorKind connectorKindFromStorageToken(const juce::String& token)
 {
     if (token.trim().equalsIgnoreCase("tNut"))
         return ConnectorKind::tNut;
+    if (token.trim().equalsIgnoreCase("dinModule"))
+        return ConnectorKind::dinModule;
 
     return ConnectorKind::cornerBracket;
 }

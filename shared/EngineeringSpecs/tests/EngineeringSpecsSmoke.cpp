@@ -65,6 +65,25 @@ int main()
             || profileRoundTrip.kind != ProfileKind::tSlotExtrusion)
             fail("ProfileSpec round trip lost data.");
 
+        // profileKindFromStorageToken went from an always-tSlotExtrusion stub
+        // to a real two-branch function in the DIN-rail phase -- the check
+        // above never would have caught a regression there since it only
+        // ever exercised the stub's single always-correct answer.
+        ProfileSpec dinRailProfile;
+        dinRailProfile.id = "profile:smoke-dinrail";
+        dinRailProfile.displayName = "Smoke DIN Rail";
+        dinRailProfile.kind = ProfileKind::dinRailTopHat;
+        dinRailProfile.familyName = "TS35x7.5";
+        dinRailProfile.outerWidthMm = 35.0f;
+        dinRailProfile.outerHeightMm = 7.5f;
+
+        ProfileSpec dinRailProfileRoundTrip;
+        if (!fromVar(toVar(dinRailProfile), dinRailProfileRoundTrip))
+            fail("DIN rail ProfileSpec fromVar(toVar(...)) failed.");
+        if (dinRailProfileRoundTrip.kind != ProfileKind::dinRailTopHat
+            || dinRailProfileRoundTrip.outerHeightMm != 7.5f)
+            fail("DIN rail ProfileSpec round trip lost data.");
+
         ConnectorSpec connector;
         connector.id = "connector:smoke";
         connector.displayName = "Smoke Bracket";
@@ -115,6 +134,10 @@ int main()
             fail("Builtin spec library loaded but one or more collections was empty.");
         if (builtins.findProfile("profile:tslot-2020") == nullptr)
             fail("Builtin spec library is missing the expected 2020 T-slot profile.");
+        if (builtins.findProfile("profile:dinrail-ts35x7.5") == nullptr)
+            fail("Builtin spec library is missing the expected TS35x7.5 DIN rail profile.");
+        if (builtins.findConnector("connector:dinmodule-terminal-block") == nullptr)
+            fail("Builtin spec library is missing the expected DIN terminal-block module.");
 #endif
 
         std::cout << "EngineeringSpecsSmoke: all checks passed." << std::endl;

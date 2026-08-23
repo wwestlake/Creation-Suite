@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "creation/engineering/ConnectorSpec.h"
+#include "creation/engineering/CustomPartSpec.h"
 #include "creation/engineering/MaterialSpec.h"
 #include "creation/engineering/ProfileSpec.h"
 
@@ -21,10 +22,14 @@ struct SpecLibrary
     std::vector<MaterialSpec> materials;
     std::vector<ProfileSpec> profiles;
     std::vector<ConnectorSpec> connectors;
+    // Exclusively user-authored (see CustomPartSpec's doc comment) -- no
+    // builtin seed data, unlike the three vectors above.
+    std::vector<CustomPartSpec> customParts;
 
     const MaterialSpec* findMaterial(const juce::String& id) const noexcept;
     const ProfileSpec* findProfile(const juce::String& id) const noexcept;
     const ConnectorSpec* findConnector(const juce::String& id) const noexcept;
+    const CustomPartSpec* findCustomPart(const juce::String& id) const noexcept;
 
     // Appends every record from `overlay` whose id does not already exist in
     // this library. A colliding id is treated as a data-entry bug (the

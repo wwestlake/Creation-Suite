@@ -61,5 +61,47 @@
             "partNumber": "",
             "notes": "Generic, multi-vendor-interoperable 40-series T-slot envelope -- common public dimensional family, not one manufacturer's proprietary catalog entry."
         }
+    },
+    {
+        "id": "profile:dinrail-ts35x7.5",
+        "displayName": "DIN Rail TS35x7.5 (top hat, IEC/EN 60715)",
+        "kind": "dinRailTopHat",
+        "familyName": "TS35x7.5",
+        "outerWidthMm": 35.0,
+        "outerHeightMm": 7.5,
+        "slotOpeningWidthMm": 0.0,
+        "slotChannelWidthMm": 0.0,
+        "slotDepthMm": 0.0,
+        "wallThicknessMm": 1.0,
+        "centerBoreDiameterMm": 0.0,
+        "slotsPerSide": 0,
+        "defaultMaterialId": "material:a36-steel",
+        "source": {
+            "kind": "builtinGeneric",
+            "manufacturer": "",
+            "partNumber": "",
+            "notes": "Standard IEC/EN 60715 35x7.5mm top-hat rail envelope -- a generic/public defining dimension of the standard itself, not one manufacturer's proprietary catalog entry."
+        }
+    },
+    {
+        "id": "profile:dinrail-ts35x15",
+        "displayName": "DIN Rail TS35x15 (deep top hat, IEC/EN 60715)",
+        "kind": "dinRailTopHat",
+        "familyName": "TS35x15",
+        "outerWidthMm": 35.0,
+        "outerHeightMm": 15.0,
+        "slotOpeningWidthMm": 0.0,
+        "slotChannelWidthMm": 0.0,
+        "slotDepthMm": 0.0,
+        "wallThicknessMm": 1.2,
+        "centerBoreDiameterMm": 0.0,
+        "slotsPerSide": 0,
+        "defaultMaterialId": "material:a36-steel",
+        "source": {
+            "kind": "builtinGeneric",
+            "manufacturer": "",
+            "partNumber": "",
+            "notes": "Standard IEC/EN 60715 35x15mm deep top-hat rail envelope -- a generic/public defining dimension of the standard itself, not one manufacturer's proprietary catalog entry."
+        }
     }
 ]

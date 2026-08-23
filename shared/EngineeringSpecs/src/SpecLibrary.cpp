@@ -31,6 +31,15 @@ const ConnectorSpec* SpecLibrary::findConnector(const juce::String& id) const no
     return nullptr;
 }
 
+const CustomPartSpec* SpecLibrary::findCustomPart(const juce::String& id) const noexcept
+{
+    for (const auto& part : customParts)
+        if (part.id == id)
+            return std::addressof(part);
+
+    return nullptr;
+}
+
 void SpecLibrary::merge(const SpecLibrary& overlay)
 {
     for (const auto& material : overlay.materials)
@@ -44,6 +53,10 @@ void SpecLibrary::merge(const SpecLibrary& overlay)
     for (const auto& connector : overlay.connectors)
         if (findConnector(connector.id) == nullptr)
             connectors.push_back(connector);
+
+    for (const auto& part : overlay.customParts)
+        if (findCustomPart(part.id) == nullptr)
+            customParts.push_back(part);
 }
 
 juce::var toVar(const SpecLibrary& library)
@@ -64,6 +77,11 @@ juce::var toVar(const SpecLibrary& library)
     for (const auto& connector : library.connectors)
         connectorsVar.add(toVar(connector));
     object->setProperty("connectors", connectorsVar);
+
+    juce::Array<juce::var> customPartsVar;
+    for (const auto& part : library.customParts)
+        customPartsVar.add(toVar(part));
+    object->setProperty("customParts", customPartsVar);
 
     return juce::var(object);
 }
@@ -99,6 +117,15 @@ bool fromVar(const juce::var& value, SpecLibrary& outLibrary)
             ConnectorSpec connector;
             if (fromVar(entry, connector))
                 outLibrary.connectors.push_back(connector);
+        }
+
+    outLibrary.customParts.clear();
+    if (const auto* array = object->getProperty("customParts").getArray())
+        for (const auto& entry : *array)
+        {
+            CustomPartSpec part;
+            if (fromVar(entry, part))
+                outLibrary.customParts.push_back(part);
         }
 
     return true;

@@ -6,12 +6,17 @@ add_library(creation_suite_engineering_specs STATIC
     src/MaterialSpec.cpp
     src/ProfileSpec.cpp
     src/ConnectorSpec.cpp
+    src/CustomPartSpec.cpp
     src/SpecLibrary.cpp
     src/BuiltinSpecLoader.cpp
 )
 
 target_include_directories(creation_suite_engineering_specs PUBLIC include)
-target_link_libraries(creation_suite_engineering_specs PUBLIC juce::juce_core)
+# juce_graphics is needed for juce::Point<float> (CustomPartSpec's sketch
+# boundary/hole coordinates) -- every other record in this library is plain
+# juce_core types, so this is CustomPartSpec's own addition, not a
+# pre-existing dependency.
+target_link_libraries(creation_suite_engineering_specs PUBLIC juce::juce_core juce::juce_graphics)
 target_compile_features(creation_suite_engineering_specs PUBLIC cxx_std_20)
 if(MSVC)
     target_compile_options(creation_suite_engineering_specs PRIVATE /FS)

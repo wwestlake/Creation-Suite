@@ -64,5 +64,38 @@
         "sizeMmZ": 10.0,
         "defaultMaterialId": "material:a36-steel",
         "source": { "kind": "builtinGeneric", "manufacturer": "", "partNumber": "", "notes": "Generic M8 drop-in T-nut sized for 40-series T-slot's 8mm slot opening." }
+    },
+    {
+        "id": "connector:dinmodule-terminal-block",
+        "displayName": "Terminal Block Module (~17.5mm)",
+        "kind": "dinModule",
+        "compatibleFamilyName": "TS35x7.5",
+        "sizeMmX": 30.0,
+        "sizeMmY": 17.5,
+        "sizeMmZ": 45.0,
+        "defaultMaterialId": "material:a36-steel",
+        "source": { "kind": "builtinGeneric", "manufacturer": "", "partNumber": "", "notes": "Generic ~17.5mm terminal-block module width -- a commonly-cited public figure that varies by manufacturer/product line, not tied to one vendor." }
+    },
+    {
+        "id": "connector:dinmodule-breaker-1p",
+        "displayName": "Single-Pole Breaker Module Footprint (~18mm)",
+        "kind": "dinModule",
+        "compatibleFamilyName": "TS35x7.5",
+        "sizeMmX": 30.0,
+        "sizeMmY": 18.0,
+        "sizeMmZ": 65.0,
+        "defaultMaterialId": "material:a36-steel",
+        "source": { "kind": "builtinGeneric", "manufacturer": "", "partNumber": "", "notes": "Generic ~18mm single-module miniature-circuit-breaker footprint -- the widely-cited public standard module width, not tied to one vendor." }
+    },
+    {
+        "id": "connector:dinmodule-enclosure-90mm",
+        "displayName": "DIN-Mount Enclosure Housing (~90mm wide)",
+        "kind": "dinModule",
+        "compatibleFamilyName": "TS35x15",
+        "sizeMmX": 35.0,
+        "sizeMmY": 90.0,
+        "sizeMmZ": 60.0,
+        "defaultMaterialId": "material:a36-steel",
+        "source": { "kind": "builtinGeneric", "manufacturer": "", "partNumber": "", "notes": "Generic DIN-mount enclosure footprint sized for the deeper TS35x15 rail -- a representative generic size, not tied to one vendor. Mounts and renders exactly like any other dinModule connector; not a separate enclosure system." }
     }
 ]

@@ -6,13 +6,17 @@
 
 namespace creation::engineering
 {
-// Only case today; the enum exists so a second profile family (an angle
-// bracket, a custom rail) can be added later without restructuring this
-// struct or any of its callers -- see the parametric-part-libraries plan's
-// Phase 2 future-work section.
+// tSlotExtrusion: T-slot aluminum extrusion (see shared/Render's
+// GenerateTSlotExtrusion). dinRailTopHat: IEC/EN 60715 DIN top-hat mounting
+// rail (see GenerateDinRailTopHat) -- reuses this same struct's
+// outerWidthMm/outerHeightMm for the rail's 35mm width/depth; the
+// T-slot-specific fields below are simply unused for this kind, same
+// "accepted but not consumed" precedent GenerateTSlotExtrusion already sets
+// for slotOpeningWidthMm.
 enum class ProfileKind
 {
-    tSlotExtrusion
+    tSlotExtrusion,
+    dinRailTopHat
 };
 
 juce::String toStorageToken(ProfileKind kind);
