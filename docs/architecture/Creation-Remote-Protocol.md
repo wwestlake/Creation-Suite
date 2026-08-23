@@ -1,17 +1,25 @@
 # Creation Remote Protocol
 
-Wire contract between the Android client ([Creation-Remote-Android](https://github.com/wwestlake/Creation-Remote-Android), CR-M5) and the Suite Remote Receiver (`apps/CreationRemoteReceiver`, CR-M1), brokered by lagdaemon.com (CR-M2/M4, lives in the `djehuti` repo). Origin: [Epic #65](https://github.com/wwestlake/Creation-Suite/issues/65), reconciled 2026-08-22 — see that issue's session-update comment for the full decision history.
+Wire contract between the Android client ([Creation-Remote-Android](https://github.com/wwestlake/Creation-Remote-Android), CR-M5) and the Suite Remote Receiver (`apps/CreationRemoteReceiver`, CR-M1), brokered by lagdaemon.com (CR-M2/M4, lives in the `djehuti` repo, `src/Djehuti.Api/RemotePairingRepository.fs`). Origin: [Epic #65](https://github.com/wwestlake/Creation-Suite/issues/65), reconciled 2026-08-22 — see that issue's session-update comment for the full decision history.
+
+**Implementation status (2026-08-23):** §2 (pairing) is real and built on both ends — server endpoints, receiver check-in/QR display, phone sign-in/scan/approve. §3 (project listing), §4 (signaling), §5/§6 (asset transfer/deposit) are still design-only, not implemented.
 
 ## 1. Hard rule: no captured media ever touches the server
 
 lagdaemon.com's entire role is **authentication and WebRTC signaling**. It never relays, stores, or stages any captured photo/video/audio, under any circumstance — no TURN relay, no S3 fallback, no queue-on-server. If a direct connection to the paired receiver can't be established, the file stays on the phone (local WorkManager-backed queue) and the app retries later. This is a correction of the epic's original CR-M7/relay-based design, made once native (CameraX + WorkManager) removed the reason that design existed — see the epic issue for why.
 
-## 2. Device pairing
+## 2. Device pairing — implemented
 
-- Receiver app displays a short-lived pairing code/QR in its settings.
-- Phone scans it, submits it to lagdaemon.com along with the account's auth token.
-- Server links the two under the account, issues both sides a long-lived device credential.
-- Devices are listed per-account (name, type, last-seen), revocable from the website and/or receiver app. An account can have multiple paired machines; the phone keeps a switchable list with one marked active.
+Schema: `remote_host_sessions` / `remote_pairings` / `remote_connection_grants` (migrations 83/84 in `Database.fs`) — backfilled from an earlier, paused remote-control effort (#22) and reused as-is, not duplicated. Auth on every route below is the existing desktop OAuth2/PKCE flow's Bearer/cookie check (`tryGetAuthClaims`) — no new auth mechanism; receiver and phone both sign in as the same account via `SuiteDesktopAuthSession`'s loopback-redirect flow (the Android client reuses this exact flow too — see `Creation-Remote-Android`'s `auth/AuthSession.kt`).
+
+- `POST /api/remote/host-sessions/check-in` — receiver announces/refreshes presence. Body: `{ productSlug, appId, appVersion, deviceId, deviceName, agentAvailable, controlPanelAvailable, capabilities: string[] }`. Upserted on `(user, productSlug, deviceId)`. Returns `{ hostSessionId, presenceState }`. Receiver calls this every 30s as a heartbeat.
+- `POST /api/remote/pairings` — receiver mints a pairing code. Body: `{ hostSessionId }`. Returns `{ pairingId, pairingCode, expiresAt }` (10-minute expiry). Receiver renders `pairingCode` as a QR with payload `creationremote://pair?code=<pairingCode>`.
+- `GET /api/remote/pairings/{id}/status` — receiver polls while the QR is on screen (no push/WebSocket relay yet — see §4). Returns `{ status: "pending" | "approved" }`.
+- `POST /api/remote/pairings/{code}/approve` — phone submits the scanned code. Body: `{ remoteDeviceName, remoteDeviceType }`. Approving account must match the pairing's account. Returns `{ grantToken, hostSessionId, expiresAt }` (30-day grant).
+- `GET /api/remote/devices` — phone's switchable paired-device list: `[{ hostSessionId, grantToken, deviceName, productSlug, presenceState, lastHeartbeatAt, grantExpiresAt }]`.
+- `DELETE /api/remote/devices/{grantToken}` — revoke a pairing (website and/or phone).
+
+Pairing codes are 8 characters from a Crockford-ish alphabet (ambiguous characters removed) for the manual-entry fallback if QR scanning fails.
 
 ## 3. Project listing
 
