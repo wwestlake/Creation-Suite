@@ -24,6 +24,12 @@ juce_add_console_app(CreationSuiteVfsService
     BUNDLE_ID "com.lagdaemon.creationsuite.vfsservice"
 )
 
+# juce_add_console_app has no ICON_BIG/ICON_SMALL hook (GUI-app-only in JUCE's
+# CMake API), so the exe icon is embedded directly as a Win32 resource instead.
+if(WIN32)
+    target_sources(CreationSuiteVfsService PRIVATE assets/branding/CreationSuiteVfsService.rc)
+endif()
+
 juce_generate_juce_header(CreationSuiteVfsService)
 
 target_sources(CreationSuiteVfsService PRIVATE
