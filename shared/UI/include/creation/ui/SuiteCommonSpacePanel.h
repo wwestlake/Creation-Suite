@@ -21,6 +21,13 @@ public:
     void setStatusText(const juce::String& text);
     void setProgress(float progressValue);
     void setFooterText(const juce::String& text);
+    // Shown together as one line under the footer text, whenever either is
+    // non-empty -- used by both the startup splash and the About box (Mode::
+    // about additionally replaces the progress-bar area, meaningless once
+    // the app is already running, with this line). See
+    // creation::ui::getSuiteCopyrightText() for the shared copyright source.
+    void setVersionText(const juce::String& text);
+    void setCopyrightText(const juce::String& text);
     void setPrimaryAction(const juce::String& buttonText, std::function<void()> onClick);
     void setSecondaryAction(const juce::String& buttonText, std::function<void()> onClick);
 
@@ -37,6 +44,8 @@ private:
     juce::Image backgroundImage;
     juce::String statusText { "Loading Creation Suite..." };
     juce::String footerText;
+    juce::String versionText;
+    juce::String copyrightText;
     float progress = 0.0f;
     juce::TextButton primaryActionButton;
     juce::TextButton secondaryActionButton;

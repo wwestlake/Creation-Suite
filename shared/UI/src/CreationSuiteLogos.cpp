@@ -14,7 +14,7 @@ juce::Image loadLogo(const char* data, int size)
 
 namespace creation::ui
 {
-std::array<SuiteLogoId, 8> getSuiteLogoIds()
+std::array<SuiteLogoId, 9> getSuiteLogoIds()
 {
     return { SuiteLogoId::suite,
              SuiteLogoId::texture,
@@ -23,7 +23,8 @@ std::array<SuiteLogoId, 8> getSuiteLogoIds()
              SuiteLogoId::engine,
              SuiteLogoId::engineer,
              SuiteLogoId::movie,
-             SuiteLogoId::live };
+             SuiteLogoId::live,
+             SuiteLogoId::remote };
 }
 
 juce::Image getSuiteLogoImage(SuiteLogoId logoId)
@@ -46,6 +47,11 @@ juce::Image getSuiteLogoImage(SuiteLogoId logoId)
             return loadLogo(BinaryData::creation_texture_png, BinaryData::creation_texture_pngSize);
         case SuiteLogoId::modeler:
             return loadLogo(BinaryData::creation_modeler_png, BinaryData::creation_modeler_pngSize);
+        case SuiteLogoId::remote:
+            // No dedicated badge art yet -- reuses the generic suite mark as a
+            // placeholder, same as Modeler/Movie/Texture's still-pending icon
+            // refresh. Swap for real Creation Remote Receiver art when available.
+            return loadLogo(BinaryData::creation_suite_png, BinaryData::creation_suite_pngSize);
     }
 
     return {};
@@ -63,6 +69,7 @@ juce::String getSuiteLogoDisplayName(SuiteLogoId logoId)
         case SuiteLogoId::live: return "Creation Live";
         case SuiteLogoId::texture: return "Creation Texture";
         case SuiteLogoId::modeler: return "Creation Modeler";
+        case SuiteLogoId::remote: return "Creation Remote Receiver";
     }
 
     return "Creation Suite";
@@ -80,8 +87,16 @@ juce::Colour getSuiteLogoAccentColour(SuiteLogoId logoId)
         case SuiteLogoId::live: return juce::Colour(0xffd4ec59);
         case SuiteLogoId::texture: return juce::Colour(0xff68cfff);
         case SuiteLogoId::modeler: return juce::Colour(0xff4de0c7);
+        case SuiteLogoId::remote: return juce::Colour(0xff9aa5b1);
     }
 
     return juce::Colours::white;
+}
+
+juce::String getSuiteCopyrightText()
+{
+    const auto year = juce::Time::getCurrentTime().getYear();
+    return juce::String(juce::CharPointer_UTF8("\xc2\xa9")) + " " + juce::String(year)
+         + " LagDaemon Software. All rights reserved.";
 }
 }

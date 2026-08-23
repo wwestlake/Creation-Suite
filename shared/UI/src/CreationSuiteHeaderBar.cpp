@@ -1,5 +1,6 @@
 #include <creation/ui/CreationSuiteHeaderBar.h>
 #include <creation/ui/CreationSuiteLogos.h>
+#include <creation/ui/SuiteJUCEApplication.h>
 #include <creation/ui/TransportActionIds.h>
 
 namespace
@@ -348,6 +349,18 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
     suiteButton.onClick = [this, callback] { callback(onSuiteRequested); };
     suiteButton.setTooltip("Open suite settings");
     addAndMakeVisible(suiteButton);
+
+    // Deliberately not routed through a callback like the other utility
+    // buttons above -- getInstance() reaches the running app directly, so
+    // this works for every app that derives from SuiteJUCEApplication with
+    // no per-app onAboutRequested wiring to remember.
+    aboutButton.onClick = []
+    {
+        if (auto* app = dynamic_cast<creation::ui::SuiteJUCEApplication*>(juce::JUCEApplication::getInstance()))
+            app->showAboutBox();
+    };
+    aboutButton.setTooltip("About this application");
+    addAndMakeVisible(aboutButton);
 
     tourButton.onClick = [this, callback] { callback(onTourRequested); };
     tourButton.setTooltip("Open guidance");
@@ -698,6 +711,7 @@ void CreationSuiteHeaderBar::resized()
     constexpr int audioButtonWidth = 72;
     constexpr int assetsButtonWidth = 72;
     constexpr int tourButtonWidth = 68;
+    constexpr int aboutButtonWidth = 32;
     constexpr int utilityGap = 6;
     constexpr int projectGap = 10;
     constexpr int minimumProjectWidth = 140;
@@ -707,7 +721,8 @@ void CreationSuiteHeaderBar::resized()
                                      + audioButtonWidth
                                      + assetsButtonWidth
                                      + tourButtonWidth
-                                     + (utilityGap * 3)
+                                     + aboutButtonWidth
+                                     + (utilityGap * 4)
                                      + projectGap;
     const int availableProjectWidth = utilityRow.getWidth() - reservedUtilityWidth;
     const int projectWidth = availableProjectWidth >= minimumProjectWidth
@@ -733,6 +748,8 @@ void CreationSuiteHeaderBar::resized()
     assetsButton.setBounds(utilityRow.removeFromLeft(juce::jmin(assetsButtonWidth, utilityRow.getWidth())));
     placeUtilityGap(utilityGap);
     tourButton.setBounds(utilityRow.removeFromLeft(juce::jmin(tourButtonWidth, utilityRow.getWidth())));
+    placeUtilityGap(utilityGap);
+    aboutButton.setBounds(utilityRow.removeFromLeft(juce::jmin(aboutButtonWidth, utilityRow.getWidth())));
 
     auto statusArea = bottomRow.removeFromRight(220);
     statusLabel.setBounds(statusArea);

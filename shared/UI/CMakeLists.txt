@@ -2,6 +2,7 @@ add_library(creation_suite_ui STATIC
     src/CreationSuiteLogos.cpp
     src/CreationSuiteHeaderBar.cpp
     src/SuiteCommonSpacePanel.cpp
+    src/SuiteJUCEApplication.cpp
     src/SuiteDesktopAuthSession.cpp
     src/SuiteEulaPanel.cpp
     src/SuiteShellController.cpp

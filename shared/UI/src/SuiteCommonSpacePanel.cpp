@@ -252,6 +252,18 @@ void SuiteCommonSpacePanel::setFooterText(const juce::String& text)
     repaint();
 }
 
+void SuiteCommonSpacePanel::setVersionText(const juce::String& text)
+{
+    versionText = text;
+    repaint();
+}
+
+void SuiteCommonSpacePanel::setCopyrightText(const juce::String& text)
+{
+    copyrightText = text;
+    repaint();
+}
+
 void SuiteCommonSpacePanel::setPrimaryAction(const juce::String& buttonText, std::function<void()> onClick)
 {
     primaryAction = std::move(onClick);
@@ -340,13 +352,19 @@ void SuiteCommonSpacePanel::paint(juce::Graphics& g)
                juce::Justification::centredLeft,
                true);
 
-    auto progressArea = left.removeFromTop(10.0f);
-    progressArea.setHeight(8.0f);
-    g.setColour(juce::Colour(0x55415b78));
-    g.fillRoundedRectangle(progressArea, 4.0f);
-    g.setGradientFill(juce::ColourGradient(accent.brighter(0.15f), progressArea.getX(), progressArea.getY(),
-                                           accent.darker(0.15f), progressArea.getRight(), progressArea.getY(), false));
-    g.fillRoundedRectangle(progressArea.withWidth(progressArea.getWidth() * progress), 4.0f);
+    // The progress bar only means something while something is actually
+    // loading -- meaningless in Mode::about (the app is already running),
+    // so it's skipped there rather than shown frozen/misleading.
+    if (mode == Mode::splash)
+    {
+        auto progressArea = left.removeFromTop(10.0f);
+        progressArea.setHeight(8.0f);
+        g.setColour(juce::Colour(0x55415b78));
+        g.fillRoundedRectangle(progressArea, 4.0f);
+        g.setGradientFill(juce::ColourGradient(accent.brighter(0.15f), progressArea.getX(), progressArea.getY(),
+                                               accent.darker(0.15f), progressArea.getRight(), progressArea.getY(), false));
+        g.fillRoundedRectangle(progressArea.withWidth(progressArea.getWidth() * progress), 4.0f);
+    }
 
     auto footerArea = left.removeFromTop(22.0f);
     g.setColour(juce::Colour(0xffd7e1f3));
@@ -355,6 +373,17 @@ void SuiteCommonSpacePanel::paint(juce::Graphics& g)
                     ? footerText
                     : juce::String(juce::roundToInt(progress * 100.0f)) + "% complete";
     g.drawText(footer, footerArea.toNearestInt(), juce::Justification::centredLeft, true);
+
+    if (versionText.isNotEmpty() || copyrightText.isNotEmpty())
+    {
+        auto versionCopyrightArea = left.removeFromTop(18.0f);
+        g.setColour(juce::Colour(0xff8494ac));
+        g.setFont(juce::Font(12.0f));
+        auto combined = versionText;
+        if (copyrightText.isNotEmpty())
+            combined = combined.isNotEmpty() ? combined + "   " + copyrightText : copyrightText;
+        g.drawText(combined, versionCopyrightArea.toNearestInt(), juce::Justification::centredLeft, true);
+    }
 
     if (primaryActionButton.isVisible() || secondaryActionButton.isVisible())
     {

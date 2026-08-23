@@ -110,6 +110,13 @@ public:
     juce::TextButton assetsButton { "Assets" };
     juce::TextButton suiteButton { juce::String(juce::CharPointer_UTF8("\xe2\x9a\x99")) };
     juce::TextButton tourButton { "Tour" };
+    // Opens the shared Help/About box (creation::ui::SuiteJUCEApplication::
+    // showAboutBox) -- wired entirely inside CreationSuiteHeaderBar.cpp via
+    // juce::JUCEApplication::getInstance(), never via an app-supplied
+    // callback, so any app that already constructs this header bar and
+    // derives its JUCEApplication subclass from SuiteJUCEApplication gets a
+    // working About entry with zero additional wiring.
+    juce::TextButton aboutButton { "?" };
     juce::Label profileNameLabel;
     juce::Label profileDetailLabel;
     juce::Image profileBadgeImage;
