@@ -7,3 +7,11 @@ out/
 *.VC.db
 *.VC.opendb
 Secrets/
+
+# GitHub wiki is its own independent git clone (Creation-Suite.wiki.git),
+# not a submodule of this repo -- never tracked here.
+/wiki/
+
+# Backup copies left behind by icon-regeneration passes; safe to delete once
+# the new icon is confirmed good, never meant to be committed.
+*.pre_icon_refresh.png

@@ -2,7 +2,7 @@ param(
     [ValidateSet("Debug")]
     [string]$Configuration = "Debug",
     [switch]$EnableStationAsio,
-    [string[]]$Targets = @("engine", "engineer", "station", "texture", "modeler", "movie", "live", "vfs"),
+    [string[]]$Targets = @("engine", "engineer", "station", "texture", "modeler", "movie", "live", "vfs", "remote"),
     [switch]$SkipSubmoduleInit
 )
 
@@ -78,6 +78,10 @@ $targetMap = @{
     "vfs" = @{
         SourceDir = (Join-Path $repoRoot "services/VfsService")
         BinaryDir = (Join-Path $repoRoot "services/VfsService/build")
+    }
+    "remote" = @{
+        SourceDir = (Join-Path $repoRoot "apps/CreationRemoteReceiver")
+        BinaryDir = (Join-Path $repoRoot "apps/CreationRemoteReceiver/build")
     }
 }
 
