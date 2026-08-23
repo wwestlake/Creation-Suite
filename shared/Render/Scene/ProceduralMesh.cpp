@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace ce {
 
@@ -337,6 +338,31 @@ void GenerateTSlotExtrusion(float outerWidthMeters, float slotOpeningWidthMeters
     }
 }
 
+void GenerateDinRailTopHat(float outerWidthMeters, float depthMeters, float lengthMeters,
+                          std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices) {
+    outVertices.clear();
+    outIndices.clear();
+
+    const float halfWidth = outerWidthMeters * 0.5f;
+    const float halfLength = lengthMeters * 0.5f;
+    const float halfDepth = depthMeters * 0.5f;
+
+    // Base plate: flat mounting web at the back (-Z), full 35mm width.
+    const float baseThickness = depthMeters * 0.25f;
+    AppendBox(outVertices, outIndices, { 0.0f, 0.0f, -halfDepth + baseThickness * 0.5f },
+             { halfWidth, halfLength, baseThickness * 0.5f });
+
+    // Two raised edge ridges, rising to the full front (+Z) face -- stand-in
+    // for the curled lip edges. Overlaps the base plate's Z range near the
+    // edges; harmless for a solid stand-in mesh, the same "no boolean union
+    // needed" approach GenerateConnectorCornerBracket's own two overlapping
+    // plates already rely on.
+    const float ridgeWidth = outerWidthMeters * 0.18f;
+    const float ridgeX = halfWidth - ridgeWidth * 0.5f;
+    AppendBox(outVertices, outIndices, { -ridgeX, 0.0f, 0.0f }, { ridgeWidth * 0.5f, halfLength, halfDepth });
+    AppendBox(outVertices, outIndices, {  ridgeX, 0.0f, 0.0f }, { ridgeWidth * 0.5f, halfLength, halfDepth });
+}
+
 void GenerateConnectorCornerBracket(float sizeXMeters, float sizeYMeters, float sizeZMeters,
                                     std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices) {
     outVertices.clear();
@@ -363,6 +389,336 @@ void GenerateConnectorTNut(float sizeXMeters, float sizeYMeters, float sizeZMete
 
     AppendBox(outVertices, outIndices, { 0.0f, 0.0f, 0.0f },
              { sizeXMeters * 0.5f, sizeYMeters * 0.5f, sizeZMeters * 0.5f });
+}
+
+namespace {
+// Local 2D point type for this generator's internal math -- juce::Point is
+// used only at the public API boundary (matches this file's own convention
+// of small local Vec3/BoxVec3 types for generator internals, see AppendBox/
+// GenerateCube above).
+struct Vec2 {
+    float x = 0.0f, y = 0.0f;
+};
+Vec2 operator+(Vec2 a, Vec2 b) { return { a.x + b.x, a.y + b.y }; }
+Vec2 operator-(Vec2 a, Vec2 b) { return { a.x - b.x, a.y - b.y }; }
+float Cross2(Vec2 a, Vec2 b) { return a.x * b.y - a.y * b.x; }
+float SignedArea(const std::vector<Vec2>& polygon) {
+    float area = 0.0f;
+    for (size_t i = 0; i < polygon.size(); ++i) {
+        const auto& a = polygon[i];
+        const auto& b = polygon[(i + 1) % polygon.size()];
+        area += a.x * b.y - b.x * a.y;
+    }
+    return area * 0.5f;
+}
+void EnsureWinding(std::vector<Vec2>& polygon, bool wantCcw) {
+    const bool isCcw = SignedArea(polygon) > 0.0f;
+    if (isCcw != wantCcw)
+        std::reverse(polygon.begin(), polygon.end());
+}
+
+std::vector<Vec2> CirclePoints(Vec2 center, float diameterMeters, int segments) {
+    std::vector<Vec2> points;
+    points.reserve(static_cast<size_t>(segments));
+    const float radius = diameterMeters * 0.5f;
+    const float pi = juce::MathConstants<float>::pi;
+    for (int i = 0; i < segments; ++i) {
+        const float theta = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
+        points.push_back({ center.x + radius * std::cos(theta), center.y + radius * std::sin(theta) });
+    }
+    return points;
+}
+
+// Proper (strict) segment intersection test -- returns false for segments
+// that only touch at a shared endpoint or overlap collinearly, which is
+// exactly the behavior needed for a hole-bridge visibility check (two
+// candidate bridge endpoints are themselves polygon vertices, so any edge
+// touching one of them at that exact point must NOT count as an
+// obstruction).
+bool SegmentsProperlyIntersect(Vec2 a, Vec2 b, Vec2 c, Vec2 d) {
+    const float d1 = Cross2(d - c, a - c);
+    const float d2 = Cross2(d - c, b - c);
+    const float d3 = Cross2(b - a, c - a);
+    const float d4 = Cross2(b - a, d - a);
+    return ((d1 > 0.0f && d2 < 0.0f) || (d1 < 0.0f && d2 > 0.0f)) &&
+           ((d3 > 0.0f && d4 < 0.0f) || (d3 < 0.0f && d4 > 0.0f));
+}
+
+bool SegmentIsClearOfLoop(Vec2 a, Vec2 b, const std::vector<Vec2>& loop) {
+    for (size_t i = 0; i < loop.size(); ++i) {
+        const auto& c = loop[i];
+        const auto& d = loop[(i + 1) % loop.size()];
+        if (SegmentsProperlyIntersect(a, b, c, d))
+            return false;
+    }
+    return true;
+}
+
+// Bridges one hole loop (already CW-wound) into `boundary` (already
+// CCW-wound, mutated in place) using the standard ear-clipping-with-holes
+// technique: find the hole's rightmost point, find where a rightward ray
+// from it first exits through the boundary, and splice the hole's loop into
+// the boundary at that crossing edge's far endpoint -- turning "boundary
+// with a hole" into one simple polygon with a zero-width slit. Holes are
+// bridged one at a time against the boundary as it currently stands
+// (including any earlier holes' already-inserted bridges) rather than all
+// at once against the pristine original boundary -- simpler to implement
+// correctly, and still order-independent in practice since a bridge is a
+// zero-width slit that never meaningfully obstructs a later hole's own
+// visibility test.
+void BridgeHoleIntoBoundary(std::vector<Vec2>& boundary, const std::vector<Vec2>& hole) {
+    if (hole.empty())
+        return;
+
+    size_t holeConnectIndex = 0;
+    for (size_t i = 1; i < hole.size(); ++i) {
+        if (hole[i].x > hole[holeConnectIndex].x ||
+            (hole[i].x == hole[holeConnectIndex].x && hole[i].y > hole[holeConnectIndex].y))
+            holeConnectIndex = i;
+    }
+    const Vec2 holeConnectPoint = hole[holeConnectIndex];
+
+    // Nearest boundary edge crossing a +X ray cast from holeConnectPoint --
+    // the standard heuristic starting point for the bridge search.
+    int crossingEdgeIndex = -1;
+    float nearestCrossingX = std::numeric_limits<float>::max();
+    for (size_t i = 0; i < boundary.size(); ++i) {
+        const auto& p0 = boundary[i];
+        const auto& p1 = boundary[(i + 1) % boundary.size()];
+        // Edge must straddle holeConnectPoint's Y to cross a horizontal ray.
+        if ((p0.y > holeConnectPoint.y) == (p1.y > holeConnectPoint.y))
+            continue;
+        const float t = (holeConnectPoint.y - p0.y) / (p1.y - p0.y);
+        const float crossX = p0.x + t * (p1.x - p0.x);
+        if (crossX >= holeConnectPoint.x && crossX < nearestCrossingX) {
+            nearestCrossingX = crossX;
+            crossingEdgeIndex = static_cast<int>(i);
+        }
+    }
+
+    size_t candidateIndex = 0;
+    bool candidateFound = false;
+    if (crossingEdgeIndex >= 0) {
+        const auto i0 = static_cast<size_t>(crossingEdgeIndex);
+        const auto i1 = (i0 + 1) % boundary.size();
+        candidateIndex = boundary[i0].x >= boundary[i1].x ? i0 : i1;
+        if (SegmentIsClearOfLoop(holeConnectPoint, boundary[candidateIndex], boundary) &&
+            SegmentIsClearOfLoop(holeConnectPoint, boundary[candidateIndex], hole))
+            candidateFound = true;
+    }
+
+    // Fallback: brute-force nearest boundary vertex with a clear line of
+    // sight -- covers both "the primary heuristic's candidate was blocked"
+    // and "no crossing was found at all" (e.g. unusual/degenerate input).
+    if (!candidateFound) {
+        float bestDistanceSq = std::numeric_limits<float>::max();
+        bool any = false;
+        for (size_t i = 0; i < boundary.size(); ++i) {
+            if (!SegmentIsClearOfLoop(holeConnectPoint, boundary[i], boundary) ||
+                !SegmentIsClearOfLoop(holeConnectPoint, boundary[i], hole))
+                continue;
+            const auto delta = boundary[i] - holeConnectPoint;
+            const float distanceSq = delta.x * delta.x + delta.y * delta.y;
+            if (distanceSq < bestDistanceSq) {
+                bestDistanceSq = distanceSq;
+                candidateIndex = i;
+                any = true;
+            }
+        }
+        if (!any)
+            candidateIndex = 0; // last resort -- proceeds anyway rather than dropping the hole silently.
+    }
+
+    std::vector<Vec2> merged;
+    merged.reserve(boundary.size() + hole.size() + 2);
+    for (size_t i = 0; i <= candidateIndex; ++i)
+        merged.push_back(boundary[i]);
+    for (size_t k = 0; k <= hole.size(); ++k)
+        merged.push_back(hole[(holeConnectIndex + k) % hole.size()]);
+    merged.push_back(boundary[candidateIndex]);
+    for (size_t i = candidateIndex + 1; i < boundary.size(); ++i)
+        merged.push_back(boundary[i]);
+
+    boundary = std::move(merged);
+}
+
+bool PointInOrOnTriangle(Vec2 p, Vec2 a, Vec2 b, Vec2 c) {
+    const float d1 = Cross2(b - a, p - a);
+    const float d2 = Cross2(c - b, p - b);
+    const float d3 = Cross2(a - c, p - c);
+    const bool hasNeg = (d1 < -1.0e-9f) || (d2 < -1.0e-9f) || (d3 < -1.0e-9f);
+    const bool hasPos = (d1 > 1.0e-9f) || (d2 > 1.0e-9f) || (d3 > 1.0e-9f);
+    return !(hasNeg && hasPos);
+}
+
+// Standard O(n^2) ear-clipping over a CCW-wound simple polygon (zero-width
+// bridge slits from BridgeHoleIntoBoundary included -- operating purely on
+// indices rather than positions makes this robust to the duplicate-position
+// vertices a bridge introduces). Returns a flat list of triangle index-
+// triples into `polygon`. `remaining.size() <= 3` without a clip found is a
+// safety valve against pathological/self-intersecting input, not expected
+// for hand-placed sketch points.
+std::vector<int> TriangulateSimplePolygon(const std::vector<Vec2>& polygon) {
+    std::vector<int> remaining(polygon.size());
+    for (size_t i = 0; i < polygon.size(); ++i)
+        remaining[i] = static_cast<int>(i);
+
+    std::vector<int> triangles;
+    while (remaining.size() > 3) {
+        bool clipped = false;
+        for (size_t i = 0; i < remaining.size(); ++i) {
+            const size_t prev = (i + remaining.size() - 1) % remaining.size();
+            const size_t next = (i + 1) % remaining.size();
+            const int a = remaining[prev];
+            const int b = remaining[i];
+            const int c = remaining[next];
+
+            if (Cross2(polygon[static_cast<size_t>(b)] - polygon[static_cast<size_t>(a)],
+                      polygon[static_cast<size_t>(c)] - polygon[static_cast<size_t>(a)]) <= 1.0e-9f)
+                continue; // reflex or degenerate -- not a valid ear tip.
+
+            bool anyInside = false;
+            for (size_t k = 0; k < remaining.size(); ++k) {
+                if (k == prev || k == i || k == next)
+                    continue;
+                if (PointInOrOnTriangle(polygon[static_cast<size_t>(remaining[k])], polygon[static_cast<size_t>(a)],
+                                        polygon[static_cast<size_t>(b)], polygon[static_cast<size_t>(c)])) {
+                    anyInside = true;
+                    break;
+                }
+            }
+            if (anyInside)
+                continue;
+
+            triangles.push_back(a);
+            triangles.push_back(b);
+            triangles.push_back(c);
+            remaining.erase(remaining.begin() + static_cast<long>(i));
+            clipped = true;
+            break;
+        }
+        if (!clipped)
+            break;
+    }
+
+    if (remaining.size() == 3) {
+        triangles.push_back(remaining[0]);
+        triangles.push_back(remaining[1]);
+        triangles.push_back(remaining[2]);
+    }
+    return triangles;
+}
+} // namespace
+
+void GenerateExtrudedPolygonWithHoles(const std::vector<juce::Point<float>>& outerBoundaryUV,
+                                      const std::vector<SketchHoleDefinition>& holes,
+                                      float thicknessMeters, int circleSegments,
+                                      std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices) {
+    outVertices.clear();
+    outIndices.clear();
+
+    if (outerBoundaryUV.size() < 3)
+        return;
+
+    std::vector<Vec2> boundary;
+    boundary.reserve(outerBoundaryUV.size());
+    for (const auto& p : outerBoundaryUV)
+        boundary.push_back({ p.x, p.y });
+    EnsureWinding(boundary, true);
+
+    // Original (unbridged) loops, kept separately for side-wall generation
+    // below -- the merged/bridged `boundary` (mutated by BridgeHoleIntoBoundary)
+    // is only used for the cap triangulation, never for the walls, since its
+    // zero-width bridge edges are not real geometry.
+    const std::vector<Vec2> originalBoundary = boundary;
+    std::vector<std::vector<Vec2>> originalHoles;
+    originalHoles.reserve(holes.size());
+
+    for (const auto& hole : holes) {
+        auto holeLoop = CirclePoints({ hole.centerUV.x, hole.centerUV.y }, hole.diameterMeters, circleSegments);
+        EnsureWinding(holeLoop, false); // holes wind CW, opposite the outer boundary.
+        originalHoles.push_back(holeLoop);
+        BridgeHoleIntoBoundary(boundary, holeLoop);
+    }
+
+    const auto triangleIndices = TriangulateSimplePolygon(boundary);
+    const float halfThickness = thicknessMeters * 0.5f;
+
+    // Top cap (+Z) -- triangleIndices are already CCW when viewed from +Z
+    // per EnsureWinding's convention above.
+    for (size_t t = 0; t + 2 < triangleIndices.size(); t += 3) {
+        const auto baseIndex = static_cast<GLuint>(outVertices.size());
+        const int idx[3] = { triangleIndices[t], triangleIndices[t + 1], triangleIndices[t + 2] };
+        for (int i = 0; i < 3; ++i) {
+            Vertex vertex{};
+            vertex.position[0] = boundary[static_cast<size_t>(idx[i])].x;
+            vertex.position[1] = boundary[static_cast<size_t>(idx[i])].y;
+            vertex.position[2] = halfThickness;
+            vertex.normal[2] = 1.0f;
+            outVertices.push_back(vertex);
+        }
+        outIndices.push_back(baseIndex + 0);
+        outIndices.push_back(baseIndex + 1);
+        outIndices.push_back(baseIndex + 2);
+    }
+
+    // Bottom cap (-Z) -- same triangles, reversed winding for the flipped normal.
+    for (size_t t = 0; t + 2 < triangleIndices.size(); t += 3) {
+        const auto baseIndex = static_cast<GLuint>(outVertices.size());
+        const int idx[3] = { triangleIndices[t], triangleIndices[t + 1], triangleIndices[t + 2] };
+        for (int i = 0; i < 3; ++i) {
+            Vertex vertex{};
+            vertex.position[0] = boundary[static_cast<size_t>(idx[i])].x;
+            vertex.position[1] = boundary[static_cast<size_t>(idx[i])].y;
+            vertex.position[2] = -halfThickness;
+            vertex.normal[2] = -1.0f;
+            outVertices.push_back(vertex);
+        }
+        outIndices.push_back(baseIndex + 0);
+        outIndices.push_back(baseIndex + 2);
+        outIndices.push_back(baseIndex + 1);
+    }
+
+    // Side walls -- every ORIGINAL boundary/hole edge (never the merged
+    // loop's zero-width bridges). 2D outward normal for a CCW edge (p0->p1)
+    // is normalize(dy,-dx); the same formula also gives the correct
+    // toward-the-hole-center normal for a CW hole edge (both are "away from
+    // the solid material," which is what makes one formula work for both --
+    // see the plan's Part O derivation).
+    const auto appendWalls = [&](const std::vector<Vec2>& loop) {
+        for (size_t i = 0; i < loop.size(); ++i) {
+            const auto& p0 = loop[i];
+            const auto& p1 = loop[(i + 1) % loop.size()];
+            const Vec2 edge = p1 - p0;
+            const float length = std::sqrt(edge.x * edge.x + edge.y * edge.y);
+            if (length < 1.0e-9f)
+                continue;
+            const Vec2 normal2D { edge.y / length, -edge.x / length };
+
+            const auto baseIndex = static_cast<GLuint>(outVertices.size());
+            const Vec2 quadUV[4] = { p0, p1, p1, p0 };
+            const float quadZ[4] = { -halfThickness, -halfThickness, halfThickness, halfThickness };
+            for (int i2 = 0; i2 < 4; ++i2) {
+                Vertex vertex{};
+                vertex.position[0] = quadUV[i2].x;
+                vertex.position[1] = quadUV[i2].y;
+                vertex.position[2] = quadZ[i2];
+                vertex.normal[0] = normal2D.x;
+                vertex.normal[1] = normal2D.y;
+                outVertices.push_back(vertex);
+            }
+            outIndices.push_back(baseIndex + 0);
+            outIndices.push_back(baseIndex + 1);
+            outIndices.push_back(baseIndex + 2);
+            outIndices.push_back(baseIndex + 0);
+            outIndices.push_back(baseIndex + 2);
+            outIndices.push_back(baseIndex + 3);
+        }
+    };
+
+    appendWalls(originalBoundary);
+    for (const auto& hole : originalHoles)
+        appendWalls(hole);
 }
 
 void BuildFlatShadedMeshFromCage(const std::vector<juce::Vector3D<float>>& corners,

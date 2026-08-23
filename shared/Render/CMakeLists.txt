@@ -2,6 +2,7 @@ add_library(creation_suite_render STATIC
     GL/Buffer.cpp
     GL/VertexArray.cpp
     Scene/Camera.cpp
+    Scene/CursorGizmoRenderer.cpp
     Scene/FreeCamera.cpp
     Scene/GridRenderer.cpp
     Scene/Mesh.cpp

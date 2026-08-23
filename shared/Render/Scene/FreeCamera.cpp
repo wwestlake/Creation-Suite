@@ -25,7 +25,7 @@ juce::Vector3D<float> FreeCamera::FlatForward() const {
 }
 
 void FreeCamera::mouseDown(const juce::MouseEvent& event) {
-    if (!event.mods.isRightButtonDown()) {
+    if (!enabled_.load(std::memory_order_relaxed) || !event.mods.isRightButtonDown()) {
         return;
     }
 
@@ -45,7 +45,7 @@ void FreeCamera::mouseDown(const juce::MouseEvent& event) {
 }
 
 void FreeCamera::mouseDrag(const juce::MouseEvent& event) {
-    if (!isLooking_.load(std::memory_order_relaxed)) {
+    if (!enabled_.load(std::memory_order_relaxed) || !isLooking_.load(std::memory_order_relaxed)) {
         return;
     }
 
@@ -73,7 +73,7 @@ void FreeCamera::mouseUp(const juce::MouseEvent& event) {
 }
 
 void FreeCamera::Update(float deltaSeconds) {
-    if (!isLooking_.load(std::memory_order_relaxed)) {
+    if (!enabled_.load(std::memory_order_relaxed) || !isLooking_.load(std::memory_order_relaxed)) {
         return;
     }
 
@@ -114,6 +114,20 @@ void FreeCamera::Update(float deltaSeconds) {
     }
     if (juce::KeyPress::isKeyCurrentlyDown('Q')) {
         position_.y -= speed;
+    }
+}
+
+void FreeCamera::SetOrientation(float yawRadians, float pitchRadians) noexcept {
+    yaw_.store(yawRadians, std::memory_order_relaxed);
+    pitch_.store(juce::jlimit(-1.5f, 1.5f, pitchRadians), std::memory_order_relaxed);
+}
+
+void FreeCamera::SetEnabled(bool enabled) noexcept {
+    enabled_.store(enabled, std::memory_order_relaxed);
+    if (!enabled && isLooking_.exchange(false, std::memory_order_relaxed)) {
+        // Was mid-drag when disabled -- release the cursor rather than
+        // leaving it hidden with no mouseUp ever coming to restore it.
+        viewport_.setMouseCursor(juce::MouseCursor::NormalCursor);
     }
 }
 

@@ -49,6 +49,23 @@ public:
     void Update(float deltaSeconds);
     void AdjustSpeed(float wheelDeltaY);
 
+    // Snaps look direction to an exact orientation -- e.g. a view-selector
+    // clicking "Top"/"Front"/etc. Safe to call from the message thread
+    // (mouseDown): yaw_/pitch_ are already atomics written from there.
+    void SetOrientation(float yawRadians, float pitchRadians) noexcept;
+
+    // Lets a caller with more than one navigation scheme (e.g.
+    // CreationEngineer's Orbit/Fly toggle) keep several controllers alive
+    // at once and just switch which one reacts to input, instead of
+    // destroying/recreating them -- construction/destruction each attach/
+    // detach a juce::MouseListener, which is unsafe to do synchronously
+    // from inside that same listener's own event callback (exactly what a
+    // "click this button to switch modes" handler would otherwise do).
+    // Default true, never touched by callers with only one FreeCamera (e.g.
+    // CreationEngine) -- zero behavior change for them.
+    void SetEnabled(bool enabled) noexcept;
+    bool IsEnabled() const noexcept { return enabled_.load(std::memory_order_relaxed); }
+
     juce::Vector3D<float> Position() const { return position_; }
     juce::Vector3D<float> Target() const { return position_ + Forward(); }
 
@@ -72,6 +89,7 @@ private:
 
     juce::Point<float> lastDragScreenPos_;
     std::atomic<float> speedMultiplier_{ 1.0f };
+    std::atomic<bool> enabled_{ true };
 };
 
 } // namespace ce

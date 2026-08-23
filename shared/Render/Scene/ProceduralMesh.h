@@ -44,6 +44,21 @@ void GenerateTSlotExtrusion(float outerWidthMeters, float slotOpeningWidthMeters
                             float lengthMeters, std::vector<Vertex>& outVertices,
                             std::vector<GLuint>& outIndices);
 
+// Approximates a DIN top-hat rail's cross-section (IEC/EN 60715 -- e.g.
+// TS35x7.5, TS35x15) as a flat base plate plus two raised lengthwise edge
+// ridges near where real modules' spring clips grip -- NOT the true rolled/
+// curled-edge profile. Same fidelity discipline GenerateTSlotExtrusion
+// already established for its own grid-decomposed notch topology: a
+// recognizable, correctly-DIMENSIONED stand-in, not manufacturing-grade.
+// Centered at the origin, extruded along Y by lengthMeters -- matches
+// GenerateTSlotExtrusion's own axis convention exactly, which matters here:
+// a module mounted on this rail shares the rail's own rotationDegrees
+// verbatim, so rail and module must agree on which local axis is "along the
+// length" (see creation::engineering::ConnectorSpec's dinModule doc comment
+// for the module side).
+void GenerateDinRailTopHat(float outerWidthMeters, float depthMeters, float lengthMeters,
+                           std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices);
+
 // Generic connector hardware meshes (ConnectorSpec-backed scene objects),
 // each centered at the origin so a pure translation places the mesh's
 // bounding-box center at the object's position, same convention as every
@@ -52,6 +67,33 @@ void GenerateConnectorCornerBracket(float sizeXMeters, float sizeYMeters, float 
                                     std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices);
 void GenerateConnectorTNut(float sizeXMeters, float sizeYMeters, float sizeZMeters,
                            std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices);
+
+// A single circular hole in a sketch profile, in the sketch's own 2D (u,v)
+// frame -- meters, matching EngineerSceneModel::SketchHole exactly (kept as
+// a separate plain struct here so shared/Render never depends on an
+// app-level type).
+struct SketchHoleDefinition
+{
+    juce::Point<float> centerUV;
+    float diameterMeters;
+};
+
+// Extrudes an arbitrary simple polygon (straight-line boundary, any winding
+// -- corrected internally to CCW) with zero or more circular holes into a
+// flat-capped solid. Always generated in a fixed local (X=u, Y=v, Z=+-
+// thickness/2) frame -- the caller (EngineerViewportComponent, via the
+// object's model matrix) is what places/orients the result in the world;
+// this function has no notion of which real-world plane the sketch was
+// authored on. circleSegments controls each hole's roundness (24 is a
+// reasonable default, matching typical GenerateCylinder caller values).
+// Holes are merged into the boundary via the standard "bridge edge" ear-
+// clipping-with-holes technique (see the .cpp for the concrete algorithm);
+// self-intersecting input is not validated or rejected -- garbage in,
+// garbage out for v1.
+void GenerateExtrudedPolygonWithHoles(const std::vector<juce::Point<float>>& outerBoundaryUV,
+                                      const std::vector<SketchHoleDefinition>& holes,
+                                      float thicknessMeters, int circleSegments,
+                                      std::vector<Vertex>& outVertices, std::vector<GLuint>& outIndices);
 
 // Expands an 8-corner editable vertex cage (fixed bit-order: bit0=+X,
 // bit1=+Y, bit2=+Z -- e.g. corner 0 = (-X,-Y,-Z), corner 7 = (+X,+Y,+Z))
