@@ -11,7 +11,7 @@ add_library(CreationDock STATIC
 )
 
 target_compile_definitions(CreationDock PUBLIC JUCE_WEB_BROWSER=0)
-target_include_directories(CreationDock PUBLIC include)
+target_include_directories(CreationDock PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(CreationDock PUBLIC
     juce::juce_core
     juce::juce_graphics
