@@ -5,7 +5,6 @@
 #include <juce_core/juce_core.h>
 
 #include "creation/suite/SuiteSettings.h"
-#include "creation/vfs/SuiteVolume.h"
 
 namespace creation::assets
 {
@@ -31,16 +30,14 @@ struct MaterializedAssetLease
     bool isValid() const noexcept { return materializedFile.existsAsFile(); }
 };
 
-// Reads an asset out of a live SuiteVolume mount and writes it to a real,
-// isolated temp file (a "lease") for callers that need an actual file path
-// (audio playback, external editors, etc). The volume passed in must already
-// be open -- this never mounts its own second copy of a container, since two
-// independent FatFs mounts of the same backing file would corrupt it.
+// Reads an asset from the suite VFS service and writes it to a real, isolated local temp
+// file (a "lease") for callers that need an actual file path (audio playback, external
+// editors, etc). Fetches over HTTP via SuiteVfsServiceClient -- never touches project
+// storage directly.
 class AssetMaterializer final
 {
 public:
     static bool materializeEntry(const creation::suite::SuiteSettings& settings,
-                                 const creation::vfs::SuiteVolume& volume,
                                  const juce::String& projectId,
                                  const juce::String& logicalPath,
                                  MaterializationAccess access,

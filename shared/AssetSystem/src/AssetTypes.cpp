@@ -10,6 +10,7 @@ juce::String toStorageToken(AssetKind kind)
         case AssetKind::render: return "render";
         case AssetKind::patch: return "patch";
         case AssetKind::foleyPatch: return "foleyPatch";
+        case AssetKind::trackerArrangement: return "trackerArrangement";
         case AssetKind::script: return "script";
         case AssetKind::metadata: return "metadata";
         case AssetKind::preset: return "preset";
@@ -29,6 +30,7 @@ AssetKind assetKindFromStorageToken(const juce::String& token)
     if (normalized == "render") return AssetKind::render;
     if (normalized == "patch") return AssetKind::patch;
     if (normalized == "foleypatch") return AssetKind::foleyPatch;
+    if (normalized == "trackerarrangement") return AssetKind::trackerArrangement;
     if (normalized == "script") return AssetKind::script;
     if (normalized == "metadata") return AssetKind::metadata;
     if (normalized == "preset") return AssetKind::preset;
@@ -46,6 +48,7 @@ juce::String toDisplayName(AssetKind kind)
         case AssetKind::render: return "Render";
         case AssetKind::patch: return "Patch";
         case AssetKind::foleyPatch: return "Foley Patch";
+        case AssetKind::trackerArrangement: return "Tracker Arrangement";
         case AssetKind::script: return "Script";
         case AssetKind::metadata: return "Metadata";
         case AssetKind::preset: return "Preset";

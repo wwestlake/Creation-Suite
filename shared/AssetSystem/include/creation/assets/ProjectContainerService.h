@@ -11,8 +11,9 @@ class ProjectContainerService final
 public:
     struct ProjectSummary
     {
-        juce::File containerFile;
+        juce::String projectId;
         ProjectManifest manifest;
+        std::int64_t totalSizeBytes = 0;
     };
 
     static bool createProject(const creation::suite::SuiteSettings& settings,
@@ -23,7 +24,8 @@ public:
                               ProjectSession& outSession,
                               juce::String& errorMessage);
 
-    static bool openProject(const juce::File& containerFile,
+    static bool openProject(const creation::suite::SuiteSettings& settings,
+                            const juce::String& projectId,
                             ProjectSession& outSession,
                             juce::String& errorMessage);
 
@@ -38,5 +40,15 @@ public:
                                 const juce::String& projectId,
                                 ProjectSummary& outProject,
                                 juce::String& errorMessage);
+
+    static bool cloneProject(const creation::suite::SuiteSettings& settings,
+                             const juce::String& sourceProjectId,
+                             const juce::String& newProjectName,
+                             juce::String& outNewProjectId,
+                             juce::String& errorMessage);
+
+    static bool deleteProject(const creation::suite::SuiteSettings& settings,
+                              const juce::String& projectId,
+                              juce::String& errorMessage);
 };
 }

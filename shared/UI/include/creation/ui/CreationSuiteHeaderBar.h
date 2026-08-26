@@ -40,6 +40,10 @@ public:
     std::function<void()> onRecord;
     std::function<void()> onRewind;
     std::function<void()> onFastForward;
+    // Optional: fired instead of onRewind/onFastForward when the button is Ctrl-clicked. Apps
+    // that don't set these keep today's plain-click-only behavior unchanged.
+    std::function<void()> onRewindToStart;
+    std::function<void()> onFastForwardToEnd;
     std::function<void(bool)> onLoopChanged;
     std::function<void(MetronomeMode)> onMetronomeModeChanged;
     std::function<void()> onSignInRequested;

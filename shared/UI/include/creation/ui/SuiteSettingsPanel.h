@@ -8,6 +8,7 @@ class SuiteSettingsPanel final : public juce::Component
 {
 public:
     SuiteSettingsPanel();
+    ~SuiteSettingsPanel() override;
 
     std::function<void(const juce::String& fieldId)> onBrowseRequested;
     std::function<void(const creation::suite::SuiteSettings& settings)> onApplyRequested;
@@ -29,14 +30,25 @@ private:
     {
         storage,
         ai,
-        log
+        log,
+#if JUCE_DEBUG
+        vfsBrowser,
+#endif
     };
 
-    struct AppSelectionRow
+    // Renders the full list of suite AI accounts at once (not a single-selection dropdown you have
+    // to page through) - each row shows the account's own name/provider/cached-model-count so the
+    // whole set is visible at a glance. Selecting a row is what Edit/Remove/Test act on.
+    class AccountListBoxModel final : public juce::ListBoxModel
     {
-        juce::Label label;
-        juce::ComboBox accountCombo;
-        juce::TextEditor modelOverrideEditor;
+    public:
+        explicit AccountListBoxModel(SuiteSettingsPanel& ownerRef) : owner(ownerRef) {}
+        int getNumRows() override;
+        void paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected) override;
+        void selectedRowsChanged(int lastRowSelected) override;
+
+    private:
+        SuiteSettingsPanel& owner;
     };
 
     struct PathRow
@@ -46,6 +58,53 @@ private:
         juce::TextEditor editor;
         juce::TextButton browseButton { "Browse" };
     };
+
+#if JUCE_DEBUG
+    // Debug-only VFS inspection tool -- see docs/Suite-VFS-Browser-Debug-Tool.md. Reads whatever
+    // the VFS actually contains at runtime (real files under the configured root, plus whatever
+    // entries the VFS service reports) rather than assuming any particular layout, so it stays
+    // correct through future reorganizations of the VFS instead of needing to be rebuilt alongside
+    // one.
+    class VfsFileTreeItem final : public juce::TreeViewItem
+    {
+    public:
+        VfsFileTreeItem(const juce::File& file, std::function<void(const juce::File&)> onSelected);
+        bool mightContainSubItems() override;
+        void itemOpennessChanged(bool isNowOpen) override;
+        void paintItem(juce::Graphics& g, int width, int height) override;
+        void itemClicked(const juce::MouseEvent&) override;
+
+    private:
+        juce::File file_;
+        std::function<void(const juce::File&)> onSelected_;
+    };
+
+    // A synthetic node (not backed by a real directory) whose children are built from a flat
+    // logical-path list -- used for the VFS service's own "suite/" entries, which live inside the
+    // suite root project's container, not as loose OS files.
+    class VfsEntryTreeItem final : public juce::TreeViewItem
+    {
+    public:
+        VfsEntryTreeItem(juce::String displayName, juce::String fullLogicalPath, bool isLeaf,
+                         std::function<void(const juce::String&)> onSelected);
+        void addChildPath(const juce::StringArray& remainingSegments, const juce::String& fullLogicalPath);
+        bool mightContainSubItems() override { return getNumSubItems() > 0; }
+        void paintItem(juce::Graphics& g, int width, int height) override;
+        void itemClicked(const juce::MouseEvent&) override;
+
+    private:
+        VfsEntryTreeItem* findOrCreateChild(const juce::String& segment);
+        juce::String displayName_;
+        juce::String fullLogicalPath_;
+        bool isLeaf_ = false;
+        std::function<void(const juce::String&)> onSelected_;
+    };
+
+    void buildVfsBrowserTree();
+    void showVfsFileContent(const juce::File& file);
+    void showVfsEntryContent(const juce::String& logicalPath);
+    void setVfsContentText(const juce::String& title, const juce::String& rawContent, bool wasParsed, const juce::String& parseNote);
+#endif
 
     void configureRow(PathRow& row, const juce::String& id, const juce::String& labelText);
     void layoutRow(PathRow& row, juce::Rectangle<int>& area);
@@ -58,17 +117,26 @@ private:
     void layoutLogTab(juce::Rectangle<int>& area);
     void appendLogLine(const juce::String& text);
     void refreshAiAccountUi();
-    void refreshAccountSelectors();
-    void pushCurrentEditorToSelectedAccount();
-    void pullSelectedAccountIntoEditor();
-    juce::String accountIdForCombo(const juce::ComboBox& comboBox) const;
+    void refreshSelectedAccountSummary();
+    // Add/Edit/Remove Account are each a complete, terminal action (like Connect already is) -
+    // persist immediately via onApplyAiSettingsRequested rather than waiting for a separate
+    // "Apply Suite Settings" click, so the account list on disk never silently diverges from
+    // what the list shows on screen.
+    void persistAiSettings();
 
     juce::Label titleLabel;
     juce::Label subTitleLabel;
     juce::Image suiteLogo;
     juce::TextButton storageTabButton { "Storage" };
-    juce::TextButton aiTabButton { "AI & Routing" };
+    juce::TextButton aiTabButton { "Suite AI Accounts" };
     juce::TextButton suiteLogTabButton { "Suite Log" };
+#if JUCE_DEBUG
+    juce::TextButton vfsBrowserTabButton { "VFS Browser" };
+    juce::TreeView vfsTreeView;
+    std::unique_ptr<juce::TreeViewItem> vfsTreeRoot;
+    juce::Label vfsContentTitleLabel;
+    juce::TextEditor vfsContentViewer;
+#endif
     juce::Viewport scrollViewport;
     juce::Component scrollContent;
     juce::Label storageIntroLabel;
@@ -76,26 +144,15 @@ private:
     PathRow suiteVfsRow;
     juce::Label aiIntroLabel;
     juce::Label aiSectionLabel;
-    juce::ComboBox accountSelectorCombo;
+    AccountListBoxModel accountListBoxModel { *this };
+    juce::ListBox accountListBox { "Suite AI Accounts", &accountListBoxModel };
     juce::TextButton addAccountButton { "+ Account" };
+    juce::TextButton editAccountButton { "Edit" };
     juce::TextButton removeAccountButton { "Remove" };
     juce::TextButton testAccountButton { "Test Account" };
-    juce::Label providerLabel;
-    juce::ComboBox providerCombo;
-    juce::Label accountLabelLabel;
-    juce::TextEditor accountLabelEditor;
-    juce::Label endpointLabel;
-    juce::TextEditor endpointEditor;
-    juce::Label modelLabel;
-    juce::TextEditor modelEditor;
-    juce::Label apiKeyLabel;
-    juce::TextEditor apiKeyEditor;
-    juce::Label defaultAccountLabel;
-    juce::ComboBox defaultAccountCombo;
-    AppSelectionRow stationSelectionRow;
-    AppSelectionRow engineSelectionRow;
-    AppSelectionRow movieSelectionRow;
-    AppSelectionRow liveSelectionRow;
+    // Read-only summary of the selected account (provider/endpoint/model/cached-model-count) -
+    // account details are only ever edited through the Add/Edit Account dialog now, not inline here.
+    juce::Label accountSummaryLabel;
     juce::Label logSectionLabel;
     juce::Label logIntroLabel;
     juce::TextEditor suiteLogEditor;
@@ -106,4 +163,5 @@ private:
     juce::Array<creation::services::SuiteAiProviderPreset> aiProviders;
     int selectedAccountIndex = -1;
     Tab selectedTab = Tab::storage;
+    creation::suite::SuiteSettings currentSettings;
 };

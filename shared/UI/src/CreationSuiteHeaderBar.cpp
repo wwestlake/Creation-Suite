@@ -295,11 +295,25 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
     };
     rewindButton.onClick = [this, callback]
     {
+        if (juce::ModifierKeys::currentModifiers.isCtrlDown() && onRewindToStart)
+        {
+            statusLabel.setText("Transport: rewind to start", juce::dontSendNotification);
+            onRewindToStart();
+            return;
+        }
+
         statusLabel.setText("Transport: rewind", juce::dontSendNotification);
         callback(onRewind);
     };
     fastForwardButton.onClick = [this, callback]
     {
+        if (juce::ModifierKeys::currentModifiers.isCtrlDown() && onFastForwardToEnd)
+        {
+            statusLabel.setText("Transport: fast forward to end", juce::dontSendNotification);
+            onFastForwardToEnd();
+            return;
+        }
+
         statusLabel.setText("Transport: fast forward", juce::dontSendNotification);
         callback(onFastForward);
     };

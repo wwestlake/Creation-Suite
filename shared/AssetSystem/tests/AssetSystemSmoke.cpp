@@ -23,13 +23,22 @@ int main()
 {
     try
     {
-        creation::suite::SuiteSettings settings;
+        // Project storage now goes through the already-running, shared CreationSuiteVfsService
+        // process -- it uses whatever suiteVfsRoot IT loaded at its own startup, not a value
+        // fabricated here, so this can no longer isolate itself into a fresh temp VFS root the
+        // way it could when ProjectSession mounted its own local FatFs container directly. Use
+        // the real configured settings and clean up this test's own project folders at the end
+        // instead (same pattern as shared/Services/tests/ServicesSmoke.cpp's project-storage
+        // coverage). tempRoot is still used for local scratch files (import sources, materialized
+        // lease temp files) -- those never go through the service, so they're still fully
+        // isolable here.
+        juce::String settingsError;
+        const auto settings = creation::suite::SuiteSettingsStore().load(settingsError);
+
         auto tempRoot = juce::File::getSpecialLocation(juce::File::tempDirectory)
                             .getChildFile("creation-suite-asset-system-smoke");
         tempRoot.deleteRecursively();
         tempRoot.createDirectory();
-
-        settings.suiteVfsRoot = tempRoot.getChildFile("SuiteRoot").getFullPathName();
 
         juce::String errorMessage;
 
@@ -46,7 +55,6 @@ int main()
         descriptor.createdAt = juce::Time::getCurrentTime();
         descriptor.modifiedAt = descriptor.createdAt;
 
-        juce::File containerPath;
         juce::String projectId;
 
         // --- create a project, write an asset, commit, close --------------
@@ -64,10 +72,15 @@ int main()
             if (! session.isValid())
                 fail("Newly created project session should be valid immediately.");
 
-            containerPath = session.getContainerFile();
             projectId = session.getManifest().projectId;
-            if (! containerPath.existsAsFile())
-                fail("createNew should have created a real container file on disk.");
+            if (session.getProjectId() != projectId)
+                fail("ProjectSession's projectId should match its manifest's projectId.");
+
+            const auto realFolder = creation::suite::getProjectContainerDirectory(settings)
+                                        .getChildFile("Creation Station")
+                                        .getChildFile(projectId);
+            if (! realFolder.isDirectory())
+                fail("createNew should have created a real project folder on disk (not a packed container).");
 
             if (! session.writeEntry(descriptor.logicalPath, juce::MemoryBlock("TEST-DATA", 9)))
                 fail("ProjectSession writeEntry failed.");
@@ -87,11 +100,11 @@ int main()
             session.close();
         }
 
-        // --- reopen a fresh session: proves the manifest and the asset
-        //     both really persisted to the container file, not just memory
+        // --- reopen a fresh session: proves the manifest and the asset both really
+        //     persisted on the VFS service, not just in this process's memory
         {
             creation::assets::ProjectSession reopened;
-            if (! creation::assets::ProjectSession::open(containerPath, reopened, errorMessage))
+            if (! creation::assets::ProjectSession::open(settings, projectId, reopened, errorMessage))
                 fail("ProjectSession open (reopen) failed: " + errorMessage);
 
             if (! reopened.isValid() || reopened.getManifest().projectId != projectId)
@@ -237,6 +250,7 @@ int main()
         }
 
         // --- ProjectContainerService / ProjectWorkspaceService -------------
+        juce::String serviceProjectId;
         {
             creation::assets::ProjectSession serviceSession;
             if (! creation::assets::ProjectContainerService::createProject(settings,
@@ -248,13 +262,12 @@ int main()
                                                                            errorMessage))
                 fail("ProjectContainerService createProject failed: " + errorMessage);
 
-            const auto serviceProjectId = serviceSession.getManifest().projectId;
+            serviceProjectId = serviceSession.getManifest().projectId;
             serviceSession.close();
 
-            // listProjects/findProjectById peek each container's manifest via
-            // its own short-lived mount -- they can only see containers that
-            // are not currently held open elsewhere (VFS-M4's single-owner
-            // rule), so the session above must be closed before scanning.
+            // listProjects/findProjectById read manifests through the VFS service, which
+            // has no concept of an app "holding a project open" at all -- no need to close
+            // the session above first, close() here is just for call-site symmetry.
             juce::String listError;
             const auto modelerProjects = creation::assets::ProjectContainerService::listProjects(settings,
                                                                                                  creation::assets::SuiteAppDomain::modeler,
@@ -319,6 +332,14 @@ int main()
         workspaceSession.close();
 
         std::cout << "AssetSystemSmoke: all checks passed." << std::endl;
+
+        // Clean up this test's own project folders on the real, shared VFS root -- never
+        // touch anything else under "Project Containers" (real projects may live alongside).
+        creation::suite::getProjectContainerDirectory(settings)
+            .getChildFile("Creation Station").getChildFile(projectId).deleteRecursively();
+        creation::suite::getProjectContainerDirectory(settings)
+            .getChildFile("Creation Modeler").getChildFile(serviceProjectId).deleteRecursively();
+        creation::suite::getMaterializedFilesDirectory(settings, projectId).deleteRecursively();
 
         tempRoot.deleteRecursively();
         return 0;

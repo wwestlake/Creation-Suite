@@ -38,7 +38,7 @@ public:
     void openSuiteProfile();
     void clearShellProfile();
 
-    std::function<void(const juce::File&)> onProjectOpenRequested;
+    std::function<void(const juce::String& projectId)> onProjectOpenRequested;
 
 private:
     void showSuiteSettingsWindow();

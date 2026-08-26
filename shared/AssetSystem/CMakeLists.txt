@@ -8,10 +8,17 @@ add_library(creation_suite_asset_system STATIC
     src/ProjectSession.cpp
     src/ProjectWorkspaceService.cpp
     src/ProjectManifest.cpp
-    src/SuiteRootProject.cpp
     src/SuiteSettings.cpp
     src/SuiteStoragePaths.cpp
     src/VirtualFileSystem.cpp
+    # SuiteVfsServiceClient/SuiteProcessRegistry live here, not shared/Services, so that
+    # ProjectSession (this library) can talk to the VFS service without creating a dependency
+    # cycle -- shared/Services already depends PUBLIC on this library for ProjectManifest, so
+    # putting the VFS-service client at the other end of that edge would be circular. Both
+    # remain reachable at their existing #include <creation/services/...> paths for every
+    # existing caller (shared/Services, shared/UI, services/VfsService).
+    src/SuiteVfsServiceClient.cpp
+    src/SuiteProcessRegistry.cpp
 )
 
 target_include_directories(creation_suite_asset_system PUBLIC include)

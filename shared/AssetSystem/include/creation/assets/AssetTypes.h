@@ -16,6 +16,7 @@ enum class AssetKind
     render,
     patch,
     foleyPatch,
+    trackerArrangement,
     script,
     metadata,
     preset,

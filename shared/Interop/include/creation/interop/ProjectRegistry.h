@@ -9,7 +9,7 @@ namespace creation::interop
 {
 struct ProjectRecord
 {
-    juce::File containerFile;
+    juce::String projectId;
     creation::assets::ProjectManifest manifest;
 };
 

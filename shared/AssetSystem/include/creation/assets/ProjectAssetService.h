@@ -32,6 +32,18 @@ public:
                            AssetDescriptor& outDescriptor,
                            juce::String& errorMessage);
 
+    // Same shape as importFile, for tool-generated content that only ever exists in memory (a
+    // serialized arrangement, patch, or node graph) -- never touches disk outside the project
+    // itself. options.logicalPath is required (there's no source file to derive a default from).
+    // A save whose logicalPath matches an existing asset reuses that asset's id and bumps its
+    // revision (silent overwrite by name, matching the convention already shipped for Signal Lab
+    // patches); otherwise a fresh id is minted.
+    static bool saveGeneratedAsset(ProjectSession& session,
+                                   const juce::MemoryBlock& data,
+                                   const ImportOptions& options,
+                                   AssetDescriptor& outDescriptor,
+                                   juce::String& errorMessage);
+
     static bool createNewVersion(ProjectSession& session,
                                  const AssetDescriptor& existingAsset,
                                  const juce::File& sourceFile,

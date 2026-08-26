@@ -1,6 +1,7 @@
 #include <creation/services/SuiteAiSettings.h>
 #include <creation/services/SuiteAiProviderRuntime.h>
-#include <creation/services/SuiteVfsServiceClient.h>
+#include <creation/services/SuiteAiModelCatalogClient.h>
+#include <creation/services/SuiteVfsJsonStore.h>
 
 namespace
 {
@@ -20,6 +21,13 @@ juce::var toVar(const creation::services::SuiteAiSettings& settings)
         accountObject->setProperty("modelName", account.modelName);
         accountObject->setProperty("apiKey", account.apiKey);
         accountObject->setProperty("enabled", account.enabled);
+
+        juce::Array<juce::var> modelIds;
+        for (const auto& modelId : account.cachedModelIds)
+            modelIds.add(modelId);
+        accountObject->setProperty("cachedModelIds", modelIds);
+        accountObject->setProperty("modelsFetchedAt", account.modelsFetchedAt);
+
         accounts.add(juce::var(accountObject));
     }
 
@@ -64,6 +72,10 @@ creation::services::SuiteAiSettings fromVar(const juce::var& value)
             account.modelName = accountObject->getProperty("modelName").toString();
             account.apiKey = accountObject->getProperty("apiKey").toString();
             account.enabled = static_cast<bool>(accountObject->getProperty("enabled"));
+            if (const auto* modelIds = accountObject->getProperty("cachedModelIds").getArray())
+                for (const auto& modelId : *modelIds)
+                    account.cachedModelIds.add(modelId.toString());
+            account.modelsFetchedAt = accountObject->getProperty("modelsFetchedAt").toString();
             settings.accounts.add(account);
         }
     }
@@ -126,45 +138,46 @@ const SuiteAiProviderPreset* SuiteAiProviderCatalog::findById(const juce::Array<
 
 SuiteAiSettings SuiteAiSettingsStore::load(juce::String& errorMessage) const
 {
-    SuiteVfsServiceClient client;
-    if (! client.discover())
-    {
-        errorMessage = "Could not reach the suite VFS service.";
-        return {};
-    }
-
-    juce::MemoryBlock data;
-    if (! client.readEntry("ai-settings.json", data))
-        return {}; // no entry yet -- same "nothing saved" meaning the old missing-file case had.
-
-    const auto parsed = juce::JSON::parse(juce::String::createStringFromData(data.getData(), static_cast<int>(data.getSize())));
+    const auto parsed = SuiteVfsJsonStore::loadJson("ai-settings.json", errorMessage);
     if (parsed.isVoid())
-    {
-        errorMessage = "Could not parse the suite AI settings entry.";
         return {};
-    }
 
     return fromVar(parsed);
 }
 
 bool SuiteAiSettingsStore::save(const SuiteAiSettings& settings, juce::String& errorMessage) const
 {
-    SuiteVfsServiceClient client;
-    if (! client.discover())
+    return SuiteVfsJsonStore::saveJson("ai-settings.json", toVar(settings), errorMessage);
+}
+
+SuiteAiSettings SuiteAiSettingsStore::refreshAllAccountModelCaches(juce::String& errorMessage) const
+{
+    auto settings = load(errorMessage);
+
+    SuiteAiModelCatalogClient client;
+    auto anyUpdated = false;
+    for (auto& account : settings.accounts)
     {
-        errorMessage = "Could not reach the suite VFS service.";
-        return false;
+        const auto profile = SuiteAiProviderRuntime::resolveProfile(account.providerId);
+        if (SuiteAiProviderRuntime::requiresApiKey(profile, account.apiKey))
+            continue;
+
+        juce::StringArray modelIds;
+        juce::String fetchError;
+        if (client.fetchModelIds(account.baseUrl, account.providerId, account.apiKey, modelIds, fetchError))
+        {
+            account.cachedModelIds = modelIds;
+            account.modelsFetchedAt = juce::Time::getCurrentTime().toISO8601(true);
+            anyUpdated = true;
+        }
+        // On failure, leave the existing cache alone - this is a background startup refresh, not
+        // a user action, so a transient network hiccup shouldn't wipe a working cache.
     }
 
-    const auto json = juce::JSON::toString(toVar(settings), true);
-    const juce::MemoryBlock data(json.toRawUTF8(), json.getNumBytesAsUTF8());
-    if (! client.writeEntry("ai-settings.json", data))
-    {
-        errorMessage = "Could not save the suite AI settings entry.";
-        return false;
-    }
+    if (anyUpdated)
+        save(settings, errorMessage);
 
-    return true;
+    return settings;
 }
 
 const SuiteAiAccountSettings* SuiteAiSettingsResolver::findAccountById(const SuiteAiSettings& settings,
@@ -307,5 +320,24 @@ void SuiteAiSettingsResolver::upsertRuntimeSettingsForApp(SuiteAiSettings& setti
 
     if (setAsDefaultIfEmpty && settings.defaultAccountId.trim().isEmpty())
         settings.defaultAccountId = accountId;
+}
+
+void SuiteAiSettingsResolver::selectAccountForApp(SuiteAiSettings& settings,
+                                                  creation::assets::SuiteAppDomain appDomain,
+                                                  const juce::String& accountId,
+                                                  const juce::String& modelNameOverride)
+{
+    for (auto& selection : settings.appSelections)
+    {
+        if (selection.appDomain == appDomain)
+        {
+            selection.accountId = accountId;
+            selection.modelNameOverride = modelNameOverride;
+            selection.enabled = true;
+            return;
+        }
+    }
+
+    settings.appSelections.add({ appDomain, accountId, modelNameOverride, true });
 }
 }

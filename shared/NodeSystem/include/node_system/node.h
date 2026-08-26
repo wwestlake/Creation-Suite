@@ -21,6 +21,7 @@ enum class Domain {
     Material,
     Event,
     Audio,
+    Video,
 };
 
 class Node {
