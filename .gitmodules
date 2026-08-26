@@ -16,3 +16,19 @@
 [submodule "apps/CreationModeler"]
 	path = apps/CreationModeler
 	url = https://github.com/wwestlake/Creation-Modeler.git
+[submodule "apps/CreationRemoteAndroid"]
+	path = apps/CreationRemoteAndroid
+	url = https://github.com/wwestlake/Creation-Remote-Android.git
+	branch = master
+[submodule "apps/CreationRemoteReceiver"]
+	path = apps/CreationRemoteReceiver
+	url = https://github.com/wwestlake/Creation-Remote-Receiver.git
+	branch = master
+[submodule "apps/CreationEngineer"]
+	path = apps/CreationEngineer
+	url = https://github.com/wwestlake/Creation-Engineer.git
+	branch = master
+[submodule "apps/CreationDeveloper"]
+	path = apps/CreationDeveloper
+	url = https://github.com/wwestlake/Creation-Developer.git
+	branch = master
