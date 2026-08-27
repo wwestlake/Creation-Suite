@@ -746,7 +746,10 @@ void SuiteShellController::showProjectBrowserWindow()
     {
         if (onProjectOpenRequested)
             onProjectOpenRequested(projectId);
-        closeProjectBrowserWindow();
+
+        // The project panel owns the button callback currently on the stack.
+        // Defer destroying its window until that callback has returned.
+        juce::MessageManager::callAsync([this] { closeProjectBrowserWindow(); });
     };
     auto window = std::make_unique<ManagedDocumentWindow>("Creation Suite Project Manager",
                                                           config.backgroundColour,
