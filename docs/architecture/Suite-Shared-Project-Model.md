@@ -55,6 +55,36 @@ There is exactly one setting a user makes: the VFS root path (recommended: a lar
 
 On launch, an app's splash screen checks whether the suite is configured (VFS root set, background service reachable) before loading its main window. If not configured, the suite's shared setup/walkthrough flow runs — not an app-local one — to gather what's needed, VFS location foremost among it. Only after that does the app proceed to its normal main screen.
 
+## Shared active-project context
+
+The shared shell owns the active `ProjectSession` for each running app. The
+header's project control opens the common Project Manager. When a project is
+selected, the shell opens its session, updates the header to `Project: <name>`,
+and passes that same session to the app. A project name in the header is
+therefore the currently selected VFS project, not a cosmetic label or an
+app-local copy of project state.
+
+Applications may remember the last successfully opened project and restore it
+at startup. That is a convenience only: the shared project session remains the
+authoritative current context.
+
+### Creation Developer workspace
+
+Creation Developer uses the active Suite project as the parent container for
+FRust Suite-plugin development. Its Frate VFS Terminal creates plugin pods in
+the project-owned FRust working area instead of writing to an arbitrary local
+directory. The current scaffold contains pod metadata and FRust source under
+the project's plugin-pod workspace, with generated material kept separately.
+
+The terminal roles intentionally remain separate:
+
+- The OS Terminal runs PowerShell against the host operating system.
+- The FRust Terminal evaluates code at the `fr->` prompt.
+- The Frate VFS Terminal manages Suite plugin-pod work at the `frate>` prompt.
+
+This separation prevents a command intended to operate on a Suite VFS project
+from accidentally behaving like a host-filesystem package command.
+
 ## Relationship to Suite-Realtime-Collaboration-Plan.md
 
 That doc is about multiple *users*, potentially on different machines, editing the same project over a network (LagDaemon.com as broker, WebRTC-style P2P data path). This doc is about multiple *apps*, same machine, same project, no network involved. They will likely converge — a project opened locally by two apps and remotely by a second user's machine is the same underlying "how do writes get coordinated" problem — but the local multi-app case is the more immediate, more foundational one: it has to work before remote collaboration is even worth building.
