@@ -216,7 +216,8 @@ bool VfsProjectStore::findProjectFolderById(const juce::String& projectId, juce:
         return false;
 
     for (auto domain : { SuiteAppDomain::station, SuiteAppDomain::engine, SuiteAppDomain::movie,
-                        SuiteAppDomain::live, SuiteAppDomain::texture, SuiteAppDomain::modeler })
+                        SuiteAppDomain::live, SuiteAppDomain::texture, SuiteAppDomain::modeler,
+                        SuiteAppDomain::developer })
     {
         auto folder = projectFolder(settings_, domain, projectId);
         if (folder.isDirectory())
