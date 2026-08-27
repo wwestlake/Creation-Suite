@@ -671,6 +671,25 @@ void SuiteShellController::showProjectBrowser()
     showProjectBrowserWindow();
 }
 
+bool SuiteShellController::openProject(const juce::String& projectId)
+{
+    juce::String errorMessage;
+    if (! creation::assets::ProjectContainerService::openProject(
+            suiteSettings, projectId, activeProjectSession, errorMessage))
+    {
+        setStatus("Could not open Suite project: " + errorMessage);
+        return false;
+    }
+
+    if (headerBar != nullptr)
+        headerBar->setProjectLabel("Project: " + activeProjectSession.getManifest().projectName);
+
+    if (onProjectOpenRequested)
+        onProjectOpenRequested(projectId);
+
+    return true;
+}
+
 void SuiteShellController::showAssetManager()
 {
     showAssetManagerWindow();
@@ -744,8 +763,8 @@ void SuiteShellController::showProjectBrowserWindow()
     auto panel = std::make_unique<SuiteProjectBrowserPanel>(config.appDomain);
     panel->onProjectOpenRequested = [this](const juce::String& projectId)
     {
-        if (onProjectOpenRequested)
-            onProjectOpenRequested(projectId);
+        if (! openProject(projectId))
+            return;
 
         // The project panel owns the button callback currently on the stack.
         // Defer destroying its window until that callback has returned.
