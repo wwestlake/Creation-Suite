@@ -27,6 +27,7 @@ juce::String suiteAuthAppSlug(creation::assets::SuiteAppDomain domain)
         case creation::assets::SuiteAppDomain::live: return "creation-live";
         case creation::assets::SuiteAppDomain::texture: return "creation-texture";
         case creation::assets::SuiteAppDomain::modeler: return "creation-modeler";
+        case creation::assets::SuiteAppDomain::developer: return "creation-developer";
         case creation::assets::SuiteAppDomain::unknown: break;
     }
 
@@ -92,6 +93,7 @@ public:
         domainCombo.addItem("Creation Live", 5);
         domainCombo.addItem("Creation Texture", 6);
         domainCombo.addItem("Creation Modeler", 7);
+        domainCombo.addItem("Creation Developer", 8);
         domainCombo.setSelectedId(1, juce::dontSendNotification);
         domainCombo.onChange = [this] { filterProjects(); };
         addAndMakeVisible(domainCombo);
@@ -190,7 +192,20 @@ public:
         {
             if (selectedDomainId > 1)
             {
-                auto targetDomain = static_cast<creation::assets::SuiteAppDomain>(selectedDomainId - 2);
+                const auto targetDomain = [selectedDomainId]
+                {
+                    switch (selectedDomainId)
+                    {
+                        case 2: return creation::assets::SuiteAppDomain::station;
+                        case 3: return creation::assets::SuiteAppDomain::engine;
+                        case 4: return creation::assets::SuiteAppDomain::movie;
+                        case 5: return creation::assets::SuiteAppDomain::live;
+                        case 6: return creation::assets::SuiteAppDomain::texture;
+                        case 7: return creation::assets::SuiteAppDomain::modeler;
+                        case 8: return creation::assets::SuiteAppDomain::developer;
+                        default: return creation::assets::SuiteAppDomain::unknown;
+                    }
+                }();
                 if (project.manifest.appDomain != targetDomain)
                     continue;
             }
@@ -727,7 +742,12 @@ void SuiteShellController::showProjectBrowserWindow()
     }
 
     auto panel = std::make_unique<SuiteProjectBrowserPanel>(config.appDomain);
-    panel->onProjectOpenRequested = onProjectOpenRequested;
+    panel->onProjectOpenRequested = [this](const juce::String& projectId)
+    {
+        if (onProjectOpenRequested)
+            onProjectOpenRequested(projectId);
+        closeProjectBrowserWindow();
+    };
     auto window = std::make_unique<ManagedDocumentWindow>("Creation Suite Project Manager",
                                                           config.backgroundColour,
                                                           juce::DocumentWindow::allButtons,
