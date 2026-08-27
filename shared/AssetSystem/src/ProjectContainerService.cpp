@@ -78,7 +78,8 @@ juce::Array<ProjectContainerService::ProjectSummary> ProjectContainerService::li
                                SuiteAppDomain::movie,
                                SuiteAppDomain::live,
                                SuiteAppDomain::texture,
-                               SuiteAppDomain::modeler })
+                               SuiteAppDomain::modeler,
+                               SuiteAppDomain::developer })
     {
         juce::String listError;
         const auto domainProjects = listProjects(settings, domain, listError);
