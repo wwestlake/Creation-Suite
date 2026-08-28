@@ -18,6 +18,12 @@ public:
         std::int64_t value = 0;
     };
 
+    struct NodeLibraryManifest
+    {
+        std::string id;
+        std::string descriptorJson;
+    };
+
     static constexpr const char* defaultPluginKey = "default";
 
     explicit PluginRuntime(std::string applicationIdentity);
@@ -48,6 +54,7 @@ public:
     [[nodiscard]] bool isLoaded(const std::string& key) const noexcept;
     [[nodiscard]] std::vector<std::string> loadedPluginKeys() const;
     [[nodiscard]] std::string lastError(const std::string& key) const;
+    [[nodiscard]] std::vector<NodeLibraryManifest> nodeLibraries(const std::string& key) const;
 
     void fireEvent(const char* name, void* payload = nullptr) const;
 

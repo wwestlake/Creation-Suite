@@ -167,6 +167,30 @@ std::string PluginRuntime::lastError(const std::string& key) const
     return found != errors.end() ? found->second : std::string{};
 }
 
+std::vector<PluginRuntime::NodeLibraryManifest> PluginRuntime::nodeLibraries(const std::string& key) const
+{
+    const auto found = plugins.find(key);
+    if (found == plugins.end())
+        return {};
+
+    FrustPluginManifestHandle manifest = frust_plugin_get_manifest(found->second);
+    if (manifest == nullptr)
+        return {};
+
+    std::vector<NodeLibraryManifest> libraries;
+    const int32_t count = frust_plugin_manifest_node_library_count(manifest);
+    libraries.reserve(static_cast<std::size_t>(count));
+    for (int32_t index = 0; index < count; ++index)
+    {
+        const char* id = frust_plugin_manifest_node_library_id(manifest, index);
+        const char* descriptorJson = frust_plugin_manifest_node_library_json(manifest, index);
+        if (id != nullptr && descriptorJson != nullptr)
+            libraries.push_back({ id, descriptorJson });
+    }
+    frust_plugin_manifest_free(manifest);
+    return libraries;
+}
+
 void PluginRuntime::fireEvent(const char* name, void* payload) const
 {
     frust_fire_event(name, payload);
