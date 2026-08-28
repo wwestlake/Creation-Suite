@@ -30,7 +30,6 @@ juce::Colour HeaderColourFor(ce::node_system::Domain domain) {
         case ce::node_system::Domain::Animation: return juce::Colour(0xff5f9c5a);
         case ce::node_system::Domain::Material: return juce::Colour(0xff9c5a9c);
         case ce::node_system::Domain::Audio: return juce::Colour(0xff9c8a5a);
-        case ce::node_system::Domain::Video: return juce::Colour(0xff2ec4b6);
     }
     return juce::Colour(0xff444444);
 }
