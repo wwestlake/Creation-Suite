@@ -21,6 +21,7 @@ public:
 
     void floatPanel(DockPanel* panel);
     void dockPanel(DockPanel* panel, DockTargetZone zone);
+    void activatePanel(const juce::String& id);
 
     // Rearranges every registered panel back to the zone it was first registered
     // into, and resets zone sizes to the library defaults.
