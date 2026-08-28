@@ -103,6 +103,16 @@ void DockManager::dockPanel(DockPanel* panel, DockTargetZone zone)
     container.resized();
 }
 
+void DockManager::activatePanel(const juce::String& id)
+{
+    auto* panel = findPanelById(id);
+    if (panel == nullptr) return;
+    if (container.getLeftZone()->containsPanel(panel)) container.getLeftZone()->setActivePanel(panel);
+    else if (container.getRightZone()->containsPanel(panel)) container.getRightZone()->setActivePanel(panel);
+    else if (container.getBottomZone()->containsPanel(panel)) container.getBottomZone()->setActivePanel(panel);
+    else if (container.getCenterZone()->containsPanel(panel)) container.getCenterZone()->setActivePanel(panel);
+}
+
 void DockManager::floatPanel(DockPanel* panel)
 {
     floatPanelAt(panel, { -1, -1 });
