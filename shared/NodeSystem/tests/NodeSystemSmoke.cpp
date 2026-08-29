@@ -1,4 +1,5 @@
 #include <node_system/celg_serialization.h>
+#include <node_system/core_control_flow.h>
 #include <node_system/graph_analysis.h>
 #include <node_system/type_registry.h>
 
@@ -89,6 +90,35 @@ int main()
 
         if (ce::node_system::DetectExecCycle(*roundTripped).has_value())
             fail("DetectExecCycle reported a cycle where none exists.");
+
+        ce::node_system::NodeTypeRegistry controlRegistry;
+        ce::node_system::RegisterCoreControlFlowNodes(controlRegistry);
+        ce::node_system::Graph branchGraph("ControlFlowGraph");
+        auto* branch = ce::node_system::AddRegisteredNode(branchGraph, controlRegistry, "core.branch", &error);
+        if (branch == nullptr || branch->Inputs().size() != 2 || branch->Outputs().size() != 2)
+            fail("Branch node contract was not registered correctly.");
+
+        ce::node_system::Graph loopGraph("LoopGraph");
+        auto* loop = ce::node_system::AddRegisteredNode(loopGraph, controlRegistry, "core.for", &error);
+        if (loop == nullptr)
+            fail("For node contract was not registered correctly.");
+        const auto findPin = [](const ce::node_system::Node& node, const std::string& name) {
+            for (const auto& pin : node.Inputs())
+                if (pin.name == name) return pin.id;
+            for (const auto& pin : node.Outputs())
+                if (pin.name == name) return pin.id;
+            return ce::node_system::PinId{};
+        };
+        if (! loopGraph.Connect(loop->Id(), findPin(*loop, "body"), loop->Id(), findPin(*loop, "execute")).has_value())
+            fail("Failed to create the For loop body cycle.");
+        if (! ce::node_system::ValidateGraph(loopGraph, &controlRegistry).ok)
+            fail("A structured For loop cycle was rejected.");
+
+        ce::node_system::Graph invalidBreakGraph("InvalidBreakGraph");
+        if (ce::node_system::AddRegisteredNode(invalidBreakGraph, controlRegistry, "core.break", &error) == nullptr)
+            fail("Failed to add Break node.");
+        if (ce::node_system::ValidateGraph(invalidBreakGraph, &controlRegistry).ok)
+            fail("Break outside a loop was accepted.");
 
         return 0;
     }

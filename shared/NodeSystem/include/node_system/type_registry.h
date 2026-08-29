@@ -10,6 +10,17 @@
 
 namespace ce::node_system {
 
+enum class ControlFlowKind {
+    None,
+    Branch,
+    Sequence,
+    For,
+    While,
+    Break,
+    Continue,
+    Return,
+};
+
 // One input or output pin's fixed shape, as promised by a registered
 // node type -- name, type, and (for inputs) the STARTING default value
 // AddRegisteredNode gives a freshly-constructed instance. A node
@@ -32,14 +43,14 @@ struct PinSignature {
 // guarantee two nodes of the "same" type actually have the same
 // shape). A NodeTypeDescriptor is the authoritative pin signature for
 // one type name; AddRegisteredNode (below) is what actually constructs
-// a node guaranteed to match it. The real v1 Core/Event node catalog
-// (OnStart, OnTick, Branch, ...) is GS9 scope, not built here --
-// GS8 is just this registry mechanism itself.
+// a node guaranteed to match it. Control-flow metadata identifies structured
+// Suite nodes without coupling this graph layer to FRust syntax.
 struct NodeTypeDescriptor {
     std::string typeName;
     Domain domain = Domain::Core;
     std::vector<PinSignature> inputs;
     std::vector<PinSignature> outputs;
+    ControlFlowKind controlFlow = ControlFlowKind::None;
 };
 
 class NodeTypeRegistry {
