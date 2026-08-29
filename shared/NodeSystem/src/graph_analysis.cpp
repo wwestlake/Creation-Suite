@@ -91,8 +91,7 @@ std::optional<std::vector<NodeId>> TopologicalDataOrder(const Graph& graph) {
 
     // Sorted seed so the result is deterministic across runs (map/set
     // iteration order isn't guaranteed) -- matters for
-    // celc --selftest-graph's structural-equality assertions and for
-    // .celg round-trip stability if this were ever serialized.
+    // graph compiler structural-equality assertions and round-trip stability.
     std::vector<NodeId> ready;
     for (const auto& [id, degree] : inDegree) {
         if (degree == 0) {

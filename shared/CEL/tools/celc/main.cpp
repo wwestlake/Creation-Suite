@@ -21,7 +21,7 @@
 #include "lang/nodegen/graph_to_source.h"
 #include "lang/nodegen/node_catalog.h"
 #include "lang/sema.h"
-#include "node_system/celg_serialization.h"
+#include "node_system/frgraph_serialization.h"
 #include "nodegen_fixtures.h"
 #include "selftest_graph.h"
 

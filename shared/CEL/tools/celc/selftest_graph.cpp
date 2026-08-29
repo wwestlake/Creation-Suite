@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "node_system/celg_serialization.h"
+#include "node_system/frgraph_serialization.h"
 #include "node_system/graph.h"
 #include "node_system/graph_analysis.h"
 #include "node_system/type_registry.h"
