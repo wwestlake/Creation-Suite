@@ -39,6 +39,15 @@ juce::String nextVersionToken(const juce::String& version, int fallbackRevision)
         return juce::String(parsed + 1);
     return juce::String(juce::jmax(1, fallbackRevision + 1));
 }
+
+juce::String versionedLogicalPath(const juce::String& logicalPath, const juce::String& version)
+{
+    const auto extension = juce::File(logicalPath).getFileExtension();
+    if (extension.isEmpty())
+        return logicalPath + "@" + version;
+
+    return logicalPath.dropLastCharacters(extension.length()) + "@" + version + extension;
+}
 }
 
 namespace creation::assets
@@ -71,6 +80,11 @@ bool ProjectAssetService::importFile(ProjectSession& session,
     descriptor.mediaType = options.mediaType;
     descriptor.sourceApp = options.sourceApp;
     descriptor.sourceTool = options.sourceTool;
+    descriptor.sourceAssetId = options.sourceAssetId;
+    descriptor.sourceVersionId = options.sourceVersionId;
+    descriptor.importerId = options.importerId;
+    descriptor.importerVersion = options.importerVersion;
+    descriptor.importSettings = options.importSettings;
     descriptor.tags = options.tags;
     descriptor.originalAssetId = options.originalAssetId;
     descriptor.derivedFromVersionId = options.derivedFromVersionId;
@@ -125,6 +139,11 @@ bool ProjectAssetService::saveGeneratedAsset(ProjectSession& session,
     descriptor.mediaType = options.mediaType;
     descriptor.sourceApp = options.sourceApp;
     descriptor.sourceTool = options.sourceTool;
+    descriptor.sourceAssetId = options.sourceAssetId;
+    descriptor.sourceVersionId = options.sourceVersionId;
+    descriptor.importerId = options.importerId;
+    descriptor.importerVersion = options.importerVersion;
+    descriptor.importSettings = options.importSettings;
     descriptor.tags = options.tags;
     descriptor.originalAssetId = options.originalAssetId;
     descriptor.derivedFromVersionId = options.derivedFromVersionId;
@@ -156,12 +175,19 @@ bool ProjectAssetService::createNewVersion(ProjectSession& session,
     descriptor.version = nextVersionToken(existingAsset.version, existingAsset.revision);
     descriptor.versionId = existingAsset.id + "@" + descriptor.version;
     descriptor.displayName = overrides.displayName.isNotEmpty() ? overrides.displayName : existingAsset.displayName;
-    descriptor.logicalPath = overrides.logicalPath.isNotEmpty() ? overrides.logicalPath : existingAsset.logicalPath;
+    descriptor.logicalPath = overrides.logicalPath.isNotEmpty()
+                                 ? overrides.logicalPath
+                                 : versionedLogicalPath(existingAsset.logicalPath, descriptor.version);
     descriptor.category = overrides.category.isNotEmpty() ? overrides.category : existingAsset.category;
     descriptor.description = overrides.description.isNotEmpty() ? overrides.description : existingAsset.description;
     descriptor.mediaType = overrides.mediaType.isNotEmpty() ? overrides.mediaType : existingAsset.mediaType;
     descriptor.sourceApp = overrides.sourceApp.isNotEmpty() ? overrides.sourceApp : existingAsset.sourceApp;
     descriptor.sourceTool = overrides.sourceTool.isNotEmpty() ? overrides.sourceTool : existingAsset.sourceTool;
+    descriptor.sourceAssetId = overrides.sourceAssetId.isNotEmpty() ? overrides.sourceAssetId : existingAsset.sourceAssetId;
+    descriptor.sourceVersionId = overrides.sourceVersionId.isNotEmpty() ? overrides.sourceVersionId : existingAsset.sourceVersionId;
+    descriptor.importerId = overrides.importerId.isNotEmpty() ? overrides.importerId : existingAsset.importerId;
+    descriptor.importerVersion = overrides.importerVersion.isNotEmpty() ? overrides.importerVersion : existingAsset.importerVersion;
+    descriptor.importSettings = overrides.importSettings.isNotEmpty() ? overrides.importSettings : existingAsset.importSettings;
     descriptor.tags = overrides.tags.isEmpty() ? existingAsset.tags : overrides.tags;
     descriptor.kind = overrides.kind != AssetKind::unknown ? overrides.kind : existingAsset.kind;
     descriptor.originalAssetId = existingAsset.originalAssetId.isNotEmpty() ? existingAsset.originalAssetId : existingAsset.id;

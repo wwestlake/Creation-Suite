@@ -20,6 +20,11 @@ public:
         juce::String mediaType;
         juce::String sourceApp;
         juce::String sourceTool;
+        AssetId sourceAssetId;
+        AssetVersionId sourceVersionId;
+        juce::String importerId;
+        juce::String importerVersion;
+        juce::String importSettings;
         juce::StringArray tags;
         AssetId originalAssetId;
         AssetVersionId derivedFromVersionId;
