@@ -35,8 +35,8 @@ public:
     PinId AddInput(const std::string& name, PinTypeDesc type, PinDefaultValue defaultValue = {});
     PinId AddOutput(const std::string& name, PinTypeDesc type, PinDefaultValue defaultValue = {});
 
-    // GS8: for reconstructing a node from a .celg file (see
-    // celg_serialization.h) with its pins' ORIGINAL ids intact, so a
+    // For reconstructing a node from a serialized FRust graph with its
+    // pins' ORIGINAL ids intact, so a
     // save/load/save round trip is byte-identical rather than
     // renumbering everything. Also advances the internal
     // next-auto-assigned-id counter past `id` if needed, so a later
@@ -55,7 +55,7 @@ public:
 
     // GS8: canvas position for the node editor (GS10) -- purely
     // presentational, never consulted by graph structure/validation/
-    // codegen. Persisted through .celg so a saved layout survives a
+    // codegen. Persisted through the graph format so a saved layout survives a
     // reload.
     float EditorX() const { return editorX_; }
     float EditorY() const { return editorY_; }

@@ -1,4 +1,4 @@
-#include "node_system/celg_serialization.h"
+#include "node_system/frgraph_serialization.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -118,7 +118,7 @@ std::size_t FirstNonBlank(std::string& line) {
 std::string SerializeGraph(const Graph& graph) {
     std::ostringstream os;
     os << std::setprecision(9);
-    os << "celg 1\n";
+    os << "frgraph 1\n";
     os << "graph " << graph.Name() << "\n";
 
     std::vector<NodeId> nodeIds;
@@ -173,15 +173,15 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
         std::string keyword;
         tok >> keyword;
 
-        if (keyword == "celg") {
+        if (keyword == "frgraph") {
             int version = 0;
             if (!(tok >> version) || version != 1) {
-                return fail("expected 'celg 1' header");
+                return fail("expected 'frgraph 1' header");
             }
             sawHeader = true;
         } else if (keyword == "graph") {
             if (!sawHeader) {
-                return fail("'graph' line before 'celg' header");
+                return fail("'graph' line before 'frgraph' header");
             }
             std::string name;
             std::getline(tok, name);
@@ -320,7 +320,7 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
     }
 
     if (!sawHeader) {
-        return fail("missing 'celg 1' header");
+        return fail("missing 'frgraph 1' header");
     }
     if (!graph) {
         return fail("missing 'graph' line");

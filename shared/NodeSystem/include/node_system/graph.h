@@ -47,8 +47,8 @@ public:
     const Node* FindNode(NodeId id) const;
     const std::unordered_map<NodeId, std::unique_ptr<Node>>& Nodes() const { return nodes_; }
 
-    // GS8: for reconstructing a graph from a .celg file (see
-    // celg_serialization.h) with its ORIGINAL node id intact, so a
+    // For reconstructing a graph from a serialized FRust graph with its
+    // ORIGINAL node id intact, so a
     // save/load/save round trip is byte-identical. Also advances the
     // internal next-auto-assigned-id counter past `id`, mirroring
     // Node::AddInputWithId/AddOutputWithId's contract exactly. Rejects
@@ -62,7 +62,7 @@ public:
                                          ConnectError* outError = nullptr);
 
     // Same validation as Connect, but for reconstructing a graph from a
-    // .celg file with the connection's ORIGINAL id intact -- same
+    // graph file with the connection's ORIGINAL id intact -- same
     // reasoning as AddNodeWithId. Rejects (returns nullopt with
     // *outError left untouched) if `id` is already in use, in addition
     // to every rejection reason Connect itself checks.
