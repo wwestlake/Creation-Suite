@@ -41,4 +41,8 @@ struct ValidationResult {
 // compile/runtime).
 ValidationResult ValidateGraph(const Graph& graph, const NodeTypeRegistry* registry = nullptr);
 
+// Validates the structured execution contracts of registered control-flow
+// nodes. Data dependencies remain governed by TopologicalDataOrder().
+ValidationResult ValidateControlFlow(const Graph& graph, const NodeTypeRegistry& registry);
+
 } // namespace ce::node_system

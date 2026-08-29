@@ -6,6 +6,7 @@ add_library(creation_suite_node_system STATIC
     src/graph.cpp
     src/type_registry.cpp
     src/graph_analysis.cpp
+    src/core_control_flow.cpp
     src/celg_serialization.cpp
 )
 
