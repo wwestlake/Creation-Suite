@@ -24,6 +24,7 @@ enum class PinKind {
 // literal syntax) had no DataType counterpart until a real node needed
 // to carry one across a wire.
 enum class DataType {
+    Any,
     Float,
     Vec2,
     Vec3,
@@ -37,14 +38,30 @@ enum class DataType {
     Texture,
     AudioSignal,
     Entity,
+    Function,
+};
+
+enum class MonadKind {
+    None,
+    Option,
+    Result,
+};
+
+struct MonadTypeDesc {
+    MonadKind kind = MonadKind::None;
+    DataType valueType = DataType::Any;
+    DataType errorType = DataType::Any;
+
+    bool operator==(const MonadTypeDesc&) const = default;
 };
 
 struct PinTypeDesc {
     PinKind kind = PinKind::Data;
     DataType dataType = DataType::Float;
+    MonadTypeDesc monad;
 
     bool operator==(const PinTypeDesc& other) const {
-        return kind == other.kind && dataType == other.dataType;
+        return kind == other.kind && dataType == other.dataType && monad == other.monad;
     }
 };
 
@@ -58,7 +75,17 @@ inline bool IsConnectionCompatible(const PinTypeDesc& output, const PinTypeDesc&
         return false;
     }
     if (output.kind == PinKind::Data) {
-        return output.dataType == input.dataType;
+        if (output.monad.kind != MonadKind::None || input.monad.kind != MonadKind::None) {
+            if (output.monad.kind != input.monad.kind)
+                return false;
+            const auto matches = [](DataType left, DataType right) {
+                return left == right || left == DataType::Any || right == DataType::Any;
+            };
+            return matches(output.monad.valueType, input.monad.valueType)
+                && matches(output.monad.errorType, input.monad.errorType);
+        }
+        return output.dataType == input.dataType || output.dataType == DataType::Any
+            || input.dataType == DataType::Any;
     }
     return true; // Exec -> Exec is always compatible.
 }
