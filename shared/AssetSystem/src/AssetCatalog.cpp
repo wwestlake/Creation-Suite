@@ -102,6 +102,11 @@ juce::var toVar(const AssetDescriptor& descriptor)
     object->setProperty("logicalPath", descriptor.logicalPath);
     object->setProperty("sourceApp", descriptor.sourceApp);
     object->setProperty("sourceTool", descriptor.sourceTool);
+    object->setProperty("sourceAssetId", descriptor.sourceAssetId);
+    object->setProperty("sourceVersionId", descriptor.sourceVersionId);
+    object->setProperty("importerId", descriptor.importerId);
+    object->setProperty("importerVersion", descriptor.importerVersion);
+    object->setProperty("importSettings", descriptor.importSettings);
     object->setProperty("version", descriptor.version);
     object->setProperty("fileSizeBytes", static_cast<int64_t>(descriptor.fileSizeBytes));
     object->setProperty("revision", descriptor.revision);
@@ -134,6 +139,11 @@ bool fromVar(const juce::var& value, AssetDescriptor& outDescriptor)
     outDescriptor.logicalPath = object->getProperty("logicalPath").toString();
     outDescriptor.sourceApp = object->getProperty("sourceApp").toString();
     outDescriptor.sourceTool = object->getProperty("sourceTool").toString();
+    outDescriptor.sourceAssetId = object->getProperty("sourceAssetId").toString();
+    outDescriptor.sourceVersionId = object->getProperty("sourceVersionId").toString();
+    outDescriptor.importerId = object->getProperty("importerId").toString();
+    outDescriptor.importerVersion = object->getProperty("importerVersion").toString();
+    outDescriptor.importSettings = object->getProperty("importSettings").toString();
     outDescriptor.version = object->getProperty("version").toString();
     outDescriptor.fileSizeBytes = static_cast<int64_t>(object->getProperty("fileSizeBytes"));
     outDescriptor.revision = static_cast<int>(object->getProperty("revision"));

@@ -57,6 +57,13 @@ struct AssetDescriptor
     juce::String logicalPath;
     juce::String sourceApp;
     juce::String sourceTool;
+    // Provenance for generated assets. A derived asset points to the exact source
+    // revision used to create it; these remain optional for legacy assets.
+    AssetId sourceAssetId;
+    AssetVersionId sourceVersionId;
+    juce::String importerId;
+    juce::String importerVersion;
+    juce::String importSettings;
     juce::String version { "1" };
     juce::StringArray tags;
     int64_t fileSizeBytes = 0;
