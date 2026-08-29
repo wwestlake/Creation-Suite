@@ -21,6 +21,15 @@ enum class ControlFlowKind {
     Return,
 };
 
+enum class MonadOperation {
+    None,
+    Wrap,
+    Bind,
+    Map,
+    Fail,
+    Recover,
+};
+
 // One input or output pin's fixed shape, as promised by a registered
 // node type -- name, type, and (for inputs) the STARTING default value
 // AddRegisteredNode gives a freshly-constructed instance. A node
@@ -51,6 +60,7 @@ struct NodeTypeDescriptor {
     std::vector<PinSignature> inputs;
     std::vector<PinSignature> outputs;
     ControlFlowKind controlFlow = ControlFlowKind::None;
+    MonadOperation monadOperation = MonadOperation::None;
 };
 
 class NodeTypeRegistry {

@@ -7,6 +7,7 @@ add_library(creation_suite_node_system STATIC
     src/type_registry.cpp
     src/graph_analysis.cpp
     src/core_control_flow.cpp
+    src/monad_nodes.cpp
     src/celg_serialization.cpp
 )
 

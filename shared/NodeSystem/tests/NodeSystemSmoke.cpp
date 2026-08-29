@@ -1,5 +1,6 @@
 #include <node_system/celg_serialization.h>
 #include <node_system/core_control_flow.h>
+#include <node_system/monad_nodes.h>
 #include <node_system/graph_analysis.h>
 #include <node_system/type_registry.h>
 
@@ -119,6 +120,19 @@ int main()
             fail("Failed to add Break node.");
         if (ce::node_system::ValidateGraph(invalidBreakGraph, &controlRegistry).ok)
             fail("Break outside a loop was accepted.");
+
+        ce::node_system::NodeTypeRegistry monadRegistry;
+        ce::node_system::RegisterCoreMonadNodes(monadRegistry);
+        if (monadRegistry.Find("core.wrap.option") == nullptr
+            || monadRegistry.Find("core.bind.result") == nullptr)
+            fail("Core monad node contracts were not registered.");
+        const auto option = monadRegistry.Find("core.wrap.option")->outputs.front().type;
+        const auto optionInput = monadRegistry.Find("core.bind.option")->inputs.front().type;
+        if (! ce::node_system::IsConnectionCompatible(option, optionInput))
+            fail("Option<T> did not match its Bind input.");
+        const auto result = monadRegistry.Find("core.wrap.result")->outputs.front().type;
+        if (ce::node_system::IsConnectionCompatible(option, result))
+            fail("Option<T> was accepted by a Result<T> input.");
 
         return 0;
     }
