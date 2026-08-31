@@ -10,6 +10,26 @@
 
 namespace ce::node_system {
 
+enum class ControlFlowKind {
+    None,
+    Branch,
+    Sequence,
+    For,
+    While,
+    Break,
+    Continue,
+    Return,
+};
+
+enum class MonadOperation {
+    None,
+    Wrap,
+    Bind,
+    Map,
+    Fail,
+    Recover,
+};
+
 // One input or output pin's fixed shape, as promised by a registered
 // node type -- name, type, and (for inputs) the STARTING default value
 // AddRegisteredNode gives a freshly-constructed instance. A node
@@ -32,14 +52,15 @@ struct PinSignature {
 // guarantee two nodes of the "same" type actually have the same
 // shape). A NodeTypeDescriptor is the authoritative pin signature for
 // one type name; AddRegisteredNode (below) is what actually constructs
-// a node guaranteed to match it. The real v1 Core/Event node catalog
-// (OnStart, OnTick, Branch, ...) is GS9 scope, not built here --
-// GS8 is just this registry mechanism itself.
+// a node guaranteed to match it. Control-flow metadata identifies structured
+// Suite nodes without coupling this graph layer to FRust syntax.
 struct NodeTypeDescriptor {
     std::string typeName;
     Domain domain = Domain::Core;
     std::vector<PinSignature> inputs;
     std::vector<PinSignature> outputs;
+    ControlFlowKind controlFlow = ControlFlowKind::None;
+    MonadOperation monadOperation = MonadOperation::None;
 };
 
 class NodeTypeRegistry {
@@ -82,7 +103,7 @@ Node* AddRegisteredNode(Graph& graph, const NodeTypeRegistry& registry, const st
 // Nodes built via AddRegisteredNode always pass trivially (before any
 // such override); this exists to catch actual SHAPE drift -- a node
 // hand-built via the raw AddNode/AddInput/AddOutput API with the wrong
-// pin count/name/type, or loaded from a .celg file saved before a
+// pin count/name/type, or loaded from an older graph file saved before a
 // type's registered pin shape changed. Returns true (with `errorsOut`
 // left empty, if given) iff every node's shape matches.
 bool ValidateAgainstRegistry(const Graph& graph, const NodeTypeRegistry& registry,

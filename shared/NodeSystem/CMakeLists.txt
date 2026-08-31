@@ -6,7 +6,9 @@ add_library(creation_suite_node_system STATIC
     src/graph.cpp
     src/type_registry.cpp
     src/graph_analysis.cpp
-    src/celg_serialization.cpp
+    src/core_control_flow.cpp
+    src/monad_nodes.cpp
+    src/frgraph_serialization.cpp
 )
 
 if(NOT TARGET node_system)

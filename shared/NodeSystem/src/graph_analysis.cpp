@@ -91,8 +91,7 @@ std::optional<std::vector<NodeId>> TopologicalDataOrder(const Graph& graph) {
 
     // Sorted seed so the result is deterministic across runs (map/set
     // iteration order isn't guaranteed) -- matters for
-    // celc --selftest-graph's structural-equality assertions and for
-    // .celg round-trip stability if this were ever serialized.
+    // graph compiler structural-equality assertions and round-trip stability.
     std::vector<NodeId> ready;
     for (const auto& [id, degree] : inDegree) {
         if (degree == 0) {
@@ -128,7 +127,18 @@ std::optional<std::vector<NodeId>> TopologicalDataOrder(const Graph& graph) {
 ValidationResult ValidateGraph(const Graph& graph, const NodeTypeRegistry* registry) {
     ValidationResult result;
 
-    if (const auto execCycle = DetectExecCycle(graph)) {
+    const auto execCycle = DetectExecCycle(graph);
+    bool legalLoopCycle = false;
+    if (execCycle.has_value() && registry != nullptr) {
+        legalLoopCycle = std::any_of(execCycle->begin(), execCycle->end(), [&](NodeId id) {
+            const auto* node = graph.FindNode(id);
+            const auto* descriptor = node != nullptr ? registry->Find(node->TypeName()) : nullptr;
+            return descriptor != nullptr && (descriptor->controlFlow == ControlFlowKind::For
+                                           || descriptor->controlFlow == ControlFlowKind::While);
+        });
+    }
+
+    if (execCycle.has_value() && ! legalLoopCycle) {
         result.ok = false;
         std::string msg = "exec cycle detected through node(s): ";
         for (std::size_t i = 0; i < execCycle->size(); ++i) {
@@ -151,8 +161,56 @@ ValidationResult ValidateGraph(const Graph& graph, const NodeTypeRegistry* regis
                 result.errors.push_back(std::move(err));
             }
         }
+        const auto controlFlow = ValidateControlFlow(graph, *registry);
+        if (! controlFlow.ok) {
+            result.ok = false;
+            result.errors.insert(result.errors.end(), controlFlow.errors.begin(), controlFlow.errors.end());
+        }
     }
 
+    return result;
+}
+
+ValidationResult ValidateControlFlow(const Graph& graph, const NodeTypeRegistry& registry)
+{
+    ValidationResult result;
+    for (const auto& [id, node] : graph.Nodes()) {
+        const auto* descriptor = registry.Find(node->TypeName());
+        if (descriptor == nullptr)
+            continue;
+
+        const auto kind = descriptor->controlFlow;
+        if (kind == ControlFlowKind::For) {
+            const Pin* step = nullptr;
+            for (const auto& pin : node->Inputs()) {
+                if (pin.name == "step") {
+                    step = &pin;
+                    break;
+                }
+            }
+            if (step != nullptr && std::holds_alternative<std::int64_t>(step->defaultValue)
+                && std::get<std::int64_t>(step->defaultValue) == 0)
+                result.errors.push_back("node " + std::to_string(id) + " (For) cannot have a zero step");
+        }
+
+        if (kind == ControlFlowKind::Break || kind == ControlFlowKind::Continue) {
+            bool hasLoop = false;
+            for (const auto& [otherId, other] : graph.Nodes()) {
+                const auto* otherDescriptor = registry.Find(other->TypeName());
+                if (otherDescriptor != nullptr && (otherDescriptor->controlFlow == ControlFlowKind::For
+                    || otherDescriptor->controlFlow == ControlFlowKind::While) && otherId != id) {
+                    hasLoop = true;
+                    break;
+                }
+            }
+            if (! hasLoop)
+                result.errors.push_back("node " + std::to_string(id) + " ("
+                    + (kind == ControlFlowKind::Break ? "Break" : "Continue")
+                    + ") must be inside a loop");
+        }
+    }
+
+    result.ok = result.errors.empty();
     return result;
 }
 
