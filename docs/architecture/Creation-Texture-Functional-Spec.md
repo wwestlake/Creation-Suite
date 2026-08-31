@@ -10,14 +10,14 @@ Like Creation Modeler, it should not become a general-purpose image editor. Its 
 
 - procedural + hand-authored texture/material creation
 - physically-based material definition (albedo, normal, roughness, metallic, AO, height, emissive)
-- node-graph procedural generation built on the shared `NodeSystem`/CEL stack, not a bespoke graph engine
+- node-graph procedural generation built on the shared `NodeSystem`/FRust stack, not a bespoke graph engine
 - direct, versioned output into the suite asset/VFS system as first-class material assets — not loose PNG/EXR files on disk
 
 ## 2. Core Workflows
 
 ### 2.1 Procedural Material Graph
 
-Node-based procedural texture/material authoring — noise, patterns, blending, layering, masks — on the shared `NodeSystem` graph model, using the same node-to-CEL generation approach the rest of the suite is standardizing on (see [[System-Architecture]]).
+Node-based procedural texture/material authoring — noise, patterns, blending, layering, masks — on the shared `NodeSystem` graph model, using the same node-to-FRust generation approach the rest of the suite is standardizing on (see [[System-Architecture]]).
 
 ### 2.2 Painting Workspace
 
@@ -45,7 +45,7 @@ Built on, not duplicating:
 
 - suite VFS and project container strategy (`shared/AssetSystem`)
 - shared asset identity, versioning, and provenance
-- shared `NodeSystem`/CEL for procedural graphs — no local graph engine
+- shared `NodeSystem`/FRust for procedural graphs — no local graph engine
 - shared shell/header/account/suite settings systems — already wired via the project scaffold
 
 ## 5. Relationship To Other Suite Apps

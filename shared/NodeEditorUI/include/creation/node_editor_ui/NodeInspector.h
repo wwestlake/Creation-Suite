@@ -17,7 +17,7 @@ namespace creation::node_editor_ui {
 // convention node catalogs rely on (a Log node's literal message, a GetVariable's variable name,
 // an ordinary Compare node's threshold). A connected input shows "(connected)" instead of an
 // editable field, since its default is never consulted by codegen once wired. Exec pins and
-// Entity-typed pins (no CEL literal exists) are never editable.
+// Entity-typed pins are never editable.
 class NodeInspector final : public juce::Component {
 public:
     explicit NodeInspector(ce::node_system::Graph& graph);

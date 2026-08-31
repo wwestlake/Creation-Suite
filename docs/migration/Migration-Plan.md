@@ -30,9 +30,9 @@ Then update:
 - Creation Station to consume shared asset/VFS code
 - Creation Engine to consume the same shared asset/VFS code
 
-## Phase 4: Shared CEL Core
+## Phase 4: Shared FRust Core
 
-Move CEL core infrastructure into `shared/CEL/`:
+Move FRust core infrastructure into `FRust/`:
 
 - parser/frontend
 - semantic analysis

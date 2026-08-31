@@ -11,7 +11,7 @@ namespace creation::video
 // Registers every built-in ("Layer 1") native video node's structural shape - type name, input/
 // output Texture pins, and one Float input pin per named parameter (so a parameter is an
 // ordinary graph pin, wireable/automatable the same way any other node_system Data pin is) -
-// into registry. Mirrors shared/CEL's node_catalog.cpp RegisterXxxNodes shape, one call covering
+// into registry. Mirrors the suite's node catalog registration shape, one call covering
 // all three reference nodes rather than one function per node (there's no separate "domain" split
 // to justify that here, unlike node_catalog's Event/ControlFlow/Math/World/Utility groups).
 void RegisterNativeVideoNodeTypes(ce::node_system::NodeTypeRegistry& registry);

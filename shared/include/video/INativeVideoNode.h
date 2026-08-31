@@ -24,7 +24,7 @@ public:
     // back on one shared context with no state reset between them.
     virtual void Render(VideoFrameContext& context) = 0;
 
-    // Named parameter surface - the addressing point for shared/CEL scripts and shared/Timeline
+    // Named parameter surface - the addressing point for FRust scripts and shared/Timeline
     // automation lanes (both bind to a node by this string name, not by C++ member access).
     virtual bool SetParameter(const std::string& name, float value) = 0;
     virtual bool GetParameter(const std::string& name, float& outValue) const = 0;

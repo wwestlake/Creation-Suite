@@ -125,7 +125,7 @@ It should be built on top of shared suite foundations:
 - shared declarative 3D scene/model asset system
 - shared asset identity and versioning
 - shared provenance and derivation tracking
-- shared CEL integration where appropriate
+- shared FRust integration where appropriate
 - shared shell/header/account/suite settings systems
 
 ## 7. Near-Term Planning Notes

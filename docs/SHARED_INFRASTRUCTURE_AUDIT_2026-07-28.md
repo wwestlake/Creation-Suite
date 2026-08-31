@@ -96,11 +96,11 @@ Status:
 
 These shared modules currently exist in name only:
 
-### 1. Shared CEL
+### 1. Shared FRust
 
 Path:
 
-- `D:\000 Creation Suite\shared\CEL`
+- `D:\000 Creation Suite\shared\FRust`
 
 Current state:
 
@@ -271,11 +271,11 @@ Still needed:
 - registry/discovery integration
 - app-facing service API
 
-### 3. Shared CEL From Creation Engine
+### 3. Shared FRust From Creation Engine
 
 Not moved yet.
 
-The most complete CEL implementation is still in:
+The most complete FRust implementation is still in:
 
 - `D:\000 Creation Suite\apps\CreationEngine\Language`
 
@@ -395,7 +395,7 @@ Build these for real inside `D:\000 Creation Suite\shared`:
    - complete VFS API
    - asset catalog/index
    - write/update/materialize support
-2. `CEL`
+2. `FRust`
    - migrate the real Engine language core
 3. `NodeSystem`
    - migrate the real Engine node core
@@ -439,7 +439,7 @@ As of July 28, 2026:
 - the Suite shared layer is **not finished**
 - the Suite shared layer is **not yet the sole source of truth**
 - the VFS is **not fully implemented**
-- shared CEL is **not migrated**
+- shared FRust is **not migrated**
 - shared NodeSystem is **not migrated**
 - shared Interop is **not implemented**
 - shared AI/BYOK services are **not implemented beyond provider metadata**

@@ -4,9 +4,9 @@ Status: planning only, nothing implemented under this name yet. A real, working 
 
 ## 1. Overview And Core Philosophy
 
-Every suite app that touches CEL, JSON, or Markdown currently has to solve text editing on its own — or worse, not solve it and get a plain `juce::TextEditor` with no syntax awareness. Creation Engine already built a real CEL-aware editor (tokeniser + script panel) for its own use. Per the suite's shared-first design rule (see [[Shared-First-Feature-Design]]), that's exactly the kind of capability that should not be re-invented per app.
+Every suite app that touches FRust, JSON, or Markdown currently has to solve text editing on its own — or worse, not solve it and get a plain `juce::TextEditor` with no syntax awareness. Creation Engine already built a real FRust-aware editor (tokeniser + script panel) for its own use. Per the suite's shared-first design rule (see [[Shared-First-Feature-Design]]), that's exactly the kind of capability that should not be re-invented per app.
 
-This spec proposes a **shared editor core** — not a new standalone "Creation X" app — that any suite app can embed: Engine's CEL script panel, Station's Patina DSL editor, Texture's material-graph CEL nodes, and wiki/doc editing anywhere in the suite (including, pointedly, the very `.md` files this session has been hand-editing all day).
+This spec proposes a **shared editor core** — not a new standalone "Creation X" app — that any suite app can embed: Engine's FRust script panel, Station's Patina DSL editor, Texture's material-graph FRust nodes, and wiki/doc editing anywhere in the suite (including, pointedly, the very `.md` files this session has been hand-editing all day).
 
 Guiding principle: **the editor has one core, and per-format intelligence plugs into it.** Adding a new format means writing a language-service plugin, not a new editor.
 
@@ -14,20 +14,20 @@ Guiding principle: **the editor has one core, and per-format intelligence plugs 
 
 | Format | Depth | Backing |
 |---|---|---|
-| CEL | Deep — real tokens, real diagnostics, real symbols | `shared/CEL` frontend (lexer, `sema.h`, `diagnostics.h`) |
+| FRust | Deep — real tokens, real diagnostics, real symbols | `FRust` frontend (lexer, `sema.h`, `diagnostics.h`) |
 | JSON | Schema-aware | Validates against suite manifest schemas (`ProjectManifest`, `AssetCatalog`, etc.) where a document's type is known |
 | Markdown | Structural + preview | Heading/link/code-fence aware; live preview pane; this is the format the suite's own wikis and docs are written in |
 | Math notation (within Markdown) | Preview-rendered | KaTeX — inline `$...$` and block `$$...$$` LaTeX math rendered in the Markdown preview pane |
 | Plain text | Baseline | Word-level editing only, no tokeniser |
 
-Non-goal: this is not meant to become a general-purpose C++/GLSL IDE. Other languages can get a tokeniser later if a real app need shows up, but CEL/JSON/Markdown/plain-text is the actual scope.
+Non-goal: this is not meant to become a general-purpose C++/GLSL IDE. Other languages can get a tokeniser later if a real app need shows up, but FRust/JSON/Markdown/plain-text is the actual scope.
 
 ## 3. Code-Level Editing Capabilities
 
-- syntax highlighting via a per-format `CodeTokeniser` (CEL's `CelCodeTokeniser` in Engine is the reference to extract, not reinvent)
-- real diagnostics, not guesses: for CEL, run the shared `ce::lang::DiagnosticEngine` (lexer/parser/sema) on edit-pause or save and surface `Diagnostic{code, severity, loc, message}` as inline squiggles + a problems list — this is a real compiler frontend already, not a heuristic linter
+- syntax highlighting via a per-format `CodeTokeniser` (FRust's `CelCodeTokeniser` in Engine is the reference to extract, not reinvent)
+- real diagnostics, not guesses: for FRust, run the shared `ce::lang::DiagnosticEngine` (lexer/parser/sema) on edit-pause or save and surface `Diagnostic{code, severity, loc, message}` as inline squiggles + a problems list — this is a real compiler frontend already, not a heuristic linter
 - bracket/paren matching, auto-indent, code folding
-- symbol outline / go-to-definition for CEL, sourced from `sema` output, not regex
+- symbol outline / go-to-definition for FRust, sourced from `sema` output, not regex
 - multi-cursor editing
 - find/replace with regex support
 
@@ -50,7 +50,7 @@ shared/Editor/
   include/creation/editor/
     EditorDocument.h       # VFS-backed document, not a raw file path
     LanguageService.h      # plugin interface: tokenise(), diagnose(), symbols(), complete()
-    CelLanguageService.h   # wraps shared/CEL frontend
+    CelLanguageService.h   # wraps FRust frontend
     JsonLanguageService.h  # schema-aware JSON support
     MarkdownLanguageService.h
     MarkdownPreviewRenderer.h  # Markdown -> HTML, with KaTeX math pass
@@ -71,23 +71,23 @@ public:
 };
 ```
 
-`SuiteEditorPanel` picks a `LanguageService` by file extension/content-type at open time and otherwise stays format-agnostic — same panel class whether it's editing a `.cel` script or a wiki `.md` page.
+`SuiteEditorPanel` picks a `LanguageService` by file extension/content-type at open time and otherwise stays format-agnostic — same panel class whether it's editing a `.frust` script or a wiki `.md` page.
 
 ## 6. Suite Integration
 
-- documents open/save through `shared/AssetSystem`/VFS like every other suite asset — a `.cel` script, a project's JSON manifest, and a wiki page are all suite assets with identity, versioning, and provenance, not bare file-path edits (consistent with [[System-Architecture]] §1–2)
-- CEL diagnostics come from the real shared frontend once Engine's CEL migration lands (see [[Roadmap]] Phase 4) — until then, this can temporarily depend on Engine's local `Language/` build as a stopgap, clearly marked as such
+- documents open/save through `shared/AssetSystem`/VFS like every other suite asset — a `.frust` script, a project's JSON manifest, and a wiki page are all suite assets with identity, versioning, and provenance, not bare file-path edits (consistent with [[System-Architecture]] §1–2)
+- FRust diagnostics come from the real shared frontend once Engine's FRust migration lands (see [[Roadmap]] Phase 4) — until then, this can temporarily depend on Engine's local `Language/` build as a stopgap, clearly marked as such
 - AI-assist hooks route through `shared/Services` (`SuiteAiService`) for "explain this error," "suggest a fix," or "draft this doc section" — reusing the suite's existing AI/BYOK plumbing rather than a bespoke integration
 
 ## 7. Relationship To Existing Code
 
 Creation Engine's `Source/Views/ScriptPanel.h` and `Source/Views/CelCodeTokeniser.h/.cpp` are a **real, working reference implementation** of exactly this idea, scoped to one app. The recommended path is extraction, not parallel construction:
 
-1. Move `CelCodeTokeniser` into `shared/Editor` as the CEL `LanguageService`'s tokeniser, generalizing anything Engine-specific.
+1. Move `CelCodeTokeniser` into `shared/Editor` as the FRust `LanguageService`'s tokeniser, generalizing anything Engine-specific.
 2. Build the generic `SuiteEditorPanel`/`EditorDocument`/`LanguageService` shell around it.
 3. Add `JsonLanguageService` and `MarkdownLanguageService`.
 4. Cut Engine's `ScriptPanel` over to consume `shared/Editor` instead of owning its tokeniser locally — same pattern as every other shared-extraction in [[Roadmap]].
-5. Offer the panel to Station (Patina), Texture (material-graph CEL), and wiki/doc editing wherever the suite ends up wanting an in-app markdown editor.
+5. Offer the panel to Station (Patina), Texture (material-graph FRust), and wiki/doc editing wherever the suite ends up wanting an in-app markdown editor.
 
 ## 8. Non-Goals
 

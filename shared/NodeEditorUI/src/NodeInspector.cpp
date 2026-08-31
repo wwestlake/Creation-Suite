@@ -257,7 +257,7 @@ void NodeInspector::RebuildRows() {
                 AddFloatRow(pin.name + ".z", pin.id, true, 2);
                 break;
             case DataType::Entity:
-                AddUneditableRow(pin.name + " (must be connected -- no CEL entity literal)");
+                AddUneditableRow(pin.name + " (must be connected -- no entity literal)");
                 break;
             default:
                 AddUneditableRow(pin.name + " (unsupported type)");

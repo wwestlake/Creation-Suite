@@ -2,11 +2,11 @@
 
 Quick-capture spec, written 2026-08-02 — the user flagged this as
 something "we keep dancing around" without ever writing down, so this
-exists to stop that. Distinct from Hermes (`shared/CEL/docs/
-HERMES_PACKAGE_MANAGER_SPEC.md`) and the CEL v2 language work — this is
+exists to stop that. Distinct from Hermes (`FRust/docs/
+HERMES_PACKAGE_MANAGER_SPEC.md`) and the FRust v2 language work — this is
 a suite-wide feature (multi-user live collaboration inside Engine,
-Movie, Station, Live), not a CEL-specific one, even though it will
-eventually need to interoperate with CEL modules/assets like everything
+Movie, Station, Live), not a FRust-specific one, even though it will
+eventually need to interoperate with FRust modules/assets like everything
 else in the Suite.
 
 Tracking: not yet filed as GitHub issues. This is a much larger,

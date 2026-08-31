@@ -19,7 +19,7 @@ enum class PinKind {
 // actually needs a new type, not speculatively.
 //
 // GS9: Entity added for the node catalog's OnStart/OnTick "self" output,
-// Spawn's result, and Get/SetPosition's entity input -- CEL's
+// Spawn's result, and Get/SetPosition's entity input -- the language's
 // ce::lang::Type::Entity (an opaque i64 handle, no arithmetic, no
 // literal syntax) had no DataType counterpart until a real node needed
 // to carry one across a wire.

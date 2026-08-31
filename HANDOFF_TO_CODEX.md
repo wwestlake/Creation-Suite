@@ -17,7 +17,7 @@ listed at the bottom.
   one; title/body updated this session to reflect the full accumulated scope, not
   just its original two-bug-fix description).
 - **Creation-Movie#30**, **Creation-Modeler#2**, **Creation-Texture#2** — smaller,
-  mostly shared/CEL + shared/NodeSystem wiring and suite AI plumbing for those three
+  mostly FRust + shared/NodeSystem wiring and suite AI plumbing for those three
   apps, plus `onProjectOpenRequested` wiring so their Open Project button actually
   works.
 
@@ -114,7 +114,7 @@ The legacy Foley Stage (`ArrangeView`) was retired outright. Replaced with:
   Foundation, NV12 texture → BT.709 HLSL compositing — deliberately **not**
   `juce_video`), thumbnail-strip rendering, scrub preview overlay.
 - A new node-graph-driven Foley setup (trigger/PlaySample/gain/Sequence/Branch/
-  random-select/Delay nodes), CEL codegen, saved as a named project asset.
+  random-select/Delay nodes), FRust codegen, saved as a named project asset.
 - Shared groundwork for this: `shared/Timeline` (generic track/clip core, pulled
   out of CreationStation), `shared/NodeEditorUI` (generic node-graph canvas/
   inspector/palette, pulled out of CreationEngine), `shared/Video` (native D3D11

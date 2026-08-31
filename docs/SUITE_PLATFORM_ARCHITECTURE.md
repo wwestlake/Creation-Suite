@@ -100,8 +100,8 @@ An asset may be:
 - tracker clip data
 - Foley event data
 - plugin preset data
-- CEL source
-- CEL compiled artifact
+- FRust source
+- FRust compiled artifact
 - node graph
 - video
 - still image
@@ -294,7 +294,7 @@ Examples:
 
 - Creation Station and Creation Movie have the same project open at once; a sound recorded in Station appears in Movie's view of that project without any export/import action
 - Creation Engine renders into a project; any other app with that project open that understands the render's asset kind can use it directly
-- CEL code shared as a Suite-level artifact that multiple apps can compile under their own domain policies
+- FRust code shared as a Suite-level artifact that multiple apps can compile under their own domain policies
 
 ### 8. Shared Declarative 3D Scene Asset System
 
@@ -309,7 +309,7 @@ This should not be Engine-only. It should be a Suite-level asset family that can
 - Creation Live for virtual sets, overlays, reactive stage elements, and broadcast scenes
 - Creation Station where spatial/reactive visualization workflows need shared scene assets
 
-The source form should be human-authorable and AI-authorable, using a declarative schema such as JSON or CEL-backed structure definitions.
+The source form should be human-authorable and AI-authorable, using a declarative schema such as JSON or FRust-backed structure definitions.
 
 The platform should treat this as a real asset pipeline:
 
@@ -335,7 +335,7 @@ This gives the Suite a native procedural/spatial asset type rather than relying 
 
 Interchange formats such as glTF still matter, but they should be import/export targets rather than the only editable truth.
 
-### 9. Shared CEL Core
+### 9. Shared FRust Core
 
 Purpose:
 
@@ -369,7 +369,7 @@ Shared node infrastructure should include:
 - type registry
 - serialization
 - analysis
-- CEL generation bridge where relevant
+- FRust generation bridge where relevant
 
 Per-app node palettes and domain nodes stay app-specific.
 
@@ -457,7 +457,7 @@ The biggest missing pieces are:
 - true shared asset catalog/resolver
 - provenance/derivation tracking
 - cross-app interop runtime
-- migrated shared CEL core
+- migrated shared FRust core
 - migrated shared node core
 - complete suite services layer
 
@@ -481,7 +481,7 @@ Until this is done, app persistence work should be considered provisional.
 
 Build next:
 
-1. shared CEL core extracted from Creation Engine
+1. shared FRust core extracted from Creation Engine
 2. shared NodeSystem core extracted from Creation Engine
 3. app policy layers on top
 

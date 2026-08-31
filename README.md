@@ -20,7 +20,7 @@ This repository exists to coordinate:
 - suite-wide architecture
 - shared libraries
 - shared build infrastructure
-- shared CEL/runtime infrastructure
+- shared FRust/runtime infrastructure
 - shared asset and virtual filesystem infrastructure
 - cross-application interoperability standards
 
@@ -39,7 +39,7 @@ Creation Suite/
     CreationDeveloper/
   shared/
     AssetSystem/
-    CEL/
+    FRust/
     NodeSystem/
     Interop/
     CMake/

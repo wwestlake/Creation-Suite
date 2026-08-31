@@ -10,7 +10,7 @@ namespace
 {
 const juce::StringArray& codeExtensions()
 {
-    static const juce::StringArray extensions { ".cel", ".cpp", ".h", ".hpp", ".py", ".js", ".lua" };
+    static const juce::StringArray extensions { ".frust", ".cpp", ".h", ".hpp", ".py", ".js", ".lua" };
     return extensions;
 }
 
