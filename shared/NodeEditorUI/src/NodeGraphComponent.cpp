@@ -34,8 +34,35 @@ juce::Colour HeaderColourFor(ce::node_system::Domain domain) {
     return juce::Colour(0xff444444);
 }
 
+// One distinct, readable color per DataType -- previously every Data pin
+// shared one fixed teal regardless of type, which made it impossible to
+// tell at a glance whether two pins were even wireable to each other
+// (found during the Pod plan's post-implementation verification pass).
+// Exec pins stay white, unrelated to this table.
+juce::Colour DataTypeColourFor(ce::node_system::DataType type) {
+    using ce::node_system::DataType;
+    switch (type) {
+        case DataType::Any:           return juce::Colour(0xff9a9a9a);
+        case DataType::Float:         return juce::Colour(0xff7fd0e8);
+        case DataType::Vec2:          return juce::Colour(0xff6fb8e0);
+        case DataType::Vec3:          return juce::Colour(0xff5a9ce0);
+        case DataType::Vec4:          return juce::Colour(0xff4a80e0);
+        case DataType::Color:         return juce::Colour(0xffe0b84a);
+        case DataType::Bool:          return juce::Colour(0xffd85a5a);
+        case DataType::Int:           return juce::Colour(0xff5ad8a0);
+        case DataType::String:        return juce::Colour(0xffd85ad0);
+        case DataType::Transform:     return juce::Colour(0xffe08a3a);
+        case DataType::BoneTransform: return juce::Colour(0xffe0a83a);
+        case DataType::Texture:       return juce::Colour(0xff9c5a9c);
+        case DataType::AudioSignal:   return juce::Colour(0xff9c8a5a);
+        case DataType::Entity:        return juce::Colour(0xff3ad8d8);
+        case DataType::Function:      return juce::Colour(0xffb8b83a);
+    }
+    return juce::Colour(0xff7fd0e8);
+}
+
 juce::Colour PinColourFor(const Pin& pin) {
-    return pin.type.kind == PinKind::Exec ? juce::Colours::white : juce::Colour(0xff7fd0e8);
+    return pin.type.kind == PinKind::Exec ? juce::Colours::white : DataTypeColourFor(pin.type.dataType);
 }
 
 } // namespace
