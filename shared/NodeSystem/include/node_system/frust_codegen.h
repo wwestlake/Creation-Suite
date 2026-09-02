@@ -36,6 +36,13 @@ struct FrustGraphCompileOptions {
     std::vector<std::string> sourceModules;
     std::string manifestJson;
 
+    // When false, skips emitting the manifest/`use self::` header lines --
+    // for compiling multiple functions (one per Event node, Node/Behavior
+    // Graph Foundations plan Phase 4) into ONE .frust file: the caller
+    // compiles the first with this true, the rest with this false, and
+    // concatenates the results.
+    bool emitManifestAndImports = true;
+
     // Orthogonal node-exposure capability (Pod Management System plan,
     // Phase 5): when set, the emitted function is prefixed `node pure`
     // (no entryNode -- pure data) or `node callable` (entryNode set)

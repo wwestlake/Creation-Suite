@@ -99,8 +99,15 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
         result.error = "only behavior or dataflow graphs compile to FRust";
         return result;
     }
-    if (options.functionName.empty() || options.resultNode == 0 || options.resultPin == 0) {
-        result.error = "a function name and result node/pin are required";
+    // A result (data output) and an entry (exec chain start) are two
+    // independent reasons to compile a function -- an Event-triggered
+    // chain (Node/Behavior Graph Foundations plan Phase 4) has an
+    // entryNode and legitimately no resultNode at all, same as
+    // core_trigger()'s own callable-with-a-trivial-return shape. At least
+    // one of the two must be present; requiring resultNode specifically
+    // predates entryNode/control-flow support and was never relaxed.
+    if (options.functionName.empty() || (options.resultNode == 0 && options.entryNode == 0)) {
+        result.error = "a function name and a result node/pin or an entry node are required";
         return result;
     }
     const ValidationResult validation = ValidateGraph(graph, &libraries.TypeRegistry());
@@ -381,20 +388,28 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
         return result;
     }
 
-    const Node* outputNode = graph.FindNode(options.resultNode);
-    const Pin* outputPin = outputNode ? outputNode->FindPin(options.resultPin) : nullptr;
-    if (!outputPin || outputPin->isInput || outputPin->type.kind != PinKind::Data || FrustType(outputPin->type.dataType).empty()) {
-        result.error = "the requested graph result must be a supported data output";
-        return result;
+    // No resultNode is legitimate now (an Event-triggered exec-only
+    // chain) -- only validate an output pin when one was actually
+    // requested.
+    const Pin* outputPin = nullptr;
+    if (options.resultNode != 0) {
+        const Node* outputNode = graph.FindNode(options.resultNode);
+        outputPin = outputNode ? outputNode->FindPin(options.resultPin) : nullptr;
+        if (!outputPin || outputPin->isInput || outputPin->type.kind != PinKind::Data || FrustType(outputPin->type.dataType).empty()) {
+            result.error = "the requested graph result must be a supported data output";
+            return result;
+        }
     }
 
     std::ostringstream source;
-    if (!options.manifestJson.empty()) source << "manifest \"" << EscapeString(options.manifestJson) << "\";\n\n";
-    for (const auto& module : importedModules) {
-        if (module.empty()) { result.error = "source module names cannot be empty"; return result; }
-        source << "use self::" << module << ";\n";
+    if (options.emitManifestAndImports) {
+        if (!options.manifestJson.empty()) source << "manifest \"" << EscapeString(options.manifestJson) << "\";\n\n";
+        for (const auto& module : importedModules) {
+            if (module.empty()) { result.error = "source module names cannot be empty"; return result; }
+            source << "use self::" << module << ";\n";
+        }
+        if (!importedModules.empty()) source << '\n';
     }
-    if (!importedModules.empty()) source << '\n';
     if (options.exposeAsNode) {
         // `node pure` for a pure data function (no entryNode -- nothing
         // but the return value), `node callable` when an entryNode gives
@@ -407,8 +422,10 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
         if (index != 0) source << ", ";
         source << options.parameters[index].name << ": " << FrustType(options.parameters[index].type);
     }
-    source << ") -> " << FrustType(outputPin->type.dataType) << " = {\n" << body.str()
-           << "    n" << options.resultNode << "\n}\n";
+    // No result pin -> trivial i64 return, same shape core_trigger() already
+    // uses for an exec-only callable with nothing meaningful to hand back.
+    source << ") -> " << (outputPin ? FrustType(outputPin->type.dataType) : "i64") << " = {\n" << body.str()
+           << "    " << (outputPin ? "n" + std::to_string(options.resultNode) : "0") << "\n}\n";
     result.ok = true;
     result.source = source.str();
     return result;

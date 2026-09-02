@@ -1,5 +1,6 @@
 #include "node_system/core_control_flow.h"
 
+#include <string>
 #include <utility>
 
 namespace ce::node_system {
@@ -36,6 +37,40 @@ void RegisterCoreControlFlowNodes(NodeTypeRegistry& registry)
     registry.Register({ "core.break", Domain::Core, { In("execute", Exec()) }, {}, ControlFlowKind::Break });
     registry.Register({ "core.continue", Domain::Core, { In("execute", Exec()) }, {}, ControlFlowKind::Continue });
     registry.Register({ "core.return", Domain::Core, { In("execute", Exec()) }, {}, ControlFlowKind::Return });
+}
+
+namespace {
+// typeName, FRust lifecycle-hook function name (must match the real hook
+// names EngineFrustHost.cpp invokes -- on_tick/on_begin_play/on_end_play).
+// Single source of truth for both registration below and
+// EventNodeFrustFunctionName().
+constexpr std::pair<const char*, const char*> kEventNodeHooks[] = {
+    { "core.event.tick", "on_tick" },
+    { "core.event.beginplay", "on_begin_play" },
+    { "core.event.endplay", "on_end_play" },
+};
+}
+
+void RegisterCoreEventNodes(NodeTypeRegistry& registry)
+{
+    // Zero inputs, one Exec output -- nothing feeds these, they ARE the
+    // start of an exec chain. Gives execution an explicit, visible entry
+    // point instead of the old "first node with an unwired Exec input"
+    // auto-detect heuristic (found missing during the Pod plan's
+    // post-implementation verification pass).
+    registry.Register({ "core.event.tick", Domain::Event, {}, { Out("then", Exec()) },
+        ControlFlowKind::None, MonadOperation::None, "On Tick" });
+    registry.Register({ "core.event.beginplay", Domain::Event, {}, { Out("then", Exec()) },
+        ControlFlowKind::None, MonadOperation::None, "On Begin Play" });
+    registry.Register({ "core.event.endplay", Domain::Event, {}, { Out("then", Exec()) },
+        ControlFlowKind::None, MonadOperation::None, "On End Play" });
+}
+
+std::string EventNodeFrustFunctionName(const std::string& typeName)
+{
+    for (const auto& [name, hook] : kEventNodeHooks)
+        if (typeName == name) return hook;
+    return {};
 }
 
 } // namespace ce::node_system
