@@ -80,8 +80,11 @@ bool ProjectAssetService::importFile(ProjectSession& session,
     descriptor.mediaType = options.mediaType;
     descriptor.sourceApp = options.sourceApp;
     descriptor.sourceTool = options.sourceTool;
-    descriptor.sourceAssetId = options.sourceAssetId;
-    descriptor.sourceVersionId = options.sourceVersionId;
+    descriptor.derivationKind = options.derivationKind;
+    descriptor.dependencies = options.dependencies;
+    descriptor.externalSourcePath = options.externalSourcePath.isNotEmpty()
+                                        ? options.externalSourcePath
+                                        : sourceFile.getFullPathName();
     descriptor.importerId = options.importerId;
     descriptor.importerVersion = options.importerVersion;
     descriptor.importSettings = options.importSettings;
@@ -139,8 +142,9 @@ bool ProjectAssetService::saveGeneratedAsset(ProjectSession& session,
     descriptor.mediaType = options.mediaType;
     descriptor.sourceApp = options.sourceApp;
     descriptor.sourceTool = options.sourceTool;
-    descriptor.sourceAssetId = options.sourceAssetId;
-    descriptor.sourceVersionId = options.sourceVersionId;
+    descriptor.derivationKind = options.derivationKind;
+    descriptor.dependencies = options.dependencies;
+    descriptor.externalSourcePath = options.externalSourcePath; // no source file for generated content -- empty unless the caller sets one explicitly.
     descriptor.importerId = options.importerId;
     descriptor.importerVersion = options.importerVersion;
     descriptor.importSettings = options.importSettings;
@@ -183,8 +187,11 @@ bool ProjectAssetService::createNewVersion(ProjectSession& session,
     descriptor.mediaType = overrides.mediaType.isNotEmpty() ? overrides.mediaType : existingAsset.mediaType;
     descriptor.sourceApp = overrides.sourceApp.isNotEmpty() ? overrides.sourceApp : existingAsset.sourceApp;
     descriptor.sourceTool = overrides.sourceTool.isNotEmpty() ? overrides.sourceTool : existingAsset.sourceTool;
-    descriptor.sourceAssetId = overrides.sourceAssetId.isNotEmpty() ? overrides.sourceAssetId : existingAsset.sourceAssetId;
-    descriptor.sourceVersionId = overrides.sourceVersionId.isNotEmpty() ? overrides.sourceVersionId : existingAsset.sourceVersionId;
+    descriptor.derivationKind = existingAsset.derivationKind;
+    descriptor.dependencies = overrides.dependencies.isEmpty() ? existingAsset.dependencies : overrides.dependencies;
+    // Reimporting always updates the remembered source to whatever file was actually just
+    // read -- this is how a relocate (the file had moved) sticks for the next reimport.
+    descriptor.externalSourcePath = sourceFile.getFullPathName();
     descriptor.importerId = overrides.importerId.isNotEmpty() ? overrides.importerId : existingAsset.importerId;
     descriptor.importerVersion = overrides.importerVersion.isNotEmpty() ? overrides.importerVersion : existingAsset.importerVersion;
     descriptor.importSettings = overrides.importSettings.isNotEmpty() ? overrides.importSettings : existingAsset.importSettings;

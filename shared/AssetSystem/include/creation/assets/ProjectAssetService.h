@@ -20,8 +20,20 @@ public:
         juce::String mediaType;
         juce::String sourceApp;
         juce::String sourceTool;
-        AssetId sourceAssetId;
-        AssetVersionId sourceVersionId;
+
+        // Pipeline position and inputs for this asset -- see
+        // AssetDescriptor::derivationKind/dependencies (AssetTypes.h).
+        // Leave derivationKind at its root default and dependencies empty
+        // for a plain external-file import.
+        AssetDerivationKind derivationKind = AssetDerivationKind::root;
+        juce::Array<AssetDependency> dependencies;
+
+        // Root assets only: remembered for Reimport/Update. importFile()
+        // fills this from sourceFile automatically if left empty --
+        // callers only need to set it explicitly when re-pointing an
+        // asset at a relocated file.
+        juce::String externalSourcePath;
+
         juce::String importerId;
         juce::String importerVersion;
         juce::String importSettings;

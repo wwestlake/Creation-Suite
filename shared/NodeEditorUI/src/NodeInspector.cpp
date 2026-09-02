@@ -249,9 +249,16 @@ void NodeInspector::RebuildRows() {
                 AddBoolRow(pin.name, pin.id);
                 break;
             case DataType::String:
+            case DataType::Texture: // Same std::string backing (pin.h) as an
+                                     // absolute file path -- no asset picker
+                                     // yet, see material_nodes.cpp's Texture
+                                     // Sample description.
                 AddStringRow(pin.name, pin.id);
                 break;
             case DataType::Vec3:
+            case DataType::Color: // Same Vec3Default backing (see pin.h) -- an RGB triplet editor
+                                   // is correct for both; a dedicated colour-picker UI is a
+                                   // possible future upgrade, not a different data path.
                 AddFloatRow(pin.name + ".x", pin.id, true, 0);
                 AddFloatRow(pin.name + ".y", pin.id, true, 1);
                 AddFloatRow(pin.name + ".z", pin.id, true, 2);

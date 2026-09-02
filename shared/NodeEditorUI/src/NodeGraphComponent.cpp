@@ -213,9 +213,11 @@ void NodeGraphComponent::DrawNode(juce::Graphics& g, const Node& node) {
     g.fillRoundedRectangle(headerBounds, 6.0f);
     g.fillRect(headerBounds.withTop(headerBounds.getBottom() - 6.0f * zoom_)); // square off the rounded bottom corners.
 
+    const auto* descriptor = registry_.Find(node.TypeName());
+    const std::string& title = (descriptor != nullptr && !descriptor->displayName.empty()) ? descriptor->displayName : node.TypeName();
     g.setColour(juce::Colours::white);
     g.setFont(juce::Font(juce::FontOptions(std::max(10.0f, 13.0f * zoom_))).boldened());
-    g.drawText(node.TypeName(), headerBounds.reduced(6.0f * zoom_, 0.0f), juce::Justification::centredLeft, true);
+    g.drawText(title, headerBounds.reduced(6.0f * zoom_, 0.0f), juce::Justification::centredLeft, true);
 
     g.setColour(selected ? juce::Colours::white : juce::Colour(0xff384354));
     g.drawRoundedRectangle(bounds, 6.0f, selected ? 2.0f : 1.0f);

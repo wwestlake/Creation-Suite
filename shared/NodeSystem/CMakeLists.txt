@@ -9,6 +9,8 @@ add_library(creation_suite_node_system STATIC
     src/core_control_flow.cpp
     src/monad_nodes.cpp
     src/frgraph_serialization.cpp
+    src/node_library.cpp
+    src/frust_codegen.cpp
 )
 
 if(NOT TARGET node_system)

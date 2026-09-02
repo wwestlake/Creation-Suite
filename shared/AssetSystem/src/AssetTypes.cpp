@@ -80,4 +80,24 @@ AssetReferenceMode assetReferenceModeFromStorageToken(const juce::String& token)
     if (normalized == "latest") return AssetReferenceMode::latest;
     return AssetReferenceMode::exact;
 }
+
+juce::String toStorageToken(AssetDerivationKind kind)
+{
+    switch (kind)
+    {
+        case AssetDerivationKind::computed: return "computed";
+        case AssetDerivationKind::referential: return "referential";
+        case AssetDerivationKind::root: break;
+    }
+
+    return "root";
+}
+
+AssetDerivationKind assetDerivationKindFromStorageToken(const juce::String& token)
+{
+    auto normalized = token.trim().toLowerCase();
+    if (normalized == "computed") return AssetDerivationKind::computed;
+    if (normalized == "referential") return AssetDerivationKind::referential;
+    return AssetDerivationKind::root;
+}
 }

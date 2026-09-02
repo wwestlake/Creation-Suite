@@ -20,7 +20,7 @@ int main()
     if (!compiled.ok) throw std::runtime_error("Material compilation failed.");
     if (compiled.source.evaluateFunction.find("EvaluateMaterial") == std::string::npos)
         throw std::runtime_error("Generated material function is missing.");
-    if (compiled.source.evaluateFunction.find("vec3(1f") == std::string::npos)
+    if (compiled.source.evaluateFunction.find("vec3(1.0f") == std::string::npos)
         throw std::runtime_error("Generated color literal is missing.");
     std::cout << "MaterialSystem smoke passed.\n";
 }

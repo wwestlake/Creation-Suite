@@ -33,7 +33,12 @@ private:
     void paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected) override;
     juce::var getDragSourceDescription(const juce::SparseSet<int>& selectedRows) override;
 
-    std::vector<std::string> typeNames_;
+    // typeName is what itemDropped() actually needs to construct a node
+    // (AddRegisteredNode dispatches on it); displayName/category are pure
+    // presentation, falling back to typeName when a registration hasn't
+    // set one (existing FRust node types, mid-migration to this field).
+    struct Entry { std::string typeName, displayName, category; };
+    std::vector<Entry> entries_;
     juce::Label titleLabel_{ {}, "Nodes" };
     juce::ListBox listBox_;
 

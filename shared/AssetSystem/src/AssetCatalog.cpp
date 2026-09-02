@@ -87,6 +87,23 @@ juce::Array<AssetDescriptor> AssetCatalog::query(const AssetQuery& queryDefiniti
     return matches;
 }
 
+juce::Array<AssetDescriptor> AssetCatalog::findDependents(const AssetId& assetId) const
+{
+    juce::Array<AssetDescriptor> dependents;
+    for (const auto& asset : assets)
+    {
+        for (const auto& dependency : asset.dependencies)
+        {
+            if (dependency.assetId == assetId)
+            {
+                dependents.add(asset);
+                break;
+            }
+        }
+    }
+    return dependents;
+}
+
 juce::var toVar(const AssetDescriptor& descriptor)
 {
     auto* object = new juce::DynamicObject();
@@ -102,8 +119,19 @@ juce::var toVar(const AssetDescriptor& descriptor)
     object->setProperty("logicalPath", descriptor.logicalPath);
     object->setProperty("sourceApp", descriptor.sourceApp);
     object->setProperty("sourceTool", descriptor.sourceTool);
-    object->setProperty("sourceAssetId", descriptor.sourceAssetId);
-    object->setProperty("sourceVersionId", descriptor.sourceVersionId);
+    object->setProperty("derivationKind", toStorageToken(descriptor.derivationKind));
+    object->setProperty("externalSourcePath", descriptor.externalSourcePath);
+
+    juce::Array<juce::var> dependencies;
+    for (const auto& dependency : descriptor.dependencies)
+    {
+        auto* dependencyObject = new juce::DynamicObject();
+        dependencyObject->setProperty("assetId", dependency.assetId);
+        dependencyObject->setProperty("versionId", dependency.versionId);
+        dependencies.add(juce::var(dependencyObject));
+    }
+    object->setProperty("dependencies", dependencies);
+
     object->setProperty("importerId", descriptor.importerId);
     object->setProperty("importerVersion", descriptor.importerVersion);
     object->setProperty("importSettings", descriptor.importSettings);
@@ -139,8 +167,24 @@ bool fromVar(const juce::var& value, AssetDescriptor& outDescriptor)
     outDescriptor.logicalPath = object->getProperty("logicalPath").toString();
     outDescriptor.sourceApp = object->getProperty("sourceApp").toString();
     outDescriptor.sourceTool = object->getProperty("sourceTool").toString();
-    outDescriptor.sourceAssetId = object->getProperty("sourceAssetId").toString();
-    outDescriptor.sourceVersionId = object->getProperty("sourceVersionId").toString();
+    outDescriptor.derivationKind = assetDerivationKindFromStorageToken(object->getProperty("derivationKind").toString());
+    outDescriptor.externalSourcePath = object->getProperty("externalSourcePath").toString();
+
+    outDescriptor.dependencies.clearQuick();
+    if (const auto* dependencies = object->getProperty("dependencies").getArray())
+    {
+        for (const auto& entry : *dependencies)
+        {
+            if (const auto* dependencyObject = entry.getDynamicObject())
+            {
+                AssetDependency dependency;
+                dependency.assetId = dependencyObject->getProperty("assetId").toString();
+                dependency.versionId = dependencyObject->getProperty("versionId").toString();
+                outDescriptor.dependencies.add(dependency);
+            }
+        }
+    }
+
     outDescriptor.importerId = object->getProperty("importerId").toString();
     outDescriptor.importerVersion = object->getProperty("importerVersion").toString();
     outDescriptor.importSettings = object->getProperty("importSettings").toString();

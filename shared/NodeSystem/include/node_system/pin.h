@@ -7,12 +7,18 @@
 namespace ce::node_system {
 
 // A pin either carries continuous/discrete data (dataflow graphs: materials,
-// animation blending, audio) or is an execution/trigger pin (control-flow
-// graphs: event/rule graphs). Both kinds coexist in the same graph so a
-// single node system serves every authoring domain (spec section 4.1).
+// animation blending, audio), is an execution/trigger pin (control-flow
+// graphs: event/rule graphs), or carries an ordered stream of values over
+// time (ported from Creation Engine's own former NodeSystem fork as part
+// of unifying onto this one shared copy -- see
+// docs/SHARED_EXTRACTION_PLAN.md and wwestlake/Creation-Suite#115; used by
+// Engine's FRust plugin manifest loader). All three kinds coexist in the
+// same graph so a single node system serves every authoring domain (spec
+// section 4.1).
 enum class PinKind {
     Data,
     Exec,
+    Stream,
 };
 
 // Data pin value types. Kept intentionally small; grows only when a domain
@@ -84,6 +90,12 @@ inline bool IsConnectionCompatible(const PinTypeDesc& output, const PinTypeDesc&
             return matches(output.monad.valueType, input.monad.valueType)
                 && matches(output.monad.errorType, input.monad.errorType);
         }
+        return output.dataType == input.dataType || output.dataType == DataType::Any
+            || input.dataType == DataType::Any;
+    }
+    if (output.kind == PinKind::Stream) {
+        // Same payload-type matching as Data -- a stream is an ordered
+        // sequence of values over time, not a different type system.
         return output.dataType == input.dataType || output.dataType == DataType::Any
             || input.dataType == DataType::Any;
     }

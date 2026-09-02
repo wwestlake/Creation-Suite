@@ -32,6 +32,22 @@ std::optional<Domain> DomainFromString(const std::string& s) {
     return std::nullopt;
 }
 
+std::string GraphTargetToString(GraphTarget target) {
+    switch (target) {
+        case GraphTarget::Behavior: return "behavior";
+        case GraphTarget::Material: return "material";
+        case GraphTarget::Dataflow: return "dataflow";
+    }
+    return "behavior";
+}
+
+std::optional<GraphTarget> GraphTargetFromString(const std::string& text) {
+    if (text == "behavior") return GraphTarget::Behavior;
+    if (text == "material") return GraphTarget::Material;
+    if (text == "dataflow") return GraphTarget::Dataflow;
+    return std::nullopt;
+}
+
 std::string DataTypeToString(DataType t) {
     switch (t) {
         case DataType::Float: return "float";
@@ -96,6 +112,8 @@ std::string SerializePinLine(NodeId nodeId, const Pin& pin) {
     os << "pin " << nodeId << " " << (pin.isInput ? "in" : "out") << " " << pin.id << " " << pin.name << " ";
     if (pin.type.kind == PinKind::Exec) {
         os << "exec";
+    } else if (pin.type.kind == PinKind::Stream) {
+        os << "stream " << DataTypeToString(pin.type.dataType);
     } else {
         os << "data " << DataTypeToString(pin.type.dataType);
     }
@@ -120,6 +138,7 @@ std::string SerializeGraph(const Graph& graph) {
     os << std::setprecision(9);
     os << "frgraph 1\n";
     os << "graph " << graph.Name() << "\n";
+    os << "target " << GraphTargetToString(graph.Target()) << "\n";
 
     std::vector<NodeId> nodeIds;
     nodeIds.reserve(graph.Nodes().size());
@@ -156,6 +175,7 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
     int lineNo = 0;
     bool sawHeader = false;
     std::unique_ptr<Graph> graph;
+    GraphTarget target = GraphTarget::Behavior;
 
     auto fail = [&](const std::string& msg) -> std::unique_ptr<Graph> {
         errorOut = "line " + std::to_string(lineNo) + ": " + msg;
@@ -188,7 +208,23 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
             if (!name.empty() && name.front() == ' ') {
                 name.erase(0, 1);
             }
-            graph = std::make_unique<Graph>(name);
+            graph = std::make_unique<Graph>(name, target);
+        } else if (keyword == "target") {
+            if (!sawHeader) {
+                return fail("'target' line before 'frgraph' header");
+            }
+            std::string targetText;
+            if (!(tok >> targetText)) {
+                return fail("'target' line missing its graph target");
+            }
+            const auto parsedTarget = GraphTargetFromString(targetText);
+            if (!parsedTarget) {
+                return fail("unknown graph target '" + targetText + "'");
+            }
+            target = *parsedTarget;
+            if (graph) {
+                graph->SetTarget(target);
+            }
         } else if (keyword == "node") {
             if (!graph) {
                 return fail("'node' line before 'graph' line");
@@ -239,11 +275,11 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
             PinTypeDesc type;
             if (kindStr == "exec") {
                 type.kind = PinKind::Exec;
-            } else if (kindStr == "data") {
-                type.kind = PinKind::Data;
+            } else if (kindStr == "data" || kindStr == "stream") {
+                type.kind = kindStr == "data" ? PinKind::Data : PinKind::Stream;
                 std::string dataTypeStr;
                 if (!(tok >> dataTypeStr)) {
-                    return fail("'pin ... data' line missing its data type");
+                    return fail("'pin ... " + kindStr + "' line missing its data type");
                 }
                 const auto dataType = DataTypeFromString(dataTypeStr);
                 if (!dataType) {
@@ -251,7 +287,7 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
                 }
                 type.dataType = *dataType;
             } else {
-                return fail("unknown pin kind '" + kindStr + "' (expected 'exec' or 'data')");
+                return fail("unknown pin kind '" + kindStr + "' (expected 'exec', 'data', or 'stream')");
             }
 
             PinDefaultValue defaultValue;
