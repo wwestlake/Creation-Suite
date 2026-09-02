@@ -57,6 +57,9 @@ juce::Colour DataTypeColourFor(ce::node_system::DataType type) {
         case DataType::AudioSignal:   return juce::Colour(0xff9c8a5a);
         case DataType::Entity:        return juce::Colour(0xff3ad8d8);
         case DataType::Function:      return juce::Colour(0xffb8b83a);
+        case DataType::Material:      return juce::Colour(0xffc85ac8);
+        case DataType::Model:         return juce::Colour(0xff5ac878);
+        case DataType::Controller:    return juce::Colour(0xffc8785a);
     }
     return juce::Colour(0xff7fd0e8);
 }

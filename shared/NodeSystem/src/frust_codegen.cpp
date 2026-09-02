@@ -17,6 +17,16 @@ std::string FrustType(DataType type) {
     case DataType::Bool: return "bool";
     case DataType::Int: return "i64";
     case DataType::String: return "String";
+    // Opaque reference handles (Node/Behavior Graph Foundations plan,
+    // Phase 3) -- all cross the FRust ABI as plain i64, same proven shape
+    // EngineLifecycle.frust already uses for Entity references. Type
+    // safety for these lives at the graph/NodeSystem layer
+    // (IsConnectionCompatible), not in FRust's own type system.
+    case DataType::Entity:
+    case DataType::Transform:
+    case DataType::Material:
+    case DataType::Model:
+    case DataType::Controller: return "i64";
     default: return {};
     }
 }

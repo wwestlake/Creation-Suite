@@ -45,6 +45,14 @@ enum class DataType {
     AudioSignal,
     Entity,
     Function,
+    // Opaque i64-handle reference types (Node/Behavior Graph Foundations
+    // plan, Phase 3) -- same ABI shape Entity/Transform already use
+    // (EngineLifecycle.frust's engine_first_transform_entity() -> i64
+    // etc.): type safety lives entirely at this graph layer via
+    // IsConnectionCompatible, FrustType() maps all of these to plain i64.
+    Material,
+    Model,
+    Controller,
 };
 
 enum class MonadKind {
