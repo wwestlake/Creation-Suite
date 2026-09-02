@@ -79,8 +79,14 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
                                                      const NodeLibraryRegistry& libraries,
                                                      const FrustGraphCompileOptions& options) {
     FrustGraphCompileResult result;
-    if (graph.Target() != GraphTarget::Behavior) {
-        result.error = "only behavior graphs compile to FRust";
+    // Dataflow graphs (Processing Pods, Pod Management System plan Phase 7)
+    // go through this exact same compile path -- a Dataflow graph simply
+    // has no natural entryNode, which the existing "no-op if entryNode ==
+    // 0" handling below already covers correctly. Material graphs are the
+    // only target genuinely out of scope here (ce::material::
+    // CompileMaterialGraph is the compiler for that target).
+    if (graph.Target() != GraphTarget::Behavior && graph.Target() != GraphTarget::Dataflow) {
+        result.error = "only behavior or dataflow graphs compile to FRust";
         return result;
     }
     if (options.functionName.empty() || options.resultNode == 0 || options.resultPin == 0) {
