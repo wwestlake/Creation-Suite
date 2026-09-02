@@ -17,6 +17,16 @@ void RegisterCoreControlFlowNodes(NodeTypeRegistry& registry);
 // compile pass needs.
 void RegisterCoreEventNodes(NodeTypeRegistry& registry);
 
+// Registers the entity-self accessor and the Bool/Int/String Variable
+// Get/Set node pairs (Node/Behavior Graph Foundations plan Phase 5) --
+// each is a real host-extern call (isHostExtern = true) into
+// EngineFrustHost's pod_get/set_variable_* functions, storage-backed by
+// the current entity's ObjectState component. Float variables are
+// deliberately not included: no dedicated f64-FFI verification exists
+// in this codebase yet, unlike bool/i64/String (see EngineFrustHost.h's
+// comment on this).
+void RegisterCoreVariableNodes(NodeTypeRegistry& registry);
+
 // Maps an Event node's typeName to the real FRust lifecycle-hook function
 // name a compile pass should emit for it (e.g. "core.event.tick" ->
 // "on_tick") -- empty string if typeName isn't a registered Event node.

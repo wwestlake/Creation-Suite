@@ -85,6 +85,8 @@ const Pin* InputPinNamed(const Node& node, const char* name) {
 
 } // namespace
 
+std::string EscapeFrustString(const std::string& value) { return EscapeString(value); }
+
 FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
                                                      const NodeLibraryRegistry& libraries,
                                                      const FrustGraphCompileOptions& options) {
@@ -188,6 +190,14 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
         return false;
     };
 
+    // Deduped extern fn declarations for host-extern node types
+    // (Node/Behavior Graph Foundations plan Phase 5 -- Variable get/set,
+    // the entity-self accessor) actually referenced in this graph, keyed
+    // by frustEntryPoint so the same host function used by several nodes
+    // only gets declared once. Built alongside the pure-node loop below;
+    // emitted into the header once the whole pass completes successfully.
+    std::map<std::string, std::string> externDeclarationsByName;
+
     for (const NodeId id : *order) {
         const Node* node = graph.FindNode(id);
         const NodeTypeDescriptor* type = node ? libraries.FindNodeType(node->TypeName()) : nullptr;
@@ -209,6 +219,16 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
         if (outputType.empty()) {
             result.error = "node " + std::to_string(id) + " has an unsupported FRust output type";
             return result;
+        }
+        if (type->isHostExtern && !externDeclarationsByName.contains(type->frustEntryPoint)) {
+            std::ostringstream decl;
+            decl << "extern fn " << type->frustEntryPoint << "(";
+            for (size_t index = 0; index < type->inputs.size(); ++index) {
+                if (index != 0) decl << ", ";
+                decl << type->inputs[index].name << ": " << FrustType(type->inputs[index].type.dataType);
+            }
+            decl << ") -> " << outputType << ";\n";
+            externDeclarationsByName[type->frustEntryPoint] = decl.str();
         }
         body << "    let n" << id << ": " << outputType << " = " << type->frustEntryPoint << "(";
         for (size_t index = 0; index < node->Inputs().size(); ++index) {
@@ -426,6 +446,10 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
     // uses for an exec-only callable with nothing meaningful to hand back.
     source << ") -> " << (outputPin ? FrustType(outputPin->type.dataType) : "i64") << " = {\n" << body.str()
            << "    " << (outputPin ? "n" + std::to_string(options.resultNode) : "0") << "\n}\n";
+    for (const auto& [name, decl] : externDeclarationsByName) {
+        (void)name;
+        result.externDeclarations.push_back(decl);
+    }
     result.ok = true;
     result.source = source.str();
     return result;

@@ -9,6 +9,8 @@ namespace {
 PinTypeDesc Exec() { return { PinKind::Exec, DataType::Int }; }
 PinTypeDesc Bool() { return { PinKind::Data, DataType::Bool }; }
 PinTypeDesc Int() { return { PinKind::Data, DataType::Int }; }
+PinTypeDesc Str() { return { PinKind::Data, DataType::String }; }
+PinTypeDesc EntityType() { return { PinKind::Data, DataType::Entity }; }
 PinSignature In(const char* name, PinTypeDesc type, PinDefaultValue value = {}) {
     return { name, type, std::move(value) };
 }
@@ -71,6 +73,51 @@ std::string EventNodeFrustFunctionName(const std::string& typeName)
     for (const auto& [name, hook] : kEventNodeHooks)
         if (typeName == name) return hook;
     return {};
+}
+
+namespace {
+// Field count needed (frustEntryPoint, isHostExtern) makes positional
+// brace-init unreadable -- named fields instead, one host-extern node
+// type at a time.
+void RegisterHostExternNode(NodeTypeRegistry& registry, std::string typeName, std::string displayName,
+                             std::vector<PinSignature> inputs, std::vector<PinSignature> outputs,
+                             std::string frustEntryPoint) {
+    NodeTypeDescriptor descriptor;
+    descriptor.typeName = std::move(typeName);
+    descriptor.domain = Domain::Core;
+    descriptor.inputs = std::move(inputs);
+    descriptor.outputs = std::move(outputs);
+    descriptor.displayName = std::move(displayName);
+    descriptor.frustEntryPoint = std::move(frustEntryPoint);
+    descriptor.isHostExtern = true;
+    registry.Register(std::move(descriptor));
+}
+
+// One Get/Set pair for a supported Variable value type -- name is the
+// per-instance literal (matches the "GetVariable's variable name is
+// deliberately a per-instance literal" convention already documented on
+// PinSignature above), entity/pod_id are real wired inputs so the
+// generic pure-node call-emission pass needs no special-casing at all;
+// entity is meant to be wired from a core.entity.self node, pod_id from
+// a core.literal.string carrying this Pod's own name.
+void RegisterVariablePair(NodeTypeRegistry& registry, const char* suffix, const char* label, PinTypeDesc valueType,
+                           const char* getHostFn, const char* setHostFn) {
+    RegisterHostExternNode(registry, std::string("core.variable.get.") + suffix, std::string("Get ") + label + " Variable",
+        { In("entity", EntityType()), In("pod_id", Str()), In("name", Str()) },
+        { Out("value", valueType) }, getHostFn);
+    RegisterHostExternNode(registry, std::string("core.variable.set.") + suffix, std::string("Set ") + label + " Variable",
+        { In("entity", EntityType()), In("pod_id", Str()), In("name", Str()), In("value", valueType) },
+        { Out("ok", Int()) }, setHostFn);
+}
+}
+
+void RegisterCoreVariableNodes(NodeTypeRegistry& registry)
+{
+    RegisterHostExternNode(registry, "core.entity.self", "Self Entity", {}, { Out("entity", EntityType()) },
+        "engine_current_object_entity");
+    RegisterVariablePair(registry, "bool", "Bool", Bool(), "pod_get_variable_bool", "pod_set_variable_bool");
+    RegisterVariablePair(registry, "int", "Int", Int(), "pod_get_variable_int", "pod_set_variable_int");
+    RegisterVariablePair(registry, "string", "String", Str(), "pod_get_variable_string", "pod_set_variable_string");
 }
 
 } // namespace ce::node_system
