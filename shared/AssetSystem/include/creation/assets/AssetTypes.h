@@ -22,7 +22,8 @@ enum class AssetKind
     preset,
     samplePack,
     midi,
-    binary
+    binary,
+    pod
 };
 
 enum class AssetReferenceMode
