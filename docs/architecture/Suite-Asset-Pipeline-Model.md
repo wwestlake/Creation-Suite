@@ -213,21 +213,76 @@ popup currently shows on every drop of a metadata-needing kind, not just
 truly-new ones; Phase 4 needs to add that exception.
 
 **Phase 4 — Reimport / update**: uses `externalSourcePath` from Phase 0.
-Missing-file relocate flow via native file chooser. Blocked on the
-pinned-vs-follow decision above being answered.
+Missing-file relocate flow via native file chooser. **Done** (2026-09-02)
+— `AssetImporter::Reimport()` per format, `ProjectAssetService::
+createNewVersion`, `ContentBrowserPanel`'s Reimport button with a
+`juce::FileChooser` relocate fallback when the remembered source is
+gone.
 
-**Phase 5 — Bake / promote**: works on any node once Phase 0's dependency
-list exists to cut.
+### Phase 5 — Bake / promote
 
-**Phase 6 — Export**: FBX/glTF/OBJ for models, existing format libraries
-for textures/audio. Least coupled to everything else above; could move
-earlier if useful as a standalone deliverable.
+**Status: honestly blocked, scoped down rather than built speculatively.**
+Nothing in Creation Engine today produces a *computed* asset —
+Materials aren't persisted (Phase 2's own note), and there is no
+procedural-modifier system of any kind. Building an attach-to-object
+Bake button now would be a control with nothing real to operate on.
+Split into what's genuinely buildable today vs. what has to wait:
+
+**5.1 — Generic Promote primitive** (`shared/AssetSystem`): a function
+that takes an `AssetDescriptor`, clears `dependencies`, sets
+`derivationKind = root`, and persists the change — the actual
+"sever the edges" operation Section 5 of this doc describes. Verified
+by a smoke test against synthetic descriptors (`AssetSystemSmoke.cpp`),
+since there is no live computed asset to promote yet. No UI.
+**Cycle**: start this sub-phase on a clean tree → build →
+fix-and-rebuild until it passes → commit/push/PR → sync and confirm
+clean before 5.2.
+
+**5.2 — Consumer integration: explicitly not started.** Blocked on a
+real computed-asset producer existing (a persisted Material, a
+procedural mesh modifier, a baked Behavior pod — any of these would
+do). Do not build UI for this speculatively; revisit once one of those
+exists. **Cycle**: same as above, applies whenever this sub-phase
+actually starts.
+
+### Phase 6 — Export
+
+Root assets already have their real, original file bytes preserved
+verbatim in the project VFS (`ProjectSession::writeEntryFromFile`,
+confirmed by `SHARED_EXTRACTION_PLAN.md`'s own guardrail: "Shared VFS
+and interop rules must never destroy original artist source material").
+That means exporting a root asset needs no format conversion and no new
+writer library at all — it's a read of the stored bytes and a write to
+wherever the user points, for every kind (model, texture, audio) the
+same way. Confirm this at implementation time rather than assuming, the
+same way every other phase's scope got checked against real code first.
+
+**6.1 — Export a root asset's stored bytes as-is.** Resolve the asset
+through `ProjectSession`, read its entry, write those exact bytes to a
+user-chosen destination via a native save-file dialog. No `stb_image_
+write` vendoring, no OBJ/glTF writer, no re-encoding — confirmed only
+`stb_image.h` (reader) is vendored today, nothing for writing images,
+and no model-writer code exists anywhere in this codebase; this
+sub-phase's scope is deliberately chosen to need none of that. **Cycle**:
+clean tree to start → build → fix-and-rebuild until it passes →
+commit/push/PR → sync and confirm clean before 6.2.
+
+**6.2 — Export UI**: an Export action per row in `ContentBrowserPanel`,
+using 6.1's primitive. **Cycle**: same as 6.1, applied to this
+sub-phase specifically before starting Phase 5.2 or closing out the
+pipeline's original six-phase list.
+
+**6.3 — Export of computed/derived assets (deferred, not started).**
+Would need real format writers (`stb_image_write`, a glTF/OBJ writer)
+since a computed asset's data doesn't already exist as a standard file
+on disk the way a root's does. Blocked on the same producer gap as
+Phase 5 — noted here so it isn't forgotten, not attempted now.
 
 ## Status
 
-Phases 0–3 implemented and verified building in `CreationEngineEditor`
-(2026-09-02, same day this document was written, from a live requirements
-discussion after the shared-VFS "is this real infrastructure" question
-from the prior session was answered yes by reading the current
-importers). Phases 4–6 (reimport/relocate, bake/promote, export) remain
-design-only, not yet started.
+Phases 0–4 implemented and verified building in `CreationEngineEditor`
+(2026-09-02). Phase 5 is intentionally scoped down to its buildable
+primitive (5.1) with consumer integration (5.2) explicitly blocked on a
+real computed-asset producer that doesn't exist yet. Phase 6's root-asset
+export (6.1, 6.2) is ready to build; derived-asset export (6.3) is
+blocked on the same gap as Phase 5.
