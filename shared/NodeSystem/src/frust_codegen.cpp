@@ -379,6 +379,13 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
         source << "use self::" << module << ";\n";
     }
     if (!importedModules.empty()) source << '\n';
+    if (options.exposeAsNode) {
+        // `node pure` for a pure data function (no entryNode -- nothing
+        // but the return value), `node callable` when an entryNode gives
+        // it exec/side-effect behavior. Either reflects into the node
+        // registry the same way CoreNodesLibrary.frust's built-ins do.
+        source << (options.entryNode != 0 ? "node callable " : "node pure ");
+    }
     source << "pub fn " << options.functionName << "(";
     for (size_t index = 0; index < options.parameters.size(); ++index) {
         if (index != 0) source << ", ";

@@ -35,6 +35,15 @@ struct FrustGraphCompileOptions {
     // next to those .frust source modules before frust_plugin_load() runs.
     std::vector<std::string> sourceModules;
     std::string manifestJson;
+
+    // Orthogonal node-exposure capability (Pod Management System plan,
+    // Phase 5): when set, the emitted function is prefixed `node pure`
+    // (no entryNode -- pure data) or `node callable` (entryNode set)
+    // instead of plain `pub fn`, so the compiler's own reflection picks
+    // it up as a draggable node type in other graphs -- see
+    // FRUST_NODE_LIBRARIES.md's single-file self-reflection note; no
+    // manifest/sibling-module split is needed for this.
+    bool exposeAsNode = false;
 };
 
 struct FrustGraphCompileResult {
