@@ -75,6 +75,17 @@ struct NodeTypeDescriptor {
     std::string description;
     std::string frustEntryPoint;
     std::vector<std::string> requiredCapabilities;
+
+    // True when frustEntryPoint names a host-registered `extern fn`
+    // (Node/Behavior Graph Foundations plan Phase 5 -- Variable get/set,
+    // the entity-self accessor) rather than a `use self::`-imported pure
+    // FRust module function. CompileBehaviorGraphToFrust emits a
+    // deduped `extern fn` declaration for each one actually referenced
+    // in a compiled graph, built from this descriptor's own inputs/
+    // outputs -- the host function's C++ signature must match exactly
+    // (same convention every existing EngineFrustHost host function
+    // already follows).
+    bool isHostExtern = false;
 };
 
 class NodeTypeRegistry {

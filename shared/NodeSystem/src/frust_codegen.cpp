@@ -17,6 +17,16 @@ std::string FrustType(DataType type) {
     case DataType::Bool: return "bool";
     case DataType::Int: return "i64";
     case DataType::String: return "String";
+    // Opaque reference handles (Node/Behavior Graph Foundations plan,
+    // Phase 3) -- all cross the FRust ABI as plain i64, same proven shape
+    // EngineLifecycle.frust already uses for Entity references. Type
+    // safety for these lives at the graph/NodeSystem layer
+    // (IsConnectionCompatible), not in FRust's own type system.
+    case DataType::Entity:
+    case DataType::Transform:
+    case DataType::Material:
+    case DataType::Model:
+    case DataType::Controller: return "i64";
     default: return {};
     }
 }
@@ -75,6 +85,8 @@ const Pin* InputPinNamed(const Node& node, const char* name) {
 
 } // namespace
 
+std::string EscapeFrustString(const std::string& value) { return EscapeString(value); }
+
 FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
                                                      const NodeLibraryRegistry& libraries,
                                                      const FrustGraphCompileOptions& options) {
@@ -89,8 +101,15 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
         result.error = "only behavior or dataflow graphs compile to FRust";
         return result;
     }
-    if (options.functionName.empty() || options.resultNode == 0 || options.resultPin == 0) {
-        result.error = "a function name and result node/pin are required";
+    // A result (data output) and an entry (exec chain start) are two
+    // independent reasons to compile a function -- an Event-triggered
+    // chain (Node/Behavior Graph Foundations plan Phase 4) has an
+    // entryNode and legitimately no resultNode at all, same as
+    // core_trigger()'s own callable-with-a-trivial-return shape. At least
+    // one of the two must be present; requiring resultNode specifically
+    // predates entryNode/control-flow support and was never relaxed.
+    if (options.functionName.empty() || (options.resultNode == 0 && options.entryNode == 0)) {
+        result.error = "a function name and a result node/pin or an entry node are required";
         return result;
     }
     const ValidationResult validation = ValidateGraph(graph, &libraries.TypeRegistry());
@@ -171,6 +190,14 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
         return false;
     };
 
+    // Deduped extern fn declarations for host-extern node types
+    // (Node/Behavior Graph Foundations plan Phase 5 -- Variable get/set,
+    // the entity-self accessor) actually referenced in this graph, keyed
+    // by frustEntryPoint so the same host function used by several nodes
+    // only gets declared once. Built alongside the pure-node loop below;
+    // emitted into the header once the whole pass completes successfully.
+    std::map<std::string, std::string> externDeclarationsByName;
+
     for (const NodeId id : *order) {
         const Node* node = graph.FindNode(id);
         const NodeTypeDescriptor* type = node ? libraries.FindNodeType(node->TypeName()) : nullptr;
@@ -192,6 +219,16 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
         if (outputType.empty()) {
             result.error = "node " + std::to_string(id) + " has an unsupported FRust output type";
             return result;
+        }
+        if (type->isHostExtern && !externDeclarationsByName.contains(type->frustEntryPoint)) {
+            std::ostringstream decl;
+            decl << "extern fn " << type->frustEntryPoint << "(";
+            for (size_t index = 0; index < type->inputs.size(); ++index) {
+                if (index != 0) decl << ", ";
+                decl << type->inputs[index].name << ": " << FrustType(type->inputs[index].type.dataType);
+            }
+            decl << ") -> " << outputType << ";\n";
+            externDeclarationsByName[type->frustEntryPoint] = decl.str();
         }
         body << "    let n" << id << ": " << outputType << " = " << type->frustEntryPoint << "(";
         for (size_t index = 0; index < node->Inputs().size(); ++index) {
@@ -371,20 +408,28 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
         return result;
     }
 
-    const Node* outputNode = graph.FindNode(options.resultNode);
-    const Pin* outputPin = outputNode ? outputNode->FindPin(options.resultPin) : nullptr;
-    if (!outputPin || outputPin->isInput || outputPin->type.kind != PinKind::Data || FrustType(outputPin->type.dataType).empty()) {
-        result.error = "the requested graph result must be a supported data output";
-        return result;
+    // No resultNode is legitimate now (an Event-triggered exec-only
+    // chain) -- only validate an output pin when one was actually
+    // requested.
+    const Pin* outputPin = nullptr;
+    if (options.resultNode != 0) {
+        const Node* outputNode = graph.FindNode(options.resultNode);
+        outputPin = outputNode ? outputNode->FindPin(options.resultPin) : nullptr;
+        if (!outputPin || outputPin->isInput || outputPin->type.kind != PinKind::Data || FrustType(outputPin->type.dataType).empty()) {
+            result.error = "the requested graph result must be a supported data output";
+            return result;
+        }
     }
 
     std::ostringstream source;
-    if (!options.manifestJson.empty()) source << "manifest \"" << EscapeString(options.manifestJson) << "\";\n\n";
-    for (const auto& module : importedModules) {
-        if (module.empty()) { result.error = "source module names cannot be empty"; return result; }
-        source << "use self::" << module << ";\n";
+    if (options.emitManifestAndImports) {
+        if (!options.manifestJson.empty()) source << "manifest \"" << EscapeString(options.manifestJson) << "\";\n\n";
+        for (const auto& module : importedModules) {
+            if (module.empty()) { result.error = "source module names cannot be empty"; return result; }
+            source << "use self::" << module << ";\n";
+        }
+        if (!importedModules.empty()) source << '\n';
     }
-    if (!importedModules.empty()) source << '\n';
     if (options.exposeAsNode) {
         // `node pure` for a pure data function (no entryNode -- nothing
         // but the return value), `node callable` when an entryNode gives
@@ -397,8 +442,14 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
         if (index != 0) source << ", ";
         source << options.parameters[index].name << ": " << FrustType(options.parameters[index].type);
     }
-    source << ") -> " << FrustType(outputPin->type.dataType) << " = {\n" << body.str()
-           << "    n" << options.resultNode << "\n}\n";
+    // No result pin -> trivial i64 return, same shape core_trigger() already
+    // uses for an exec-only callable with nothing meaningful to hand back.
+    source << ") -> " << (outputPin ? FrustType(outputPin->type.dataType) : "i64") << " = {\n" << body.str()
+           << "    " << (outputPin ? "n" + std::to_string(options.resultNode) : "0") << "\n}\n";
+    for (const auto& [name, decl] : externDeclarationsByName) {
+        (void)name;
+        result.externDeclarations.push_back(decl);
+    }
     result.ok = true;
     result.source = source.str();
     return result;
