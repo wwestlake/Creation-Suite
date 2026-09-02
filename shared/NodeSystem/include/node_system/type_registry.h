@@ -61,6 +61,20 @@ struct NodeTypeDescriptor {
     std::vector<PinSignature> outputs;
     ControlFlowKind controlFlow = ControlFlowKind::None;
     MonadOperation monadOperation = MonadOperation::None;
+
+    // Editor/documentation metadata and the FRust compilation contract,
+    // ported from Creation Engine's own former NodeSystem fork as part of
+    // unifying onto this one shared copy (docs/SHARED_EXTRACTION_PLAN.md,
+    // "node-to-FRust shared contracts"; wwestlake/Creation-Suite#115).
+    // frustEntryPoint/requiredCapabilities are metadata here, same as the
+    // header comment above already established for controlFlow/
+    // monadOperation -- CompileBehaviorGraphToFrust (frust_codegen.h) is
+    // what actually interprets them; this struct just carries the values.
+    std::string displayName;
+    std::string category;
+    std::string description;
+    std::string frustEntryPoint;
+    std::vector<std::string> requiredCapabilities;
 };
 
 class NodeTypeRegistry {

@@ -95,6 +95,7 @@ void DockZone::setActivePanel(DockPanel* panel)
         p->setVisible(p.get() == activePanel);
 
     resized();
+    repaint();
 }
 
 void DockZone::refreshLayout()

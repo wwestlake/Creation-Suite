@@ -33,13 +33,26 @@ enum class ConnectError {
     IncompatibleTypes,
 };
 
+// The compiler backend a graph asset targets. A behavior graph compiles to
+// FRust; a material graph compiles to shader code (ce::material::
+// CompileMaterialGraph); a dataflow graph can target a non-rendering
+// evaluator without its authored structure changing. Ported from Creation
+// Engine's own former NodeSystem fork as part of unifying onto this one
+// shared copy -- see docs/SHARED_EXTRACTION_PLAN.md ("node-to-FRust shared
+// contracts" under Pass 4) and wwestlake/Creation-Suite#115.
+enum class GraphTarget {
+    Behavior,
+    Material,
+    Dataflow,
+};
+
 // A single node graph: the unit a designer edits, tests in-editor, and
 // eventually compiles. Domain-agnostic — an animation blend tree, a
 // material graph, and an event/rule graph are all a Graph, distinguished
 // by the Domain of the nodes inside it.
 class Graph {
 public:
-    explicit Graph(std::string name);
+    explicit Graph(std::string name, GraphTarget target = GraphTarget::Behavior);
 
     Node& AddNode(std::string typeName, Domain domain);
     bool RemoveNode(NodeId id);
@@ -73,12 +86,15 @@ public:
 
     const std::vector<Connection>& Connections() const { return connections_; }
     const std::string& Name() const { return name_; }
+    GraphTarget Target() const { return target_; }
+    void SetTarget(GraphTarget target) { target_ = target; }
 
 private:
     std::optional<ConnectionId> ConnectInternal(std::optional<ConnectionId> explicitId, NodeId fromNode,
                                                  PinId fromPin, NodeId toNode, PinId toPin, ConnectError* outError);
 
     std::string name_;
+    GraphTarget target_ = GraphTarget::Behavior;
     std::unordered_map<NodeId, std::unique_ptr<Node>> nodes_;
     std::vector<Connection> connections_;
     NodeId nextNodeId_ = 1;
