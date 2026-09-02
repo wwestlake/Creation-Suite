@@ -6,6 +6,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "node_system/graph.h"
+#include "node_system/type_registry.h"
 
 namespace creation::node_editor_ui {
 
@@ -20,7 +21,14 @@ namespace creation::node_editor_ui {
 // Entity-typed pins are never editable.
 class NodeInspector final : public juce::Component {
 public:
-    explicit NodeInspector(ce::node_system::Graph& graph);
+    // typeRegistry is optional (defaults to nullptr, so an existing caller
+    // that only ever passed a Graph keeps compiling unchanged) -- when
+    // given, RebuildRows() looks up the selected node's displayName/
+    // description instead of showing the raw dotted typeName (e.g.
+    // "core.variable.get.bool"), which is what most of this panel's
+    // registered types actually have set. Content-clarity pass, Node/
+    // Behavior Graph Foundations plan Phase 7.
+    explicit NodeInspector(ce::node_system::Graph& graph, const ce::node_system::NodeTypeRegistry* typeRegistry = nullptr);
 
     void SetSelectedNode(ce::node_system::NodeId nodeId);
 
@@ -43,11 +51,13 @@ private:
     void AddStringRow(const juce::String& label, ce::node_system::PinId pinId);
 
     ce::node_system::Graph& graph_;
+    const ce::node_system::NodeTypeRegistry* typeRegistry_ = nullptr;
     ce::node_system::NodeId selectedNode_ = 0;
 
     juce::Label titleLabel_{ {}, "Inspector" };
     juce::Label noSelectionLabel_{ {}, "No node selected" };
     juce::Label nodeTypeLabel_;
+    juce::Label nodeDescriptionLabel_;
 
     struct Row {
         std::unique_ptr<juce::Label> label;
