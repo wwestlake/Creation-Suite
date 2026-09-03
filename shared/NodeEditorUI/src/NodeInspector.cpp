@@ -30,9 +30,37 @@ bool IsConnectedInput(const ce::node_system::Graph& graph, NodeId nodeId, PinId 
     return false;
 }
 
+// Short, human-readable name for a row's tooltip -- the concrete
+// complaint this answers: a user could see a labeled field but had no
+// way to tell what type of value it actually held. Content-clarity
+// pass, Node/Behavior Graph Foundations plan Phase 7.
+juce::String DataTypeName(DataType type) {
+    switch (type) {
+        case DataType::Float: return "Float";
+        case DataType::Vec2: return "Vec2";
+        case DataType::Vec3: return "Vec3";
+        case DataType::Vec4: return "Vec4";
+        case DataType::Color: return "Color";
+        case DataType::Bool: return "Bool";
+        case DataType::Int: return "Int";
+        case DataType::String: return "String";
+        case DataType::Transform: return "Transform";
+        case DataType::BoneTransform: return "Bone Transform";
+        case DataType::Texture: return "Texture";
+        case DataType::AudioSignal: return "Audio Signal";
+        case DataType::Entity: return "Entity";
+        case DataType::Function: return "Function";
+        case DataType::Material: return "Material";
+        case DataType::Model: return "Model";
+        case DataType::Controller: return "Controller";
+        default: return "Any";
+    }
+}
+
 } // namespace
 
-NodeInspector::NodeInspector(ce::node_system::Graph& graph) : graph_(graph) {
+NodeInspector::NodeInspector(ce::node_system::Graph& graph, const ce::node_system::NodeTypeRegistry* typeRegistry)
+    : graph_(graph), typeRegistry_(typeRegistry) {
     titleLabel_.setFont(juce::Font(juce::FontOptions(15.0f)).boldened());
     titleLabel_.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(titleLabel_);
@@ -43,6 +71,11 @@ NodeInspector::NodeInspector(ce::node_system::Graph& graph) : graph_(graph) {
     nodeTypeLabel_.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
     nodeTypeLabel_.setFont(juce::Font(juce::FontOptions(13.0f)).boldened());
     addAndMakeVisible(nodeTypeLabel_);
+
+    nodeDescriptionLabel_.setColour(juce::Label::textColourId, juce::Colour(0xff8a95a5));
+    nodeDescriptionLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
+    nodeDescriptionLabel_.setMinimumHorizontalScale(1.0f);
+    addAndMakeVisible(nodeDescriptionLabel_);
 
     RebuildRows();
 }
@@ -72,6 +105,7 @@ void NodeInspector::AddFloatRow(const juce::String& label, PinId pinId, bool isV
     auto editor = std::make_unique<juce::TextEditor>();
     Node* node = graph_.FindNode(selectedNode_);
     const Pin* pin = node != nullptr ? node->FindPin(pinId) : nullptr;
+    editor->setTooltip(isVec3Component ? "Vec3/Color component (Float)" : "Float value");
     if (pin != nullptr) {
         if (isVec3Component) {
             const Vec3Default v = ReadVec3(*pin);
@@ -123,6 +157,7 @@ void NodeInspector::AddIntRow(const juce::String& label, PinId pinId) {
     auto editor = std::make_unique<juce::TextEditor>();
     Node* node = graph_.FindNode(selectedNode_);
     const Pin* pin = node != nullptr ? node->FindPin(pinId) : nullptr;
+    editor->setTooltip("Int value");
     if (pin != nullptr) {
         if (const auto* i = std::get_if<std::int64_t>(&pin->defaultValue)) {
             editor->setText(juce::String(*i), juce::dontSendNotification);
@@ -160,6 +195,7 @@ void NodeInspector::AddBoolRow(const juce::String& label, PinId pinId) {
     auto editor = std::make_unique<juce::ToggleButton>();
     Node* node = graph_.FindNode(selectedNode_);
     const Pin* pin = node != nullptr ? node->FindPin(pinId) : nullptr;
+    editor->setTooltip("Bool value");
     bool initial = false;
     if (pin != nullptr) {
         if (const auto* b = std::get_if<bool>(&pin->defaultValue)) {
@@ -195,6 +231,8 @@ void NodeInspector::AddStringRow(const juce::String& label, PinId pinId) {
     auto editor = std::make_unique<juce::TextEditor>();
     Node* node = graph_.FindNode(selectedNode_);
     const Pin* pin = node != nullptr ? node->FindPin(pinId) : nullptr;
+    editor->setTooltip(pin != nullptr && pin->type.dataType == DataType::Texture
+                            ? "Texture file path" : "String value");
     if (pin != nullptr) {
         if (const auto* s = std::get_if<std::string>(&pin->defaultValue)) {
             editor->setText(*s, juce::dontSendNotification);
@@ -226,9 +264,21 @@ void NodeInspector::RebuildRows() {
     Node* node = graph_.FindNode(selectedNode_);
     if (node == nullptr) {
         nodeTypeLabel_.setText({}, juce::dontSendNotification);
+        nodeDescriptionLabel_.setText({}, juce::dontSendNotification);
         return;
     }
-    nodeTypeLabel_.setText(node->TypeName(), juce::dontSendNotification);
+
+    // Prefer the registered displayName/description over the raw dotted
+    // typeName (e.g. "core.variable.get.bool") -- most registered types
+    // already set these, this just surfaces them. Falls back to the
+    // typeName itself when no registry was given or the type isn't
+    // found, so this never regresses to showing nothing.
+    const auto* descriptor = typeRegistry_ != nullptr ? typeRegistry_->Find(node->TypeName()) : nullptr;
+    const bool hasDisplayName = descriptor != nullptr && !descriptor->displayName.empty();
+    nodeTypeLabel_.setText(hasDisplayName ? descriptor->displayName : juce::String(node->TypeName()), juce::dontSendNotification);
+    nodeTypeLabel_.setTooltip(node->TypeName());
+    nodeDescriptionLabel_.setText(descriptor != nullptr ? juce::String(descriptor->description) : juce::String{},
+                                   juce::dontSendNotification);
 
     for (const Pin& pin : node->Inputs()) {
         if (pin.type.kind == PinKind::Exec) {
@@ -280,11 +330,13 @@ void NodeInspector::resized() {
     Node* node = graph_.FindNode(selectedNode_);
     noSelectionLabel_.setVisible(node == nullptr);
     nodeTypeLabel_.setVisible(node != nullptr);
+    nodeDescriptionLabel_.setVisible(node != nullptr && nodeDescriptionLabel_.getText().isNotEmpty());
     if (node == nullptr) {
         noSelectionLabel_.setBounds(bounds.removeFromTop(18));
         return;
     }
     nodeTypeLabel_.setBounds(bounds.removeFromTop(20));
+    if (nodeDescriptionLabel_.isVisible()) nodeDescriptionLabel_.setBounds(bounds.removeFromTop(28));
     bounds.removeFromTop(4);
 
     for (auto& row : rows_) {

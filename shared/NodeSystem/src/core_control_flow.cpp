@@ -19,26 +19,29 @@ PinSignature Out(const char* name, PinTypeDesc type) { return { name, type, {} }
 
 void RegisterCoreControlFlowNodes(NodeTypeRegistry& registry)
 {
+    // displayName (7th positional field, MonadOperation::None as the 6th
+    // default) added Phase 7 -- content-clarity pass, so the Inspector
+    // shows "Branch" instead of the raw "core.branch".
     registry.Register({ "core.branch", Domain::Core,
         { In("execute", Exec()), In("condition", Bool()) },
-        { Out("true", Exec()), Out("false", Exec()) }, ControlFlowKind::Branch });
+        { Out("true", Exec()), Out("false", Exec()) }, ControlFlowKind::Branch, MonadOperation::None, "Branch" });
 
     registry.Register({ "core.sequence", Domain::Core,
         { In("execute", Exec()) },
-        { Out("then_0", Exec()), Out("then_1", Exec()) }, ControlFlowKind::Sequence });
+        { Out("then_0", Exec()), Out("then_1", Exec()) }, ControlFlowKind::Sequence, MonadOperation::None, "Sequence" });
 
     registry.Register({ "core.for", Domain::Core,
         { In("execute", Exec()), In("firstIndex", Int(), std::int64_t(0)),
           In("lastIndex", Int(), std::int64_t(0)), In("step", Int(), std::int64_t(1)) },
-        { Out("body", Exec()), Out("completed", Exec()), Out("index", Int()) }, ControlFlowKind::For });
+        { Out("body", Exec()), Out("completed", Exec()), Out("index", Int()) }, ControlFlowKind::For, MonadOperation::None, "For Loop" });
 
     registry.Register({ "core.while", Domain::Core,
         { In("execute", Exec()), In("condition", Bool()) },
-        { Out("body", Exec()), Out("completed", Exec()) }, ControlFlowKind::While });
+        { Out("body", Exec()), Out("completed", Exec()) }, ControlFlowKind::While, MonadOperation::None, "While Loop" });
 
-    registry.Register({ "core.break", Domain::Core, { In("execute", Exec()) }, {}, ControlFlowKind::Break });
-    registry.Register({ "core.continue", Domain::Core, { In("execute", Exec()) }, {}, ControlFlowKind::Continue });
-    registry.Register({ "core.return", Domain::Core, { In("execute", Exec()) }, {}, ControlFlowKind::Return });
+    registry.Register({ "core.break", Domain::Core, { In("execute", Exec()) }, {}, ControlFlowKind::Break, MonadOperation::None, "Break" });
+    registry.Register({ "core.continue", Domain::Core, { In("execute", Exec()) }, {}, ControlFlowKind::Continue, MonadOperation::None, "Continue" });
+    registry.Register({ "core.return", Domain::Core, { In("execute", Exec()) }, {}, ControlFlowKind::Return, MonadOperation::None, "Return" });
 }
 
 namespace {
@@ -81,7 +84,7 @@ namespace {
 // type at a time.
 void RegisterHostExternNode(NodeTypeRegistry& registry, std::string typeName, std::string displayName,
                              std::vector<PinSignature> inputs, std::vector<PinSignature> outputs,
-                             std::string frustEntryPoint) {
+                             std::string frustEntryPoint, std::vector<std::string> requiredCapabilities = {}) {
     NodeTypeDescriptor descriptor;
     descriptor.typeName = std::move(typeName);
     descriptor.domain = Domain::Core;
@@ -90,6 +93,7 @@ void RegisterHostExternNode(NodeTypeRegistry& registry, std::string typeName, st
     descriptor.displayName = std::move(displayName);
     descriptor.frustEntryPoint = std::move(frustEntryPoint);
     descriptor.isHostExtern = true;
+    descriptor.requiredCapabilities = std::move(requiredCapabilities);
     registry.Register(std::move(descriptor));
 }
 
@@ -118,6 +122,13 @@ void RegisterCoreVariableNodes(NodeTypeRegistry& registry)
     RegisterVariablePair(registry, "bool", "Bool", Bool(), "pod_get_variable_bool", "pod_set_variable_bool");
     RegisterVariablePair(registry, "int", "Int", Int(), "pod_get_variable_int", "pod_set_variable_int");
     RegisterVariablePair(registry, "string", "String", Str(), "pod_get_variable_string", "pod_set_variable_string");
+}
+
+void RegisterCoreCapabilityNodes(NodeTypeRegistry& registry)
+{
+    RegisterHostExternNode(registry, "core.asset.exists", "Asset Exists",
+        { In("name", Str()) }, { Out("exists", Bool()) }, "engine_asset_exists",
+        { "engine.asset.query" });
 }
 
 } // namespace ce::node_system
