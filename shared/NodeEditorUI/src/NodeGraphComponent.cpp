@@ -212,15 +212,29 @@ void NodeGraphComponent::SelectNode(NodeId id) {
 void NodeGraphComponent::paint(juce::Graphics& g) {
     g.fillAll(juce::Colour(0xff11151b));
 
-    // Faint dot grid, purely decorative -- helps make pan/zoom legible.
-    g.setColour(juce::Colour(0xff1c232d));
-    const float gridSpacing = 32.0f * zoom_;
-    if (gridSpacing > 6.0f) {
-        for (float x = std::fmod(viewOffset_.x, gridSpacing); x < static_cast<float>(getWidth()); x += gridSpacing) {
-            for (float y = std::fmod(viewOffset_.y, gridSpacing); y < static_cast<float>(getHeight()); y += gridSpacing) {
-                g.fillRect(x, y, 2.0f, 2.0f);
-            }
-        }
+    // Adaptive graph-paper grid, purely decorative -- helps make pan/zoom
+    // legible across the whole zoom range. Previously a single fixed dot
+    // spacing that just vanished entirely below a zoom threshold; now
+    // minor lines fade out at low zoom (removing clutter/detail) while
+    // major lines (every 4th minor line) stay visible across the entire
+    // 0.35x-2.5x zoom range, so structure is never fully gone. Node/
+    // Behavior Graph Foundations UX plan Phase 4.
+    const float minorSpacing = 32.0f * zoom_;
+    const float majorSpacing = minorSpacing * 4.0f;
+
+    if (majorSpacing > 4.0f) {
+        g.setColour(juce::Colour(0xff26313f));
+        for (float x = std::fmod(viewOffset_.x, majorSpacing); x < static_cast<float>(getWidth()); x += majorSpacing)
+            g.drawVerticalLine(static_cast<int>(x), 0.0f, static_cast<float>(getHeight()));
+        for (float y = std::fmod(viewOffset_.y, majorSpacing); y < static_cast<float>(getHeight()); y += majorSpacing)
+            g.drawHorizontalLine(static_cast<int>(y), 0.0f, static_cast<float>(getWidth()));
+    }
+    if (minorSpacing > 16.0f) {
+        g.setColour(juce::Colour(0xff1a212a));
+        for (float x = std::fmod(viewOffset_.x, minorSpacing); x < static_cast<float>(getWidth()); x += minorSpacing)
+            g.drawVerticalLine(static_cast<int>(x), 0.0f, static_cast<float>(getHeight()));
+        for (float y = std::fmod(viewOffset_.y, minorSpacing); y < static_cast<float>(getHeight()); y += minorSpacing)
+            g.drawHorizontalLine(static_cast<int>(y), 0.0f, static_cast<float>(getWidth()));
     }
 
     for (const Connection& conn : graph_.Connections()) {
