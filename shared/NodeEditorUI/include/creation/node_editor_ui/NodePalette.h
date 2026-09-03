@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <vector>
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -21,6 +22,10 @@ namespace creation::node_editor_ui {
 // filtering of its own, it lists everything in `registry.Types()`. Each domain (Signal Lab, video
 // FX, Foley) is expected to own its own NodeTypeRegistry instance rather than sharing one, per
 // the suite's explicit "share editing machinery, never merge catalogs" stance.
+//
+// Entries are grouped into collapsible-by-category sections (a single ListBox of synthesized
+// header + entry rows, rebuilt on expand/collapse or filter change) instead of a flat list with a
+// per-row category column -- Pod Editor UX & Architecture Fixes plan Phase 5.
 class NodePalette final : public juce::Component, private juce::ListBoxModel {
 public:
     explicit NodePalette(const ce::node_system::NodeTypeRegistry& registry);
@@ -31,7 +36,10 @@ public:
 private:
     int getNumRows() override;
     void paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected) override;
+    void listBoxItemClicked(int row, const juce::MouseEvent& event) override;
     juce::var getDragSourceDescription(const juce::SparseSet<int>& selectedRows) override;
+
+    void RebuildRows();
 
     // typeName is what itemDropped() actually needs to construct a node
     // (AddRegisteredNode dispatches on it); displayName/category are pure
@@ -39,7 +47,22 @@ private:
     // set one (existing FRust node types, mid-migration to this field).
     struct Entry { std::string typeName, displayName, category; };
     std::vector<Entry> entries_;
+
+    // One synthesized row, either a collapsible category header or a
+    // reference back into entries_ -- rebuilt whenever a header is
+    // clicked or the filter text changes, so listBox_ never needs its
+    // own notion of grouping.
+    struct Row {
+        bool isHeader = false;
+        std::string category;   // raw category key ("" bucket displays as "Other")
+        int count = 0;          // header rows only: entries currently shown under it
+        int entryIndex = -1;    // entry rows only: index into entries_
+    };
+    std::vector<Row> rows_;
+    std::map<std::string, bool> categoryExpanded_;
+
     juce::Label titleLabel_{ {}, "Nodes" };
+    juce::TextEditor filterBox_;
     juce::ListBox listBox_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NodePalette)
