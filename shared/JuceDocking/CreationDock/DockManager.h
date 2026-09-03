@@ -19,6 +19,15 @@ public:
 
     DockPanel* registerPanel(const juce::String& id, const juce::String& title, std::unique_ptr<juce::Component> contentComponent, DockTargetZone initialZone);
 
+    // Permanently removes a registered panel -- pulls it out of wherever it
+    // currently lives (a zone; a floating window is not searched, same
+    // limitation as extractPanel()) and lets it be destroyed, unlike
+    // dockPanel()/floatPanel() which only ever relocate a panel. For panels
+    // that are meant to exist only while something is open in them (e.g. an
+    // asset's editor), not as permanent dock fixtures.
+    void unregisterPanel(const juce::String& id);
+    bool isRegistered(const juce::String& id) const { return findPanelById(id) != nullptr; }
+
     void floatPanel(DockPanel* panel);
     void dockPanel(DockPanel* panel, DockTargetZone zone);
     void activatePanel(const juce::String& id);

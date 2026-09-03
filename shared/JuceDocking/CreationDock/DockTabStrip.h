@@ -36,6 +36,14 @@ private:
     DockZone& zone;
     std::vector<std::unique_ptr<DockTab>> tabViews;
 
+    // Overflow handling: when tabViews don't all fit in the strip's width,
+    // the tail (skipping the active tab, which always keeps its slot so the
+    // current selection never silently disappears) is hidden and reachable
+    // only through this button's popup menu, rebuilt each resized().
+    juce::TextButton overflowButton;
+    std::vector<DockTab*> hiddenTabs;
+    void showOverflowMenu();
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DockTabStrip)
 };
 
