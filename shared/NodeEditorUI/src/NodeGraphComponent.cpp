@@ -8,6 +8,7 @@ namespace creation::node_editor_ui {
 namespace {
 
 using ce::node_system::Connection;
+using ce::node_system::ConnectionId;
 using ce::node_system::Node;
 using ce::node_system::NodeId;
 using ce::node_system::Pin;
@@ -82,6 +83,7 @@ void NodeGraphComponent::ClearSelection() {
 void NodeGraphComponent::GraphReplaced() {
     selectedNode_ = 0;
     errorNode_ = 0;
+    selectedConnection_ = 0;
     draggingNode_ = false;
     draggingWire_ = false;
     panning_ = false;
@@ -145,7 +147,58 @@ bool NodeGraphComponent::HitTestPin(juce::Point<float> screenPos, PinHit& outHit
     return false;
 }
 
+bool NodeGraphComponent::ConnectionScreenEndpoints(const Connection& conn, juce::Point<float>& outFrom,
+                                                    juce::Point<float>& outTo) const {
+    const Node* fromNode = graph_.FindNode(conn.fromNode);
+    const Node* toNode = graph_.FindNode(conn.toNode);
+    if (fromNode == nullptr || toNode == nullptr) return false;
+    const Pin* fromPin = fromNode->FindPin(conn.fromPin);
+    const Pin* toPin = toNode->FindPin(conn.toPin);
+    if (fromPin == nullptr || toPin == nullptr) return false;
+    const auto& fromOutputs = fromNode->Outputs();
+    const auto& toInputs = toNode->Inputs();
+    const auto fromIt = std::find_if(fromOutputs.begin(), fromOutputs.end(),
+                                      [&](const Pin& p) { return p.id == fromPin->id; });
+    const auto toIt = std::find_if(toInputs.begin(), toInputs.end(), [&](const Pin& p) { return p.id == toPin->id; });
+    if (fromIt == fromOutputs.end() || toIt == toInputs.end()) return false;
+    outFrom = PinScreenPos(*fromNode, *fromPin, static_cast<std::size_t>(fromIt - fromOutputs.begin()));
+    outTo = PinScreenPos(*toNode, *toPin, static_cast<std::size_t>(toIt - toInputs.begin()));
+    return true;
+}
+
+ce::node_system::ConnectionId NodeGraphComponent::HitTestConnection(juce::Point<float> screenPos) const {
+    constexpr float kHitDistance = 6.0f;
+    constexpr int kSamples = 24;
+    ConnectionId best = 0;
+    float bestDistance = kHitDistance;
+    for (const Connection& conn : graph_.Connections()) {
+        juce::Point<float> from, to;
+        if (!ConnectionScreenEndpoints(conn, from, to)) continue;
+        // Same cubic bezier DrawWire() actually draws -- sampled rather
+        // than using a JUCE Path nearest-point query, so the hit-test
+        // matches the drawn curve exactly with no extra API surface.
+        const float dx = std::max(30.0f, std::abs(to.x - from.x) * 0.5f);
+        const juce::Point<float> c1{ from.x + dx, from.y };
+        const juce::Point<float> c2{ to.x - dx, to.y };
+        for (int i = 0; i <= kSamples; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(kSamples);
+            const float u = 1.0f - t;
+            const float bx = u * u * u * from.x + 3.0f * u * u * t * c1.x + 3.0f * u * t * t * c2.x + t * t * t * to.x;
+            const float by = u * u * u * from.y + 3.0f * u * u * t * c1.y + 3.0f * u * t * t * c2.y + t * t * t * to.y;
+            const float distance = juce::Point<float>(bx, by).getDistanceFrom(screenPos);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = conn.id;
+            }
+        }
+    }
+    return best;
+}
+
 void NodeGraphComponent::SelectNode(NodeId id) {
+    // Node and connection selection are mutually exclusive -- selecting
+    // either clears the other, same as any single-selection tool.
+    selectedConnection_ = 0;
     if (selectedNode_ == id) {
         return;
     }
@@ -171,28 +224,23 @@ void NodeGraphComponent::paint(juce::Graphics& g) {
     }
 
     for (const Connection& conn : graph_.Connections()) {
+        juce::Point<float> fromPos, toPos;
+        if (!ConnectionScreenEndpoints(conn, fromPos, toPos)) continue;
+        if (conn.id == selectedConnection_) {
+            // Selected wire drawn thicker/white, same visual language the
+            // selected-node outline already uses -- Node/Behavior Graph
+            // Foundations UX plan Phase 2.
+            juce::Path path;
+            path.startNewSubPath(fromPos);
+            const float dx = std::max(30.0f, std::abs(toPos.x - fromPos.x) * 0.5f);
+            path.cubicTo(fromPos.x + dx, fromPos.y, toPos.x - dx, toPos.y, toPos.x, toPos.y);
+            g.setColour(juce::Colours::white);
+            g.strokePath(path, juce::PathStrokeType(3.5f));
+            continue;
+        }
         const Node* fromNode = graph_.FindNode(conn.fromNode);
-        const Node* toNode = graph_.FindNode(conn.toNode);
-        if (fromNode == nullptr || toNode == nullptr) {
-            continue;
-        }
-        const Pin* fromPin = fromNode->FindPin(conn.fromPin);
-        const Pin* toPin = toNode->FindPin(conn.toPin);
-        if (fromPin == nullptr || toPin == nullptr) {
-            continue;
-        }
-        const auto& fromOutputs = fromNode->Outputs();
-        const auto& toInputs = toNode->Inputs();
-        const auto fromIt = std::find_if(fromOutputs.begin(), fromOutputs.end(),
-                                          [&](const Pin& p) { return p.id == fromPin->id; });
-        const auto toIt =
-            std::find_if(toInputs.begin(), toInputs.end(), [&](const Pin& p) { return p.id == toPin->id; });
-        if (fromIt == fromOutputs.end() || toIt == toInputs.end()) {
-            continue;
-        }
-        const auto fromPos = PinScreenPos(*fromNode, *fromPin, static_cast<std::size_t>(fromIt - fromOutputs.begin()));
-        const auto toPos = PinScreenPos(*toNode, *toPin, static_cast<std::size_t>(toIt - toInputs.begin()));
-        DrawWire(g, fromPos, toPos, PinColourFor(*fromPin));
+        const Pin* fromPin = fromNode ? fromNode->FindPin(conn.fromPin) : nullptr;
+        DrawWire(g, fromPos, toPos, fromPin ? PinColourFor(*fromPin) : juce::Colours::grey);
     }
 
     if (draggingWire_) {
@@ -313,6 +361,17 @@ void NodeGraphComponent::mouseDown(const juce::MouseEvent& event) {
         return;
     }
 
+    // Checked after nodes/pins so a node overlapping a wire's path still
+    // takes priority -- clicking a wire only counts when nothing else
+    // was hit. Node/Behavior Graph Foundations UX plan Phase 2.
+    const ConnectionId hitConnection = HitTestConnection(screenPos);
+    if (hitConnection != 0) {
+        SelectNode(0);
+        selectedConnection_ = hitConnection;
+        repaint();
+        return;
+    }
+
     SelectNode(0);
     panning_ = true;
     panStartMouse_ = screenPos;
@@ -387,7 +446,22 @@ void NodeGraphComponent::mouseWheelMove(const juce::MouseEvent& event, const juc
 }
 
 bool NodeGraphComponent::keyPressed(const juce::KeyPress& key) {
-    if ((key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey) && selectedNode_ != 0) {
+    if (key != juce::KeyPress::deleteKey && key != juce::KeyPress::backspaceKey) {
+        return false;
+    }
+    if (selectedConnection_ != 0) {
+        // Node/Behavior Graph Foundations UX plan Phase 2 -- previously
+        // the only way to remove a connection was deleting one of the
+        // two nodes it touched.
+        graph_.Disconnect(selectedConnection_);
+        selectedConnection_ = 0;
+        if (onGraphChanged) {
+            onGraphChanged();
+        }
+        repaint();
+        return true;
+    }
+    if (selectedNode_ != 0) {
         graph_.RemoveNode(selectedNode_);
         selectedNode_ = 0;
         if (onSelectionChanged) {
