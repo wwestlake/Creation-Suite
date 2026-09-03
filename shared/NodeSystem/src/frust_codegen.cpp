@@ -274,6 +274,24 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
                 return false;
             }
 
+            // An Event node (On Tick/On Begin Play/On End Play -- Node/
+            // Behavior Graph Foundations plan Phase 4) can only ever
+            // legally be `start` itself: nothing wires exec INTO an
+            // Event node, it IS where the chain starts. It has zero Exec
+            // inputs and no frustEntryPoint of its own (it doesn't call
+            // anything), so it doesn't fit the generic "callable node"
+            // shape the ControlFlowKind::None case below handles -- it's
+            // a pure marker, not a call. Skip straight to whatever's
+            // wired to its "then" output, emitting nothing for the
+            // marker itself. Found while running the plan's own
+            // verification pass: "On Tick -> Return" -- about as minimal
+            // a program as exists -- failed to compile before this fix.
+            if (current == start && type->domain == Domain::Event) {
+                const Connection* next = ExecThenConnection(graph, *node);
+                current = next ? next->toNode : 0;
+                continue;
+            }
+
             switch (type->controlFlow) {
             case ControlFlowKind::None: {
                 if (type->domain != Domain::Event || type->frustEntryPoint.empty()) {

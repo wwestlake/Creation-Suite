@@ -73,6 +73,15 @@ private:
 
     ce::node_system::NodeId HitTestNode(juce::Point<float> screenPos) const;
     bool HitTestPin(juce::Point<float> screenPos, PinHit& outHit) const;
+    // Node/Behavior Graph Foundations UX plan Phase 2 -- there was no way
+    // to remove a single connection before this, only whole-node deletion
+    // or drag-a-replacement-wire onto an input. Shared by paint() (which
+    // already computed these same endpoints inline) and the new
+    // connection hit-test/delete path, so both agree on exactly where a
+    // wire is drawn.
+    bool ConnectionScreenEndpoints(const ce::node_system::Connection& conn, juce::Point<float>& outFrom,
+                                    juce::Point<float>& outTo) const;
+    ce::node_system::ConnectionId HitTestConnection(juce::Point<float> screenPos) const;
 
     void SelectNode(ce::node_system::NodeId id);
     void DrawNode(juce::Graphics& g, const ce::node_system::Node& node);
@@ -86,6 +95,7 @@ private:
 
     ce::node_system::NodeId selectedNode_ = 0;
     ce::node_system::NodeId errorNode_ = 0;
+    ce::node_system::ConnectionId selectedConnection_ = 0;
 
     bool panning_ = false;
     juce::Point<float> panStartMouse_;
