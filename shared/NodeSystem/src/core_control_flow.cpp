@@ -84,7 +84,7 @@ namespace {
 // type at a time.
 void RegisterHostExternNode(NodeTypeRegistry& registry, std::string typeName, std::string displayName,
                              std::vector<PinSignature> inputs, std::vector<PinSignature> outputs,
-                             std::string frustEntryPoint) {
+                             std::string frustEntryPoint, std::vector<std::string> requiredCapabilities = {}) {
     NodeTypeDescriptor descriptor;
     descriptor.typeName = std::move(typeName);
     descriptor.domain = Domain::Core;
@@ -93,6 +93,7 @@ void RegisterHostExternNode(NodeTypeRegistry& registry, std::string typeName, st
     descriptor.displayName = std::move(displayName);
     descriptor.frustEntryPoint = std::move(frustEntryPoint);
     descriptor.isHostExtern = true;
+    descriptor.requiredCapabilities = std::move(requiredCapabilities);
     registry.Register(std::move(descriptor));
 }
 
@@ -121,6 +122,13 @@ void RegisterCoreVariableNodes(NodeTypeRegistry& registry)
     RegisterVariablePair(registry, "bool", "Bool", Bool(), "pod_get_variable_bool", "pod_set_variable_bool");
     RegisterVariablePair(registry, "int", "Int", Int(), "pod_get_variable_int", "pod_set_variable_int");
     RegisterVariablePair(registry, "string", "String", Str(), "pod_get_variable_string", "pod_set_variable_string");
+}
+
+void RegisterCoreCapabilityNodes(NodeTypeRegistry& registry)
+{
+    RegisterHostExternNode(registry, "core.asset.exists", "Asset Exists",
+        { In("name", Str()) }, { Out("exists", Bool()) }, "engine_asset_exists",
+        { "engine.asset.query" });
 }
 
 } // namespace ce::node_system

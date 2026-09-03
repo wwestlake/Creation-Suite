@@ -27,6 +27,16 @@ void RegisterCoreEventNodes(NodeTypeRegistry& registry);
 // comment on this).
 void RegisterCoreVariableNodes(NodeTypeRegistry& registry);
 
+// Registers core.asset.exists (Node/Behavior Graph Foundations plan
+// Phase 8) -- a real capability node, host-extern into
+// EngineFrustHost::assetExists, declared with requiredCapabilities =
+// {"engine.asset.query"} as documentation of intent (this path is
+// C++-registered, not loaded from an external plugin manifest, so the
+// new capability-enforcement check in EngineNodeLibraryLoader.cpp
+// doesn't apply to it -- enforcement matters for untrusted plugin
+// content, not this first-party node).
+void RegisterCoreCapabilityNodes(NodeTypeRegistry& registry);
+
 // Maps an Event node's typeName to the real FRust lifecycle-hook function
 // name a compile pass should emit for it (e.g. "core.event.tick" ->
 // "on_tick") -- empty string if typeName isn't a registered Event node.
