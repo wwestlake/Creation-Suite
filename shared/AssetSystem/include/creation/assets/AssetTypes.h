@@ -24,7 +24,9 @@ enum class AssetKind
     midi,
     binary,
     pod,
-    objectDefinition
+    objectDefinition,
+    game,
+    scene
 };
 
 enum class AssetReferenceMode
