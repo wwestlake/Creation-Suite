@@ -111,6 +111,7 @@ bool SuiteVfsServiceClient::writeEntry(const juce::String& logicalPath, const ju
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("PUT")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/octet-stream\r\n")
             .withStatusCode(&statusCode));
 
     return stream != nullptr && statusCode == 200;
@@ -181,6 +182,7 @@ bool SuiteVfsServiceClient::createProject(creation::assets::SuiteAppDomain appDo
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("POST")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/json\r\n")
             .withStatusCode(&statusCode));
 
     if (stream == nullptr || statusCode != 200)
@@ -231,6 +233,7 @@ bool SuiteVfsServiceClient::writeManifest(const juce::String& projectId, const c
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("PUT")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/json\r\n")
             .withStatusCode(&statusCode));
 
     return stream != nullptr && statusCode == 200;
@@ -292,6 +295,7 @@ bool SuiteVfsServiceClient::cloneProject(const juce::String& sourceProjectId, co
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("POST")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/json\r\n")
             .withStatusCode(&statusCode));
 
     if (stream == nullptr || statusCode != 200)
@@ -367,6 +371,7 @@ bool SuiteVfsServiceClient::writeProjectEntry(const juce::String& projectId, con
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("PUT")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/octet-stream\r\n")
             .withStatusCode(&statusCode));
 
     return stream != nullptr && statusCode == 200;

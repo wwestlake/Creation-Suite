@@ -18,6 +18,7 @@ juce::String toStorageToken(AssetKind kind)
         case AssetKind::midi: return "midi";
         case AssetKind::binary: return "binary";
         case AssetKind::pod: return "pod";
+        case AssetKind::objectDefinition: return "objectDefinition";
         case AssetKind::unknown: break;
     }
 
@@ -39,6 +40,7 @@ AssetKind assetKindFromStorageToken(const juce::String& token)
     if (normalized == "midi") return AssetKind::midi;
     if (normalized == "binary") return AssetKind::binary;
     if (normalized == "pod") return AssetKind::pod;
+    if (normalized == "objectdefinition") return AssetKind::objectDefinition;
     return AssetKind::unknown;
 }
 
@@ -58,6 +60,7 @@ juce::String toDisplayName(AssetKind kind)
         case AssetKind::midi: return "MIDI";
         case AssetKind::binary: return "Binary";
         case AssetKind::pod: return "Pod";
+        case AssetKind::objectDefinition: return "Object Definition";
         case AssetKind::unknown: break;
     }
 

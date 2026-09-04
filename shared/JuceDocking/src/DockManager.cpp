@@ -1,5 +1,7 @@
 #include "CreationDock/DockManager.h"
 
+#include <algorithm>
+
 namespace CreationDock {
 
 namespace {
@@ -69,6 +71,26 @@ DockPanel* DockManager::registerPanel(const juce::String& id, const juce::String
 
     dockPanel(rawPtr, initialZone);
     return rawPtr;
+}
+
+void DockManager::unregisterPanel(const juce::String& id)
+{
+    auto* panel = findPanelById(id);
+    if (panel == nullptr) return;
+
+    defaultLayout.erase(std::remove_if(defaultLayout.begin(), defaultLayout.end(),
+                                        [&](const auto& entry) { return entry.first == id; }),
+                         defaultLayout.end());
+
+    // extractPanel returns ownership to us as a unique_ptr and falls out of
+    // scope immediately -- that's the actual destruction, there's no
+    // separate "delete" step. If the panel is currently floating this is a
+    // no-op (extractPanel doesn't search floating windows, same as its
+    // other callers) -- closing a floated panel goes through
+    // handleFloatingWindowClosed instead, which re-docks rather than
+    // destroys; extending that path is out of scope here.
+    extractPanel(panel);
+    container.resized();
 }
 
 std::unique_ptr<DockPanel> DockManager::extractPanel(DockPanel* panel)

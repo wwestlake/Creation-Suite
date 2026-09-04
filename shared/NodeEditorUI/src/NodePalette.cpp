@@ -34,6 +34,12 @@ NodePalette::NodePalette(const ce::node_system::NodeTypeRegistry& registry) : li
     addAndMakeVisible(listBox_);
 
     RebuildRows();
+    // ListBox caches its row count -- it doesn't poll getNumRows() on its
+    // own, only on an explicit updateContent(). Every OTHER call site
+    // that touches rows_ (filter typing, header click) already calls
+    // this; the first build here needs it too, or the list stays empty
+    // even though rows_ is fully populated.
+    listBox_.updateContent();
 }
 
 void NodePalette::RebuildRows() {
