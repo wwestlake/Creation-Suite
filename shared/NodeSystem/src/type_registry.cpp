@@ -1,5 +1,6 @@
 #include "node_system/type_registry.h"
 
+#include <algorithm>
 #include <sstream>
 
 namespace ce::node_system {
@@ -88,6 +89,17 @@ bool ValidateAgainstRegistry(const Graph& graph, const NodeTypeRegistry& registr
         ok = PinsMatchSignature(node->Outputs(), descriptor->outputs, node->TypeName(), "output", errorsOut) && ok;
     }
     return ok;
+}
+
+DataType ResolveEffectivePinType(const NodeTypeDescriptor& type, const Node& node, const Pin& pin) {
+    if (type.genericParams.empty()) return pin.type.dataType;
+    const std::vector<PinSignature>& signatures = pin.isInput ? type.inputs : type.outputs;
+    const auto sigIt = std::find_if(signatures.begin(), signatures.end(),
+                                     [&](const PinSignature& sig) { return sig.name == pin.name; });
+    if (sigIt == signatures.end() || sigIt->genericParam.empty()) return pin.type.dataType;
+    const auto& bindings = node.GenericBindings();
+    const auto bindingIt = bindings.find(sigIt->genericParam);
+    return bindingIt == bindings.end() ? DataType::Any : bindingIt->second;
 }
 
 } // namespace ce::node_system

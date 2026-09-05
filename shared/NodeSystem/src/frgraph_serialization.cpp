@@ -159,6 +159,15 @@ std::string SerializeGraph(const Graph& graph) {
         for (const Pin& pin : node->Outputs()) {
             os << SerializePinLine(id, pin) << "\n";
         }
+        // Per-instance generic type-parameter bindings (real monomorphized
+        // generics for Schematic nodes plan, Phase 2) -- own line per
+        // binding, same "detail line follows its node line, keyed by
+        // nodeId" convention as pin lines above. Absent entirely for a
+        // non-generic node (the common case) or an unresolved parameter,
+        // same as an ordinary node having zero pin lines of some kind.
+        for (const auto& [paramName, dataType] : node->GenericBindings()) {
+            os << "genericbinding " << id << " " << paramName << " " << DataTypeToString(dataType) << "\n";
+        }
     }
 
     std::vector<Connection> connections = graph.Connections();
@@ -336,6 +345,24 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
             } else {
                 node->AddOutputWithId(pinId, name, type, defaultValue);
             }
+        } else if (keyword == "genericbinding") {
+            if (!graph) {
+                return fail("'genericbinding' line before 'graph' line");
+            }
+            NodeId nodeId = 0;
+            std::string paramName, dataTypeStr;
+            if (!(tok >> nodeId >> paramName >> dataTypeStr)) {
+                return fail("malformed 'genericbinding' line (expected: genericbinding <nodeId> <paramName> <dataType>)");
+            }
+            Node* node = graph->FindNode(nodeId);
+            if (node == nullptr) {
+                return fail("'genericbinding' references unknown node " + std::to_string(nodeId));
+            }
+            const auto dataType = DataTypeFromString(dataTypeStr);
+            if (!dataType) {
+                return fail("unknown data type '" + dataTypeStr + "' on 'genericbinding' line");
+            }
+            node->SetGenericBinding(paramName, *dataType);
         } else if (keyword == "connection") {
             if (!graph) {
                 return fail("'connection' line before 'graph' line");
