@@ -43,6 +43,15 @@ struct PinSignature {
     std::string name;
     PinTypeDesc type;
     PinDefaultValue defaultValue;
+
+    // Non-empty when this pin's type is one of the node type's own
+    // genericParams (see NodeTypeDescriptor::genericParams below) -- e.g.
+    // "T" for a pin FRust reflection tagged with "genericParam":"T"
+    // (Codegen.h's compileNodeReflection). `type.dataType` stays
+    // DataType::Any for a generic pin, same as an ordinary untyped one;
+    // this is what actually distinguishes "genuinely untyped" from
+    // "generic, resolved per node instance" -- see ResolveEffectivePinType.
+    std::string genericParam;
 };
 
 // GS8: the fix for Node::TypeName() being a completely free-form,
@@ -61,6 +70,15 @@ struct NodeTypeDescriptor {
     std::vector<PinSignature> outputs;
     ControlFlowKind controlFlow = ControlFlowKind::None;
     MonadOperation monadOperation = MonadOperation::None;
+
+    // Non-empty for a node type backed by a generic FRust `node pure`/
+    // `node callable` function (e.g. `["T"]` for `fn identity<T>(x: T) ->
+    // T`), straight from FRust reflection's own "genericParams" array
+    // (Codegen.h's compileNodeReflection). Each placed instance of a
+    // generic node type resolves every one of these to a concrete
+    // DataType via Node::GenericBindings() before it can compile -- see
+    // ResolveEffectivePinType.
+    std::vector<std::string> genericParams;
 
     // Editor/documentation metadata and the FRust compilation contract,
     // ported from Creation Engine's own former NodeSystem fork as part of
@@ -140,5 +158,21 @@ Node* AddRegisteredNode(Graph& graph, const NodeTypeRegistry& registry, const st
 // left empty, if given) iff every node's shape matches.
 bool ValidateAgainstRegistry(const Graph& graph, const NodeTypeRegistry& registry,
                               std::vector<std::string>* errorsOut = nullptr);
+
+// The one authoritative place a pin's REAL type is determined, for any
+// consumer that needs to know it -- codegen's `let` type annotations,
+// turbofish argument order, and wiring-compatibility checks all go
+// through this instead of reading `pin.type.dataType` directly. For an
+// ordinary (non-generic) pin, that raw dataType IS the answer. For a pin
+// whose matching PinSignature carries a `genericParam` name (found by
+// name+direction in `type`'s inputs/outputs), the answer instead comes
+// from `node`'s own per-instance `GenericBindings()` for that parameter
+// name -- DataType::Any if unresolved (the caller's own "must be
+// resolved before compiling" error path is expected to catch that
+// separately; this function does not itself error). Without going
+// through here, a downstream node reading from a generic node's OUTPUT
+// pin would still see the descriptor-level Any even though this
+// particular instance is concretely bound to e.g. Float.
+DataType ResolveEffectivePinType(const NodeTypeDescriptor& type, const Node& node, const Pin& pin);
 
 } // namespace ce::node_system
