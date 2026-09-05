@@ -1,7 +1,9 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
+#include "node_system/node_library.h"
 #include "node_system/type_registry.h"
 
 namespace ce::node_system {
@@ -63,5 +65,17 @@ void RegisterCoreInputNodes(NodeTypeRegistry& registry);
 // The single source of truth for that mapping, so a compile pass never
 // hand-duplicates the typeName strings.
 std::string EventNodeFrustFunctionName(const std::string& typeName);
+
+// Builds one Domain::Event marker node type per name in `comboNames` --
+// same shape as core.event.tick/beginplay/endplay (zero inputs, one Exec
+// output named "then", no frustEntryPoint) -- for user-authored Input
+// Combo Events (Input Combo Events plan) rather than fixed engine
+// lifecycle points. Each type name is "core.input.combo." + name;
+// EventNodeFrustFunctionName derives "on_action_<sanitized name>" for
+// these dynamically, the same way it looks up a fixed name for the
+// built-in three. Pass to NodeLibraryRegistry::ReplaceLibrary (not
+// Register) every time the caller's combo list changes, since library ids
+// must stay unique under Register's stricter contract.
+NodeLibraryDescriptor BuildInputComboEventLibrary(const std::vector<std::string>& comboNames);
 
 } // namespace ce::node_system

@@ -27,6 +27,16 @@ public:
     // owning plugin, so removing a plugin cannot leave ambiguous graph nodes.
     bool Register(NodeLibraryDescriptor descriptor, std::string* errorOut = nullptr);
 
+    // Wholesale-replaces a previously-registered library under the same id
+    // -- for dynamically-authored content whose node set legitimately
+    // changes at runtime (e.g. user-defined Input Combo Events becoming
+    // placeable event nodes), unlike Register's strict "duplicate id/type
+    // name is a bug" contract, which stays intended for static/plugin
+    // registrations. Registers fresh if `descriptor.id` isn't registered
+    // yet. Still rejects if any of the new descriptor's type names collide
+    // with a name owned by a DIFFERENT library.
+    bool ReplaceLibrary(NodeLibraryDescriptor descriptor, std::string* errorOut = nullptr);
+
     const NodeLibraryDescriptor* FindLibrary(const std::string& id) const;
     const NodeTypeDescriptor* FindNodeType(const std::string& typeName) const;
     Node* AddNode(Graph& graph, const std::string& typeName, std::string* errorOut = nullptr) const;

@@ -9,6 +9,10 @@ void NodeTypeRegistry::Register(NodeTypeDescriptor descriptor) {
     types_[key] = std::move(descriptor);
 }
 
+void NodeTypeRegistry::Unregister(const std::string& typeName) {
+    types_.erase(typeName);
+}
+
 const NodeTypeDescriptor* NodeTypeRegistry::Find(const std::string& typeName) const {
     const auto it = types_.find(typeName);
     return it == types_.end() ? nullptr : &it->second;

@@ -1,5 +1,6 @@
 #include "node_system/core_control_flow.h"
 
+#include <cctype>
 #include <string>
 #include <utility>
 
@@ -71,11 +72,54 @@ void RegisterCoreEventNodes(NodeTypeRegistry& registry)
         ControlFlowKind::None, MonadOperation::None, "On End Play" });
 }
 
+namespace {
+// core.input.combo.<name> -> on_action_<sanitized name> -- the one
+// convention-based rule EventNodeFrustFunctionName needs beyond the fixed
+// kEventNodeHooks table, so a dynamically user-named Input Combo Event
+// (Input Combo Events plan) compiles as its own real hook the same way
+// the three built-in lifecycle events do, with zero changes needed to
+// PodEditorPanel.cpp's own two call sites (both already just call this
+// function) or to frust_codegen.cpp's lowerExecChain (already generic
+// over any Domain::Event node's shape).
+constexpr const char* kComboTypeNamePrefix = "core.input.combo.";
+
+std::string SanitizeFrustIdentifier(const std::string& raw)
+{
+    std::string result;
+    result.reserve(raw.size());
+    for (const char c : raw)
+        result += (std::isalnum(static_cast<unsigned char>(c)) || c == '_') ? c : '_';
+    if (result.empty() || std::isdigit(static_cast<unsigned char>(result.front())))
+        result.insert(result.begin(), '_');
+    return result;
+}
+} // namespace
+
 std::string EventNodeFrustFunctionName(const std::string& typeName)
 {
     for (const auto& [name, hook] : kEventNodeHooks)
         if (typeName == name) return hook;
+    if (typeName.rfind(kComboTypeNamePrefix, 0) == 0)
+        return "on_action_" + SanitizeFrustIdentifier(typeName.substr(std::string(kComboTypeNamePrefix).size()));
     return {};
+}
+
+NodeLibraryDescriptor BuildInputComboEventLibrary(const std::vector<std::string>& comboNames)
+{
+    NodeLibraryDescriptor library;
+    library.id = "input-combos";
+    library.displayName = "Input Combo Events";
+    library.description = "User-recorded key-combo events (Input Combo Events plan) -- one Domain::Event marker node per named combo, same shape as core.event.tick/beginplay/endplay.";
+    library.target = GraphTarget::Behavior;
+    for (const auto& name : comboNames) {
+        NodeTypeDescriptor descriptor;
+        descriptor.typeName = kComboTypeNamePrefix + name;
+        descriptor.domain = Domain::Event;
+        descriptor.outputs = { Out("then", Exec()) };
+        descriptor.displayName = "Combo: " + name;
+        library.nodeTypes.push_back(std::move(descriptor));
+    }
+    return library;
 }
 
 namespace {
