@@ -164,4 +164,29 @@ void RegisterCoreAnimationNodes(NodeTypeRegistry& registry)
         "engine_anim_is_blending", {}, Domain::Animation);
 }
 
+void RegisterCoreInputNodes(NodeTypeRegistry& registry)
+{
+    // No `entity` input on any of these -- Action state is process-global
+    // (one poll per tick), matching engine::GameplayInput's own shape, not
+    // a new convention.
+    RegisterHostExternNode(registry, "core.input.isActionActive", "Is Action Active",
+        { In("action", Str()) }, { Out("active", Bool()) },
+        "engine_input_is_action_active", {}, Domain::Input);
+
+    RegisterHostExternNode(registry, "core.input.wasActionPressed", "Was Action Pressed",
+        { In("action", Str()) }, { Out("pressed", Bool()) },
+        "engine_input_was_action_pressed", {}, Domain::Input);
+
+    RegisterHostExternNode(registry, "core.input.wasActionReleased", "Was Action Released",
+        { In("action", Str()) }, { Out("released", Bool()) },
+        "engine_input_was_action_released", {}, Domain::Input);
+
+    // valuePerMille: 1000 = full magnitude, matching the setPlaybackSpeed/
+    // blendMillis integer-encoding convention already used for analog-ish
+    // values elsewhere in this file.
+    RegisterHostExternNode(registry, "core.input.getActionValue", "Get Action Value",
+        { In("action", Str()) }, { Out("valuePerMille", Int()) },
+        "engine_input_get_action_value_permille", {}, Domain::Input);
+}
+
 } // namespace ce::node_system
