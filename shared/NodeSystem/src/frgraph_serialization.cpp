@@ -19,6 +19,7 @@ std::string DomainToString(Domain d) {
         case Domain::Material: return "material";
         case Domain::Event: return "event";
         case Domain::Audio: return "audio";
+        case Domain::Input: return "input";
     }
     return "core";
 }
@@ -29,6 +30,7 @@ std::optional<Domain> DomainFromString(const std::string& s) {
     if (s == "material") return Domain::Material;
     if (s == "event") return Domain::Event;
     if (s == "audio") return Domain::Audio;
+    if (s == "input") return Domain::Input;
     return std::nullopt;
 }
 

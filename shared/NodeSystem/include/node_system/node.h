@@ -22,6 +22,7 @@ enum class Domain {
     Event,
     Audio,
     Video,
+    Input,
 };
 
 class Node {

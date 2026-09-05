@@ -48,6 +48,15 @@ void RegisterCoreCapabilityNodes(NodeTypeRegistry& registry);
 // why Float variables aren't supported either).
 void RegisterCoreAnimationNodes(NodeTypeRegistry& registry);
 
+// Registers the Domain::Input host-extern query nodes (Input Binding
+// System plan): read-only queries into EngineFrustHost's input* functions,
+// backed by InputActionSystem's per-tick poll of an active Game's bound
+// keyboard/mouse/controller state. No mutating nodes exist -- bindings
+// themselves are authored only through InputBindingsPanel, never from a
+// graph. i64/string/bool at the FFI boundary, analog values as per-mille
+// integers, same convention as RegisterCoreAnimationNodes.
+void RegisterCoreInputNodes(NodeTypeRegistry& registry);
+
 // Maps an Event node's typeName to the real FRust lifecycle-hook function
 // name a compile pass should emit for it (e.g. "core.event.tick" ->
 // "on_tick") -- empty string if typeName isn't a registered Event node.
