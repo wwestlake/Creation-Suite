@@ -19,12 +19,16 @@ namespace ce::node_system {
 // if one exists, nullopt if the exec subgraph is acyclic.
 std::optional<std::vector<NodeId>> DetectExecCycle(const Graph& graph);
 
-// Topological order over Data-pin dependencies (an output must be
-// computed before anything consuming it via a Data connection).
-// Returns nullopt if a data cycle exists -- unlike Exec, a data cycle is
-// unconditionally invalid; there's no dedicated node type that makes
-// circular data dependencies meaningful the way a loop node makes an
-// exec cycle-shaped control-flow pattern meaningful.
+// Topological order over Data- and Stream-pin dependencies (an output
+// must be computed/produced before anything consuming it via a Data OR
+// Stream connection -- per IsConnectionCompatible's own reasoning in
+// pin.h, a Stream is "an ordered sequence of values over time, not a
+// different type system," so it carries the same real dependency-cycle
+// risk a Data connection does). Returns nullopt if a cycle exists among
+// either -- unlike Exec, a data/stream cycle is unconditionally invalid;
+// there's no dedicated node type that makes circular data dependencies
+// meaningful the way a loop node makes an exec cycle-shaped control-flow
+// pattern meaningful.
 std::optional<std::vector<NodeId>> TopologicalDataOrder(const Graph& graph);
 
 struct ValidationResult {

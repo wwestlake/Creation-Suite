@@ -10,10 +10,19 @@ namespace ce::node_system {
 
 namespace {
 
-// Builds an adjacency list over `graph`'s connections, keeping only
-// ones whose source pin matches `kindFilter` -- shared by both
-// DetectExecCycle (Exec) and TopologicalDataOrder (Data).
-std::unordered_map<NodeId, std::vector<NodeId>> BuildAdjacency(const Graph& graph, PinKind kindFilter) {
+// Builds an adjacency list over `graph`'s connections, keeping only ones
+// whose source pin's kind `includeKind` accepts -- shared by both
+// DetectExecCycle (Exec only) and TopologicalDataOrder (Data AND Stream:
+// per IsConnectionCompatible's own reasoning in pin.h, "a stream is an
+// ordered sequence of values over time, not a different type system," so
+// a stream consumer depending on its producer is exactly as real a
+// dependency-cycle risk as a Data connection is -- found and fixed here
+// because the previous single-PinKind filter silently let a genuine
+// cyclic Stream-only graph pass ValidateGraph, caught by FrustGraphSmoke's
+// own "Stream cycle was not rejected" check once that test itself was
+// fixed to compile again).
+std::unordered_map<NodeId, std::vector<NodeId>> BuildAdjacency(const Graph& graph,
+                                                                const std::function<bool(PinKind)>& includeKind) {
     std::unordered_map<NodeId, std::vector<NodeId>> adjacency;
     for (const Connection& conn : graph.Connections()) {
         const Node* fromNode = graph.FindNode(conn.fromNode);
@@ -21,7 +30,7 @@ std::unordered_map<NodeId, std::vector<NodeId>> BuildAdjacency(const Graph& grap
             continue;
         }
         const Pin* fromPin = fromNode->FindPin(conn.fromPin);
-        if (fromPin == nullptr || fromPin->type.kind != kindFilter) {
+        if (fromPin == nullptr || !includeKind(fromPin->type.kind)) {
             continue;
         }
         adjacency[conn.fromNode].push_back(conn.toNode);
@@ -32,7 +41,7 @@ std::unordered_map<NodeId, std::vector<NodeId>> BuildAdjacency(const Graph& grap
 } // namespace
 
 std::optional<std::vector<NodeId>> DetectExecCycle(const Graph& graph) {
-    const auto adjacency = BuildAdjacency(graph, PinKind::Exec);
+    const auto adjacency = BuildAdjacency(graph, [](PinKind kind) { return kind == PinKind::Exec; });
 
     enum class VisitState { Unvisited, InProgress, Done };
     std::unordered_map<NodeId, VisitState> state;
@@ -77,7 +86,7 @@ std::optional<std::vector<NodeId>> DetectExecCycle(const Graph& graph) {
 }
 
 std::optional<std::vector<NodeId>> TopologicalDataOrder(const Graph& graph) {
-    const auto adjacency = BuildAdjacency(graph, PinKind::Data);
+    const auto adjacency = BuildAdjacency(graph, [](PinKind kind) { return kind == PinKind::Data || kind == PinKind::Stream; });
 
     std::unordered_map<NodeId, int> inDegree;
     for (const auto& [id, node] : graph.Nodes()) {
