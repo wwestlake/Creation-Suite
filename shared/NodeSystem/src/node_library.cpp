@@ -34,6 +34,17 @@ bool NodeLibraryRegistry::Register(NodeLibraryDescriptor descriptor, std::string
     return true;
 }
 
+bool NodeLibraryRegistry::ReplaceLibrary(NodeLibraryDescriptor descriptor, std::string* errorOut) {
+    if (const auto existing = libraries_.find(descriptor.id); existing != libraries_.end()) {
+        for (const auto& node : existing->second.nodeTypes) {
+            typeOwners_.erase(node.typeName);
+            nodeTypes_.Unregister(node.typeName);
+        }
+        libraries_.erase(existing);
+    }
+    return Register(std::move(descriptor), errorOut);
+}
+
 const NodeLibraryDescriptor* NodeLibraryRegistry::FindLibrary(const std::string& id) const {
     const auto found = libraries_.find(id);
     return found == libraries_.end() ? nullptr : &found->second;

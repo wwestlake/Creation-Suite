@@ -96,6 +96,13 @@ public:
     // re-register.
     void Register(NodeTypeDescriptor descriptor);
 
+    // Removes one registered type by name, if present -- no-op otherwise.
+    // Used when replacing a whole library's node set wholesale
+    // (NodeLibraryRegistry::ReplaceLibrary) so a renamed/removed
+    // dynamically-authored node type (e.g. a renamed Input Combo Event)
+    // doesn't leave a stale entry other code could still resolve.
+    void Unregister(const std::string& typeName);
+
     const NodeTypeDescriptor* Find(const std::string& typeName) const;
     const std::unordered_map<std::string, NodeTypeDescriptor>& Types() const { return types_; }
 
