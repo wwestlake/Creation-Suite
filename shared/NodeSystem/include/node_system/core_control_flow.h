@@ -37,6 +37,17 @@ void RegisterCoreVariableNodes(NodeTypeRegistry& registry);
 // content, not this first-party node).
 void RegisterCoreCapabilityNodes(NodeTypeRegistry& registry);
 
+// Registers the Domain::Animation host-extern nodes (Animation Control
+// plan Phase 2): clip selection/crossfade/speed control and read-only
+// query nodes into EngineFrustHost's anim* functions, backed by an
+// entity's Animator component. Deliberately i64/string/bool at the FFI
+// boundary, not float -- durations/speeds cross as milliseconds/per-mille
+// integers, same convention as the pre-existing (not yet node-wrapped)
+// engine_set_material_scalar_parameter, since no float-FFI verification
+// exists in this codebase (see RegisterCoreVariableNodes' own comment on
+// why Float variables aren't supported either).
+void RegisterCoreAnimationNodes(NodeTypeRegistry& registry);
+
 // Maps an Event node's typeName to the real FRust lifecycle-hook function
 // name a compile pass should emit for it (e.g. "core.event.tick" ->
 // "on_tick") -- empty string if typeName isn't a registered Event node.

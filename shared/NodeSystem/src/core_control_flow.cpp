@@ -84,10 +84,11 @@ namespace {
 // type at a time.
 void RegisterHostExternNode(NodeTypeRegistry& registry, std::string typeName, std::string displayName,
                              std::vector<PinSignature> inputs, std::vector<PinSignature> outputs,
-                             std::string frustEntryPoint, std::vector<std::string> requiredCapabilities = {}) {
+                             std::string frustEntryPoint, std::vector<std::string> requiredCapabilities = {},
+                             Domain domain = Domain::Core) {
     NodeTypeDescriptor descriptor;
     descriptor.typeName = std::move(typeName);
-    descriptor.domain = Domain::Core;
+    descriptor.domain = domain;
     descriptor.inputs = std::move(inputs);
     descriptor.outputs = std::move(outputs);
     descriptor.displayName = std::move(displayName);
@@ -129,6 +130,38 @@ void RegisterCoreCapabilityNodes(NodeTypeRegistry& registry)
     RegisterHostExternNode(registry, "core.asset.exists", "Asset Exists",
         { In("name", Str()) }, { Out("exists", Bool()) }, "engine_asset_exists",
         { "engine.asset.query" });
+}
+
+void RegisterCoreAnimationNodes(NodeTypeRegistry& registry)
+{
+    // Hard cut to `clipName`, no blend -- use core.anim.crossfadeTo for a
+    // smooth transition instead.
+    RegisterHostExternNode(registry, "core.anim.setActiveClip", "Set Active Clip",
+        { In("entity", EntityType()), In("clipName", Str()) }, { Out("ok", Int()) },
+        "engine_anim_set_active_clip", {}, Domain::Animation);
+
+    RegisterHostExternNode(registry, "core.anim.crossfadeTo", "Crossfade To Clip",
+        { In("entity", EntityType()), In("clipName", Str()), In("blendMillis", Int()) }, { Out("ok", Int()) },
+        "engine_anim_crossfade_to", {}, Domain::Animation);
+
+    // speedPerMille: 1000 = normal speed, 2000 = 2x, 500 = 0.5x.
+    RegisterHostExternNode(registry, "core.anim.setPlaybackSpeed", "Set Playback Speed",
+        { In("entity", EntityType()), In("speedPerMille", Int()) }, { Out("ok", Int()) },
+        "engine_anim_set_playback_speed_permille", {}, Domain::Animation);
+
+    RegisterHostExternNode(registry, "core.anim.getActiveClipName", "Get Active Clip Name",
+        { In("entity", EntityType()) }, { Out("clipName", Str()) },
+        "engine_anim_get_active_clip_name", {}, Domain::Animation);
+
+    RegisterHostExternNode(registry, "core.anim.getClipDuration", "Get Clip Duration (ms)",
+        { In("entity", EntityType()), In("clipName", Str()) }, { Out("durationMillis", Int()) },
+        "engine_anim_get_clip_duration_millis", {}, Domain::Animation);
+
+    // So a locomotion Pod can avoid re-triggering a crossfade that's
+    // already in progress toward the same target clip.
+    RegisterHostExternNode(registry, "core.anim.isBlending", "Is Blending",
+        { In("entity", EntityType()) }, { Out("isBlending", Bool()) },
+        "engine_anim_is_blending", {}, Domain::Animation);
 }
 
 } // namespace ce::node_system
