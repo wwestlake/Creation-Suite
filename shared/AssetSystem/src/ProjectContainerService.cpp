@@ -28,7 +28,6 @@ bool ProjectContainerService::openProject(const creation::suite::SuiteSettings& 
 }
 
 juce::Array<ProjectContainerService::ProjectSummary> ProjectContainerService::listProjects(const creation::suite::SuiteSettings&,
-                                                                                           SuiteAppDomain appDomain,
                                                                                            juce::String& errorMessage)
 {
     juce::Array<ProjectSummary> results;
@@ -42,9 +41,9 @@ juce::Array<ProjectContainerService::ProjectSummary> ProjectContainerService::li
     }
 
     juce::Array<creation::services::SuiteVfsServiceClient::ProjectSummary> summaries;
-    if (! client.listProjects(appDomain, summaries))
+    if (! client.listProjects(summaries))
     {
-        errorMessage = "Could not list projects for that domain.";
+        errorMessage = "Could not list projects.";
         return results;
     }
 
@@ -55,38 +54,6 @@ juce::Array<ProjectContainerService::ProjectSummary> ProjectContainerService::li
         result.manifest = summary.manifest;
         result.totalSizeBytes = summary.totalSizeBytes;
         results.add(std::move(result));
-    }
-
-    std::sort(results.begin(), results.end(), [](const ProjectSummary& left, const ProjectSummary& right)
-    {
-        if (left.manifest.modifiedAt == right.manifest.modifiedAt)
-            return left.manifest.projectName.compareIgnoreCase(right.manifest.projectName) < 0;
-        return left.manifest.modifiedAt > right.manifest.modifiedAt;
-    });
-
-    return results;
-}
-
-juce::Array<ProjectContainerService::ProjectSummary> ProjectContainerService::listAllProjects(const creation::suite::SuiteSettings& settings,
-                                                                                              juce::String& errorMessage)
-{
-    juce::Array<ProjectSummary> results;
-    errorMessage.clear();
-
-    for (const auto domain : { SuiteAppDomain::station,
-                               SuiteAppDomain::engine,
-                               SuiteAppDomain::movie,
-                               SuiteAppDomain::live,
-                               SuiteAppDomain::texture,
-                               SuiteAppDomain::modeler,
-                               SuiteAppDomain::developer })
-    {
-        juce::String listError;
-        const auto domainProjects = listProjects(settings, domain, listError);
-        results.addArray(domainProjects);
-
-        if (errorMessage.isEmpty() && listError.isNotEmpty())
-            errorMessage = listError;
     }
 
     std::sort(results.begin(), results.end(), [](const ProjectSummary& left, const ProjectSummary& right)

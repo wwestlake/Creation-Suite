@@ -47,7 +47,9 @@ public:
                        juce::String& errorMessage) const;
     bool readManifest(const juce::String& projectId, creation::assets::ProjectManifest& outManifest) const;
     bool writeManifest(const juce::String& projectId, const creation::assets::ProjectManifest& manifest) const;
-    bool listProjects(creation::assets::SuiteAppDomain appDomain, juce::Array<ProjectSummary>& outProjects) const;
+    // Unfiltered by design -- projects are not owned by any app. See
+    // docs/architecture/Suite-Shared-Project-Model.md.
+    bool listProjects(juce::Array<ProjectSummary>& outProjects) const;
     bool cloneProject(const juce::String& sourceProjectId, const juce::String& newProjectName,
                       juce::String& outNewProjectId, juce::String& errorMessage) const;
     bool deleteProject(const juce::String& projectId, juce::String& errorMessage) const;

@@ -19,8 +19,7 @@ enum class SuiteAppDomain
     // Reserved for the suite's own root data (AI settings, auth session, etc.), stored
     // directly under the VFS root's "suite/" folder by services/VfsService::VfsProjectStore
     // -- not a project folder at all, so this domain value exists only to keep
-    // SuiteAppDomain exhaustive elsewhere; it's never passed to listProjects/
-    // listAllProjects/findProjectById.
+    // SuiteAppDomain exhaustive elsewhere; it's never stamped onto a real project's manifest.
     suite
 };
 

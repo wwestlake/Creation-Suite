@@ -6,9 +6,6 @@ namespace
 {
 bool matchesQuery(const creation::interop::ProjectRecord& project, const creation::interop::ProjectQuery& query)
 {
-    if (query.appDomain.has_value() && project.manifest.appDomain != *query.appDomain)
-        return false;
-
     if (query.searchText.isNotEmpty())
     {
         const auto haystack = project.manifest.projectName + "\n"
@@ -28,7 +25,7 @@ juce::Array<ProjectRecord> ProjectRegistry::discoverProjects(const creation::sui
                                                              juce::String& errorMessage)
 {
     juce::Array<ProjectRecord> projects;
-    const auto summaries = creation::assets::ProjectContainerService::listAllProjects(settings, errorMessage);
+    const auto summaries = creation::assets::ProjectContainerService::listProjects(settings, errorMessage);
 
     for (const auto& summary : summaries)
         projects.add({ summary.projectId, summary.manifest });

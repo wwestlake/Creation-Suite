@@ -241,14 +241,14 @@ bool SuiteVfsServiceClient::writeManifest(const juce::String& projectId, const c
     return stream != nullptr && statusCode == 200;
 }
 
-bool SuiteVfsServiceClient::listProjects(creation::assets::SuiteAppDomain appDomain, juce::Array<ProjectSummary>& outProjects) const
+bool SuiteVfsServiceClient::listProjects(juce::Array<ProjectSummary>& outProjects) const
 {
     outProjects.clear();
     if (httpPort_ <= 0)
         return false;
 
     int statusCode = 0;
-    auto stream = baseUrl("/project/list").withParameter("appDomain", creation::assets::toStorageToken(appDomain)).createInputStream(
+    auto stream = baseUrl("/project/list").createInputStream(
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withConnectionTimeoutMs(5000)
             .withStatusCode(&statusCode));
