@@ -18,31 +18,48 @@ PinSignature In(const char* name, PinTypeDesc type, PinDefaultValue value = {}) 
 PinSignature Out(const char* name, PinTypeDesc type) { return { name, type, {} }; }
 }
 
+namespace {
+// Named-field construction, not positional brace-init: NodeTypeDescriptor's
+// member order has already been reordered once by a later phase (see
+// FrustCodegenSmoke.cpp's own comment on the identical class of bug found
+// there) and gained another field since (genericParams) -- positional
+// init is fragile against exactly this, named-field isn't.
+void RegisterControlFlowNode(NodeTypeRegistry& registry, std::string typeName, std::string displayName,
+                              std::vector<PinSignature> inputs, std::vector<PinSignature> outputs,
+                              ControlFlowKind controlFlow) {
+    NodeTypeDescriptor descriptor;
+    descriptor.typeName = std::move(typeName);
+    descriptor.domain = Domain::Core;
+    descriptor.inputs = std::move(inputs);
+    descriptor.outputs = std::move(outputs);
+    descriptor.controlFlow = controlFlow;
+    descriptor.displayName = std::move(displayName);
+    registry.Register(std::move(descriptor));
+}
+}
+
 void RegisterCoreControlFlowNodes(NodeTypeRegistry& registry)
 {
-    // displayName (7th positional field, MonadOperation::None as the 6th
-    // default) added Phase 7 -- content-clarity pass, so the Inspector
-    // shows "Branch" instead of the raw "core.branch".
-    registry.Register({ "core.branch", Domain::Core,
+    RegisterControlFlowNode(registry, "core.branch", "Branch",
         { In("execute", Exec()), In("condition", Bool()) },
-        { Out("true", Exec()), Out("false", Exec()) }, ControlFlowKind::Branch, MonadOperation::None, "Branch" });
+        { Out("true", Exec()), Out("false", Exec()) }, ControlFlowKind::Branch);
 
-    registry.Register({ "core.sequence", Domain::Core,
+    RegisterControlFlowNode(registry, "core.sequence", "Sequence",
         { In("execute", Exec()) },
-        { Out("then_0", Exec()), Out("then_1", Exec()) }, ControlFlowKind::Sequence, MonadOperation::None, "Sequence" });
+        { Out("then_0", Exec()), Out("then_1", Exec()) }, ControlFlowKind::Sequence);
 
-    registry.Register({ "core.for", Domain::Core,
+    RegisterControlFlowNode(registry, "core.for", "For Loop",
         { In("execute", Exec()), In("firstIndex", Int(), std::int64_t(0)),
           In("lastIndex", Int(), std::int64_t(0)), In("step", Int(), std::int64_t(1)) },
-        { Out("body", Exec()), Out("completed", Exec()), Out("index", Int()) }, ControlFlowKind::For, MonadOperation::None, "For Loop" });
+        { Out("body", Exec()), Out("completed", Exec()), Out("index", Int()) }, ControlFlowKind::For);
 
-    registry.Register({ "core.while", Domain::Core,
+    RegisterControlFlowNode(registry, "core.while", "While Loop",
         { In("execute", Exec()), In("condition", Bool()) },
-        { Out("body", Exec()), Out("completed", Exec()) }, ControlFlowKind::While, MonadOperation::None, "While Loop" });
+        { Out("body", Exec()), Out("completed", Exec()) }, ControlFlowKind::While);
 
-    registry.Register({ "core.break", Domain::Core, { In("execute", Exec()) }, {}, ControlFlowKind::Break, MonadOperation::None, "Break" });
-    registry.Register({ "core.continue", Domain::Core, { In("execute", Exec()) }, {}, ControlFlowKind::Continue, MonadOperation::None, "Continue" });
-    registry.Register({ "core.return", Domain::Core, { In("execute", Exec()) }, {}, ControlFlowKind::Return, MonadOperation::None, "Return" });
+    RegisterControlFlowNode(registry, "core.break", "Break", { In("execute", Exec()) }, {}, ControlFlowKind::Break);
+    RegisterControlFlowNode(registry, "core.continue", "Continue", { In("execute", Exec()) }, {}, ControlFlowKind::Continue);
+    RegisterControlFlowNode(registry, "core.return", "Return", { In("execute", Exec()) }, {}, ControlFlowKind::Return);
 }
 
 namespace {
@@ -64,12 +81,17 @@ void RegisterCoreEventNodes(NodeTypeRegistry& registry)
     // point instead of the old "first node with an unwired Exec input"
     // auto-detect heuristic (found missing during the Pod plan's
     // post-implementation verification pass).
-    registry.Register({ "core.event.tick", Domain::Event, {}, { Out("then", Exec()) },
-        ControlFlowKind::None, MonadOperation::None, "On Tick" });
-    registry.Register({ "core.event.beginplay", Domain::Event, {}, { Out("then", Exec()) },
-        ControlFlowKind::None, MonadOperation::None, "On Begin Play" });
-    registry.Register({ "core.event.endplay", Domain::Event, {}, { Out("then", Exec()) },
-        ControlFlowKind::None, MonadOperation::None, "On End Play" });
+    auto registerEventNode = [&](std::string typeName, std::string displayName) {
+        NodeTypeDescriptor descriptor;
+        descriptor.typeName = std::move(typeName);
+        descriptor.domain = Domain::Event;
+        descriptor.outputs = { Out("then", Exec()) };
+        descriptor.displayName = std::move(displayName);
+        registry.Register(std::move(descriptor));
+    };
+    registerEventNode("core.event.tick", "On Tick");
+    registerEventNode("core.event.beginplay", "On Begin Play");
+    registerEventNode("core.event.endplay", "On End Play");
 }
 
 namespace {

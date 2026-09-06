@@ -47,6 +47,12 @@ struct ProjectContainerPaths
     static constexpr const char* derivedAssetRoot = "Assets/Derived/";
     static constexpr const char* metadataRoot = "Metadata/";
     static constexpr const char* exportsRoot = "Exports/";
+    // Djehuti Bridge engine-side handoff: an external tool (a Blender add-on)
+    // drops a file here via VfsService's existing PUT /project/entry; the
+    // engine's DjehutiImportWatcher picks it up. ".results/" beneath this
+    // is where the watcher writes back {ok, assetId, error} JSON, keyed by
+    // the original dropped file's name.
+    static constexpr const char* importsRoot = "Imports/";
 };
 
 juce::String toStorageToken(SuiteAppDomain domain);

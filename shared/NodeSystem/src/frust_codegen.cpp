@@ -169,17 +169,32 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
     // parameter, or the pin's own default), with one added rule: a wired
     // data node must already be in boundDataNodes, or resolution fails.
     auto resolveInputExpr = [&](NodeId nodeId, const Pin& input, std::string& outExpr) -> bool {
-        if (input.type.kind != PinKind::Data || FrustType(input.type.dataType).empty()) return false;
+        if (input.type.kind != PinKind::Data) return false;
+        // Route through ResolveEffectivePinType rather than input.type.dataType
+        // directly -- a generic pin's raw dataType is always DataType::Any
+        // regardless of what this particular node instance is bound to; the
+        // instance's own genericBindings are what actually says "float" here.
+        const Node* currentNode = graph.FindNode(nodeId);
+        const NodeTypeDescriptor* currentType = currentNode ? libraries.FindNodeType(currentNode->TypeName()) : nullptr;
+        const DataType effectiveInputType = (currentNode && currentType)
+            ? ResolveEffectivePinType(*currentType, *currentNode, input)
+            : input.type.dataType;
+        if (FrustType(effectiveInputType).empty()) return false;
         if (const Connection* connection = InputConnection(graph, nodeId, input.id)) {
             const Node* source = graph.FindNode(connection->fromNode);
             const Pin* output = source ? source->FindPin(connection->fromPin) : nullptr;
-            if (!output || output->type.kind != PinKind::Data || output->type.dataType != input.type.dataType) return false;
+            if (!output || output->type.kind != PinKind::Data) return false;
+            const NodeTypeDescriptor* sourceType = libraries.FindNodeType(source->TypeName());
+            const DataType effectiveOutputType = sourceType
+                ? ResolveEffectivePinType(*sourceType, *source, *output)
+                : output->type.dataType;
+            if (effectiveOutputType != effectiveInputType) return false;
             if (!boundDataNodes.contains(connection->fromNode)) return false;
             outExpr = "n" + std::to_string(connection->fromNode);
             return true;
         }
         if (const auto bound = parameterBindings.find({ nodeId, input.id }); bound != parameterBindings.end()) {
-            if (parameterTypes.at(bound->second) != input.type.dataType) return false;
+            if (parameterTypes.at(bound->second) != effectiveInputType) return false;
             outExpr = bound->second;
             return true;
         }
@@ -215,7 +230,42 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
             return result;
         }
         importNodeModules(*type);
-        const std::string outputType = FrustType(type->outputs.front().type.dataType);
+
+        // Generic node type (Codegen.h reflection's own "genericParams" --
+        // e.g. `node pure fn identity<T>(x: T) -> T`): every parameter must
+        // be resolved to a concrete, FRust-supported DataType on THIS
+        // instance before it can compile at all -- FRust itself has no
+        // type inference (turbofish is always explicit), so there is no
+        // fallback here, only a clear diagnostic. Host-extern generic
+        // nodes are out of scope (a fixed extern fn signature can't be
+        // templated); nothing populates genericParams for one today.
+        std::string turbofish;
+        if (!type->genericParams.empty()) {
+            turbofish = "::<";
+            const auto& bindings = node->GenericBindings();
+            for (size_t g = 0; g < type->genericParams.size(); ++g) {
+                const auto& paramName = type->genericParams[g];
+                const auto bindingIt = bindings.find(paramName);
+                if (bindingIt == bindings.end()) {
+                    result.error = "node " + std::to_string(id) + " is an instance of generic node type '" +
+                                    type->typeName + "' with an unresolved type parameter '" + paramName +
+                                    "' -- every type parameter must be bound before compiling";
+                    return result;
+                }
+                const std::string bound = FrustType(bindingIt->second);
+                if (bound.empty()) {
+                    result.error = "node " + std::to_string(id) + "'s binding for type parameter '" + paramName +
+                                    "' names an unsupported type for a generic node (only Float/Bool/Int/String "
+                                    "are supported today)";
+                    return result;
+                }
+                if (g != 0) turbofish += ',';
+                turbofish += bound;
+            }
+            turbofish += '>';
+        }
+
+        const std::string outputType = FrustType(ResolveEffectivePinType(*type, *node, node->Outputs().front()));
         if (outputType.empty()) {
             result.error = "node " + std::to_string(id) + " has an unsupported FRust output type";
             return result;
@@ -230,7 +280,7 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
             decl << ") -> " << outputType << ";\n";
             externDeclarationsByName[type->frustEntryPoint] = decl.str();
         }
-        body << "    let n" << id << ": " << outputType << " = " << type->frustEntryPoint << "(";
+        body << "    let n" << id << ": " << outputType << " = " << type->frustEntryPoint << turbofish << "(";
         for (size_t index = 0; index < node->Inputs().size(); ++index) {
             const Pin& input = node->Inputs()[index];
             std::string expr;
@@ -430,10 +480,19 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
     // chain) -- only validate an output pin when one was actually
     // requested.
     const Pin* outputPin = nullptr;
+    DataType resultType = DataType::Any;
     if (options.resultNode != 0) {
         const Node* outputNode = graph.FindNode(options.resultNode);
         outputPin = outputNode ? outputNode->FindPin(options.resultPin) : nullptr;
-        if (!outputPin || outputPin->isInput || outputPin->type.kind != PinKind::Data || FrustType(outputPin->type.dataType).empty()) {
+        // Resolved through ResolveEffectivePinType, not outputPin->type.dataType
+        // directly -- a generic node's result pin is always DataType::Any at
+        // the raw descriptor level; the per-node loop above already emitted
+        // the correctly-resolved concrete type for it, and this final check
+        // must agree, not re-reject it as unsupported.
+        const NodeTypeDescriptor* outputType = outputNode ? libraries.FindNodeType(outputNode->TypeName()) : nullptr;
+        resultType = (outputPin && outputNode && outputType) ? ResolveEffectivePinType(*outputType, *outputNode, *outputPin)
+                                                              : (outputPin ? outputPin->type.dataType : DataType::Any);
+        if (!outputPin || outputPin->isInput || outputPin->type.kind != PinKind::Data || FrustType(resultType).empty()) {
             result.error = "the requested graph result must be a supported data output";
             return result;
         }
@@ -462,7 +521,7 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
     }
     // No result pin -> trivial i64 return, same shape core_trigger() already
     // uses for an exec-only callable with nothing meaningful to hand back.
-    source << ") -> " << (outputPin ? FrustType(outputPin->type.dataType) : "i64") << " = {\n" << body.str()
+    source << ") -> " << (outputPin ? FrustType(resultType) : "i64") << " = {\n" << body.str()
            << "    " << (outputPin ? "n" + std::to_string(options.resultNode) : "0") << "\n}\n";
     for (const auto& [name, decl] : externDeclarationsByName) {
         (void)name;

@@ -1,23 +1,25 @@
 #include "creation/services/SuiteVfsServiceClient.h"
 
 #include <creation/services/SuiteProcessRegistry.h>
+#include <creation/suite/SuiteSettings.h>
 
 namespace
 {
 constexpr const char* kServiceAppId = "CreationSuiteVfsService";
 
-// Matches services/VfsService/CMakeLists.txt's post-build copy step --
-// every suite executable lands in this shared bin directory.
+// Real bug fixed here: this used to be a hardcoded dev-tree literal
+// ("D:/CreationSuite-Workspaces/codex-{debug,release}-bin"), unreachable
+// by anything outside this exact dev machine's build layout -- including
+// an external process (a Blender add-on) that needs the same launch
+// capability. Now reads suiteExecutablesRoot from the suite's own
+// settings file (SuiteSettings.h), whose default value matches the old
+// hardcoded literal exactly, so behavior is unchanged until someone
+// actually configures a different location.
 juce::File findServiceExecutable()
 {
-#if JUCE_DEBUG
-    constexpr const char* kConfigDir = "codex-debug-bin";
-#else
-    constexpr const char* kConfigDir = "codex-release-bin";
-#endif
-    return juce::File("D:/CreationSuite-Workspaces")
-        .getChildFile(kConfigDir)
-        .getChildFile("CreationSuiteVfsService.exe");
+    juce::String loadError;
+    const auto settings = creation::suite::SuiteSettingsStore().load(loadError);
+    return juce::File(settings.suiteExecutablesRoot).getChildFile("CreationSuiteVfsService.exe");
 }
 }
 
