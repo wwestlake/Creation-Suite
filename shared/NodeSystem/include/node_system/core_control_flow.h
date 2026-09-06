@@ -59,6 +59,22 @@ void RegisterCoreAnimationNodes(NodeTypeRegistry& registry);
 // integers, same convention as RegisterCoreAnimationNodes.
 void RegisterCoreInputNodes(NodeTypeRegistry& registry);
 
+// Registers the Domain::Core physics config/action/query nodes, plus three
+// Domain::Event collision markers (Jolt vendoring plan, Decision 5) --
+// RigidBody/ColliderShape are pure config-node setters (a Pod sets both,
+// in either order, and PhysicsWorld's own reconciliation pass creates the
+// real Jolt body once both are present -- neither node creates it
+// directly). Registered as Domain::Core specifically (not a new
+// Domain::Physics) because frust_codegen.cpp's pure-single-value-node
+// compile path requires it -- Domain::Core is the only domain with a real
+// test proving a host-extern node actually compiles through a FRust
+// graph; Animation/Input above were registered under their own domains
+// with no such proof and may not compile today. Real f64 (not the legacy
+// i64-permille convention) for every continuous value, now that a
+// dedicated bit-exact f64-FFI check exists (EngineFrustHost.h's own
+// comment on why Float was excluded elsewhere no longer applies here).
+void RegisterCorePhysicsNodes(NodeTypeRegistry& registry);
+
 // Maps an Event node's typeName to the real FRust lifecycle-hook function
 // name a compile pass should emit for it (e.g. "core.event.tick" ->
 // "on_tick") -- empty string if typeName isn't a registered Event node.
