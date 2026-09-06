@@ -10,14 +10,11 @@ namespace
 // Projects are folders named by their id (a UUID), not their (possibly colliding, renameable)
 // display name -- this makes find-by-id an O(1) path join instead of a scan, and sidesteps name
 // collisions entirely. listProjects still enumerates + reads each manifest for display purposes.
-juce::File domainFolder(const SuiteSettings& settings, SuiteAppDomain domain)
+// Flat, one level under the container root -- projects are not owned by, or nested under, any
+// app domain. See docs/architecture/Suite-Shared-Project-Model.md.
+juce::File projectFolder(const SuiteSettings& settings, const juce::String& projectId)
 {
-    return getProjectContainerDirectory(settings).getChildFile(appDomainFolderName(domain));
-}
-
-juce::File projectFolder(const SuiteSettings& settings, SuiteAppDomain domain, const juce::String& projectId)
-{
-    return domainFolder(settings, domain).getChildFile(projectId);
+    return getProjectContainerDirectory(settings).getChildFile(projectId);
 }
 }
 
@@ -144,7 +141,7 @@ bool VfsProjectStore::createProject(SuiteAppDomain appDomain, const juce::String
     outManifest = createDefaultManifest(projectName, appDomain, suiteVersion, appVersion);
     outProjectId = outManifest.projectId;
 
-    const auto folder = projectFolder(settings_, appDomain, outProjectId);
+    const auto folder = projectFolder(settings_, outProjectId);
     if (! folder.createDirectory())
     {
         errorMessage = "Could not create the project directory.";
@@ -180,15 +177,15 @@ bool VfsProjectStore::writeManifest(const juce::String& projectId, const Project
     return writeManifestToFolder(folder, manifest, errorMessage);
 }
 
-bool VfsProjectStore::listProjects(SuiteAppDomain appDomain, juce::Array<ProjectSummary>& outProjects) const
+bool VfsProjectStore::listProjects(juce::Array<ProjectSummary>& outProjects) const
 {
     outProjects.clear();
-    const auto domainDir = domainFolder(settings_, appDomain);
-    if (! domainDir.isDirectory())
+    const auto containerDir = getProjectContainerDirectory(settings_);
+    if (! containerDir.isDirectory())
         return true;
 
     juce::Array<juce::File> subdirectories;
-    domainDir.findChildFiles(subdirectories, juce::File::findDirectories, false);
+    containerDir.findChildFiles(subdirectories, juce::File::findDirectories, false);
 
     for (const auto& folder : subdirectories)
     {
@@ -215,19 +212,42 @@ bool VfsProjectStore::findProjectFolderById(const juce::String& projectId, juce:
     if (projectId.isEmpty())
         return false;
 
+    auto folder = projectFolder(settings_, projectId);
+    if (! folder.isDirectory())
+        return false;
+
+    outFolder = folder;
+    return true;
+}
+
+void VfsProjectStore::migrateLegacyDomainNestedProjects()
+{
+    const auto containerDir = getProjectContainerDirectory(settings_);
+    if (! containerDir.isDirectory())
+        return;
+
     for (auto domain : { SuiteAppDomain::station, SuiteAppDomain::engine, SuiteAppDomain::movie,
                         SuiteAppDomain::live, SuiteAppDomain::texture, SuiteAppDomain::modeler,
                         SuiteAppDomain::developer, SuiteAppDomain::unknown })
     {
-        auto folder = projectFolder(settings_, domain, projectId);
-        if (folder.isDirectory())
-        {
-            outFolder = folder;
-            return true;
-        }
-    }
+        const auto legacyDomainDir = containerDir.getChildFile(appDomainFolderName(domain));
+        if (! legacyDomainDir.isDirectory())
+            continue;
 
-    return false;
+        juce::Array<juce::File> legacyProjectFolders;
+        legacyDomainDir.findChildFiles(legacyProjectFolders, juce::File::findDirectories, false);
+
+        for (const auto& legacyFolder : legacyProjectFolders)
+        {
+            const auto newFolder = containerDir.getChildFile(legacyFolder.getFileName());
+            if (newFolder.exists())
+                continue; // already migrated (or a genuine id collision) -- leave it alone, don't clobber.
+
+            legacyFolder.moveFileTo(newFolder);
+        }
+
+        legacyDomainDir.deleteRecursively(); // only removes what moveFileTo left behind (empty on success).
+    }
 }
 
 bool VfsProjectStore::cloneProject(const juce::String& sourceProjectId, const juce::String& newProjectName,
@@ -251,7 +271,7 @@ bool VfsProjectStore::cloneProject(const juce::String& sourceProjectId, const ju
     newManifest.modifiedAt = newManifest.createdAt;
     outNewProjectId = newManifest.projectId;
 
-    const auto destinationFolder = projectFolder(settings_, sourceManifest.appDomain, outNewProjectId);
+    const auto destinationFolder = projectFolder(settings_, outNewProjectId);
     if (! destinationFolder.createDirectory())
     {
         errorMessage = "Could not create the cloned project directory.";

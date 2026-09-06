@@ -268,11 +268,14 @@ int main()
             // listProjects/findProjectById read manifests through the VFS service, which
             // has no concept of an app "holding a project open" at all -- no need to close
             // the session above first, close() here is just for call-site symmetry.
+            // Unfiltered by design -- projects are not owned by any app.
             juce::String listError;
-            const auto modelerProjects = creation::assets::ProjectContainerService::listProjects(settings,
-                                                                                                 creation::assets::SuiteAppDomain::modeler,
-                                                                                                 listError);
-            if (modelerProjects.isEmpty())
+            const auto allProjectsFromService = creation::assets::ProjectContainerService::listProjects(settings, listError);
+            bool foundServiceProject = false;
+            for (const auto& summary : allProjectsFromService)
+                if (summary.projectId == serviceProjectId)
+                    foundServiceProject = true;
+            if (! foundServiceProject)
                 fail("ProjectContainerService listProjects did not find the created project.");
 
             creation::assets::ProjectContainerService::ProjectSummary foundProject;

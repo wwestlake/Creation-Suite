@@ -178,7 +178,7 @@ public:
         subtitleLabel.setText("Suite Storage: " + root.getFullPathName(), juce::dontSendNotification);
 
         juce::String listError;
-        allProjects = creation::assets::ProjectContainerService::listAllProjects(loadedSettings, listError);
+        allProjects = creation::assets::ProjectContainerService::listProjects(loadedSettings, listError);
         filterProjects();
     }
 

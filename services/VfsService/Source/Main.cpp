@@ -135,6 +135,7 @@ int main(int, char*[])
 
     juce::CriticalSection storeLock;
     VfsProjectStore store(settings);
+    store.migrateLegacyDomainNestedProjects();
     appendBootLog("main: project store ready");
     appendServiceLog("project store ready; suite root folder=" + store.suiteRootFolder().getFullPathName());
 
@@ -322,19 +323,14 @@ int main(int, char*[])
         res.set_content("{\"status\":\"ok\"}", "application/json");
     });
 
-    http.Get("/project/list", [&](const httplib::Request& req, httplib::Response& res)
+    http.Get("/project/list", [&](const httplib::Request&, httplib::Response& res)
     {
-        if (! req.has_param("appDomain"))
-        {
-            res.status = 400;
-            return;
-        }
-
-        const auto appDomain = creation::assets::suiteAppDomainFromStorageToken(juce::String(req.get_param_value("appDomain")));
+        // Unfiltered by design -- projects are not owned by any app. See
+        // docs/architecture/Suite-Shared-Project-Model.md.
         juce::Array<VfsProjectStore::ProjectSummary> summaries;
         {
             const juce::ScopedLock lock(storeLock);
-            store.listProjects(appDomain, summaries);
+            store.listProjects(summaries);
         }
 
         juce::Array<juce::var> array;

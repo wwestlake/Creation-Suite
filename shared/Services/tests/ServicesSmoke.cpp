@@ -499,7 +499,7 @@ int main()
                 fail("VfsProjectStore smoke: readManifest did not reflect the written manifest.");
 
             juce::Array<creation::services::SuiteVfsServiceClient::ProjectSummary> projects;
-            if (! client.listProjects(creation::assets::SuiteAppDomain::station, projects))
+            if (! client.listProjects(projects))
                 fail("VfsProjectStore smoke: listProjects failed.");
             bool foundInListing = false;
             for (const auto& summary : projects)

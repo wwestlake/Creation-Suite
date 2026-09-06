@@ -430,9 +430,9 @@ private:
 
         if (errorMessage.isEmpty())
         {
-            auto root = capability.appDomain != creation::assets::SuiteAppDomain::unknown
-                            ? creation::suite::getAppProjectsDirectory(settings, capability.appDomain)
-                            : creation::suite::getSuiteRootDirectory(settings);
+            // No per-app silo -- projects are not owned by any app. See
+            // docs/architecture/Suite-Shared-Project-Model.md.
+            auto root = creation::suite::getSuiteRootDirectory(settings);
 
             if (! root.exists())
                 root.createDirectory();
