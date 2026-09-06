@@ -76,8 +76,9 @@ int main()
             if (session.getProjectId() != projectId)
                 fail("ProjectSession's projectId should match its manifest's projectId.");
 
+            // Flat layout -- projects are not nested under an app-domain
+            // folder (see docs/architecture/Suite-Shared-Project-Model.md).
             const auto realFolder = creation::suite::getProjectContainerDirectory(settings)
-                                        .getChildFile("Creation Station")
                                         .getChildFile(projectId);
             if (! realFolder.isDirectory())
                 fail("createNew should have created a real project folder on disk (not a packed container).");
@@ -338,10 +339,11 @@ int main()
 
         // Clean up this test's own project folders on the real, shared VFS root -- never
         // touch anything else under "Project Containers" (real projects may live alongside).
+        // Flat layout -- no app-domain subfolder to descend into.
         creation::suite::getProjectContainerDirectory(settings)
-            .getChildFile("Creation Station").getChildFile(projectId).deleteRecursively();
+            .getChildFile(projectId).deleteRecursively();
         creation::suite::getProjectContainerDirectory(settings)
-            .getChildFile("Creation Modeler").getChildFile(serviceProjectId).deleteRecursively();
+            .getChildFile(serviceProjectId).deleteRecursively();
         creation::suite::getMaterializedFilesDirectory(settings, projectId).deleteRecursively();
 
         tempRoot.deleteRecursively();
