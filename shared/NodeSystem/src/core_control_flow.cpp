@@ -10,6 +10,7 @@ namespace {
 PinTypeDesc Exec() { return { PinKind::Exec, DataType::Int }; }
 PinTypeDesc Bool() { return { PinKind::Data, DataType::Bool }; }
 PinTypeDesc Int() { return { PinKind::Data, DataType::Int }; }
+PinTypeDesc Float() { return { PinKind::Data, DataType::Float }; }
 PinTypeDesc Str() { return { PinKind::Data, DataType::String }; }
 PinTypeDesc EntityType() { return { PinKind::Data, DataType::Entity }; }
 PinSignature In(const char* name, PinTypeDesc type, PinDefaultValue value = {}) {
@@ -71,6 +72,9 @@ constexpr std::pair<const char*, const char*> kEventNodeHooks[] = {
     { "core.event.tick", "on_tick" },
     { "core.event.beginplay", "on_begin_play" },
     { "core.event.endplay", "on_end_play" },
+    { "core.physics.onCollisionEnter", "on_collision_enter" },
+    { "core.physics.onCollisionStay", "on_collision_stay" },
+    { "core.physics.onCollisionExit", "on_collision_exit" },
 };
 }
 
@@ -92,6 +96,13 @@ void RegisterCoreEventNodes(NodeTypeRegistry& registry)
     registerEventNode("core.event.tick", "On Tick");
     registerEventNode("core.event.beginplay", "On Begin Play");
     registerEventNode("core.event.endplay", "On End Play");
+    // Jolt vendoring plan (Decision 5) -- fixed three, same shape as the
+    // lifecycle events above, not a per-collision-pair dynamic set (unlike
+    // Input Combo Events' BuildInputComboEventLibrary below, there's no
+    // enumerable "list of collisions" to build one marker per name from).
+    registerEventNode("core.physics.onCollisionEnter", "On Collision Enter");
+    registerEventNode("core.physics.onCollisionStay", "On Collision Stay");
+    registerEventNode("core.physics.onCollisionExit", "On Collision Exit");
 }
 
 namespace {
@@ -186,6 +197,14 @@ void RegisterCoreVariableNodes(NodeTypeRegistry& registry)
 {
     RegisterHostExternNode(registry, "core.entity.self", "Self Entity", {}, { Out("entity", EntityType()) },
         "engine_current_object_entity");
+    // Cross-entity reference by placed-instance name: a button Pod acting on
+    // a separately-placed door needs an entity reference to something that
+    // ISN'T core.entity.self. Resolves ce::scene::Name (set when an object is
+    // placed/renamed in the Hierarchy) to an entity id; entity == -1 if no
+    // placed instance currently carries that name.
+    RegisterHostExternNode(registry, "core.entity.findByName", "Find Entity By Name",
+        { In("name", Str()) }, { Out("entity", EntityType()) },
+        "engine_entity_find_by_name");
     RegisterVariablePair(registry, "bool", "Bool", Bool(), "pod_get_variable_bool", "pod_set_variable_bool");
     RegisterVariablePair(registry, "int", "Int", Int(), "pod_get_variable_int", "pod_set_variable_int");
     RegisterVariablePair(registry, "string", "String", Str(), "pod_get_variable_string", "pod_set_variable_string");
@@ -253,6 +272,70 @@ void RegisterCoreInputNodes(NodeTypeRegistry& registry)
     RegisterHostExternNode(registry, "core.input.getActionValue", "Get Action Value",
         { In("action", Str()) }, { Out("valuePerMille", Int()) },
         "engine_input_get_action_value_permille", {}, Domain::Input);
+}
+
+void RegisterCorePhysicsNodes(NodeTypeRegistry& registry)
+{
+    // motionType: 0 = Static, 1 = Kinematic, 2 = Dynamic (ce::physics::MotionType).
+    // Config node -- does not create the Jolt body itself; see the header
+    // comment above RegisterCorePhysicsNodes.
+    RegisterHostExternNode(registry, "core.physics.setRigidBody", "Rigid Body",
+        { In("entity", EntityType()), In("motionType", Int()), In("mass", Float()),
+          In("friction", Float()), In("restitution", Float()),
+          In("linearDamping", Float()), In("angularDamping", Float()) },
+        { Out("ok", Int()) }, "engine_physics_set_rigid_body");
+
+    // shapeKind: 0 = Box, 1 = Sphere, 2 = Capsule (ce::physics::ColliderShapeKind).
+    // halfExtentX/Y/Z apply to Box; radius to Sphere/Capsule; halfHeight to
+    // Capsule only -- unused fields for a given shape are simply ignored.
+    // isSensor (Possessable Designer Character plan, Phase 2): a sensor
+    // collider fires the same on_collision* hooks but applies no physical
+    // collision response -- Jolt's own BodyCreationSettings::mIsSensor,
+    // "can be used as a trigger volume." The button/door interaction case.
+    RegisterHostExternNode(registry, "core.physics.setColliderShape", "Collider Shape",
+        { In("entity", EntityType()), In("shapeKind", Int()),
+          In("halfExtentX", Float()), In("halfExtentY", Float()), In("halfExtentZ", Float()),
+          In("radius", Float()), In("halfHeight", Float()), In("collisionLayer", Int()),
+          In("isSensor", Bool()) },
+        { Out("ok", Int()) }, "engine_physics_set_collider_shape");
+
+    RegisterHostExternNode(registry, "core.physics.applyForce", "Apply Force",
+        { In("entity", EntityType()), In("x", Float()), In("y", Float()), In("z", Float()) },
+        { Out("ok", Int()) }, "engine_physics_apply_force");
+
+    RegisterHostExternNode(registry, "core.physics.applyImpulse", "Apply Impulse",
+        { In("entity", EntityType()), In("x", Float()), In("y", Float()), In("z", Float()) },
+        { Out("ok", Int()) }, "engine_physics_apply_impulse");
+
+    RegisterHostExternNode(registry, "core.physics.setLinearVelocity", "Set Linear Velocity",
+        { In("entity", EntityType()), In("x", Float()), In("y", Float()), In("z", Float()) },
+        { Out("ok", Int()) }, "engine_physics_set_linear_velocity");
+
+    RegisterHostExternNode(registry, "core.physics.getLinearVelocityX", "Get Linear Velocity X",
+        { In("entity", EntityType()) }, { Out("x", Float()) }, "engine_physics_get_linear_velocity_x");
+    RegisterHostExternNode(registry, "core.physics.getLinearVelocityY", "Get Linear Velocity Y",
+        { In("entity", EntityType()) }, { Out("y", Float()) }, "engine_physics_get_linear_velocity_y");
+    RegisterHostExternNode(registry, "core.physics.getLinearVelocityZ", "Get Linear Velocity Z",
+        { In("entity", EntityType()) }, { Out("z", Float()) }, "engine_physics_get_linear_velocity_z");
+
+    // A single cached query -- one FFI call can only return one scalar, so
+    // this performs the raycast and caches the result; the four getters
+    // below just read that cache. Call this first, then read whichever of
+    // the getters you need, same tick.
+    RegisterHostExternNode(registry, "core.physics.raycast", "Raycast",
+        { In("originX", Float()), In("originY", Float()), In("originZ", Float()),
+          In("dirX", Float()), In("dirY", Float()), In("dirZ", Float()), In("maxDistance", Float()) },
+        { Out("hit", Bool()) }, "engine_physics_raycast");
+    RegisterHostExternNode(registry, "core.physics.raycastHitEntity", "Raycast Hit Entity",
+        {}, { Out("entity", EntityType()) }, "engine_physics_raycast_hit_entity");
+    RegisterHostExternNode(registry, "core.physics.raycastHitDistance", "Raycast Hit Distance",
+        {}, { Out("distance", Float()) }, "engine_physics_raycast_hit_distance");
+    RegisterHostExternNode(registry, "core.physics.raycastNormalX", "Raycast Hit Normal X",
+        {}, { Out("x", Float()) }, "engine_physics_raycast_normal_x");
+    RegisterHostExternNode(registry, "core.physics.raycastNormalY", "Raycast Hit Normal Y",
+        {}, { Out("y", Float()) }, "engine_physics_raycast_normal_y");
+    RegisterHostExternNode(registry, "core.physics.raycastNormalZ", "Raycast Hit Normal Z",
+        {}, { Out("z", Float()) }, "engine_physics_raycast_normal_z");
 }
 
 } // namespace ce::node_system
