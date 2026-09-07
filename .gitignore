@@ -7,3 +7,5 @@ out/
 *.VC.db
 *.VC.opendb
 Secrets/
+third_party/jolt-vcpkg/vcpkg_installed/
+wiki/
