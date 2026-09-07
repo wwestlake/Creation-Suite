@@ -98,6 +98,52 @@ check_repo() {
         done <<< "$stray"
     fi
 
+    # 5. Submodule-safety git config: self-healing, not just a check. These
+    #    three settings are what actually prevent a superproject's gitlink
+    #    from silently drifting from what's checked out (see
+    #    feedback_clean_worktree_after_pr_sync.md):
+    #      status.submodulesummary  -- `git status` shows the actual commit
+    #        range a submodule has moved by, not just "modified".
+    #      diff.submodule=log       -- same, for `git diff`.
+    #      push.recurseSubmodules=check -- refuses to push the superproject
+    #        if a submodule points at a commit that isn't pushed to ITS
+    #        remote yet (the exact bug class that caused gitlink-vs-PR
+    #        ordering mistakes earlier).
+    #    Local to each clone's .git/config -- not tracked by git itself, so
+    #    every fresh clone needs this run once. Auto-applies rather than
+    #    just warning, since there's no reason not to.
+    local cfg_fixed=0
+    if [[ "$(git -C "$repo" config --get status.submodulesummary 2>/dev/null)" != "1" ]]; then
+        git -C "$repo" config status.submodulesummary 1
+        cfg_fixed=1
+    fi
+    if [[ "$(git -C "$repo" config --get diff.submodule 2>/dev/null)" != "log" ]]; then
+        git -C "$repo" config diff.submodule log
+        cfg_fixed=1
+    fi
+    if [[ "$(git -C "$repo" config --get push.recurseSubmodules 2>/dev/null)" != "check" ]]; then
+        git -C "$repo" config push.recurseSubmodules check
+        cfg_fixed=1
+    fi
+    if [[ $cfg_fixed -eq 1 ]]; then
+        echo "submodule-safety config: ${YELLOW}was missing, applied now${RESET} (status.submodulesummary, diff.submodule=log, push.recurseSubmodules=check)"
+    else
+        echo "submodule-safety config: ${GREEN}already set${RESET}"
+    fi
+
+    # 6. If this repo itself has submodules (a superproject like the Suite
+    #    root), report any whose checked-out commit has drifted from what
+    #    the index records -- the literal "gitlink out of sync" problem.
+    if [[ -f "$repo/.gitmodules" ]]; then
+        local sm_drift
+        sm_drift=$(git -C "$repo" submodule status 2>/dev/null | grep '^+' || true)
+        if [[ -n "$sm_drift" ]]; then
+            echo "${YELLOW}submodule(s) checked out ahead of the recorded gitlink${RESET} -- commit the gitlink bump once the submodule's own commit is pushed and merged:"
+            echo "$sm_drift" | sed 's/^/  /'
+            repo_problem=1
+        fi
+    fi
+
     if [[ $repo_problem -ne 0 ]]; then
         overall_status=1
     fi
