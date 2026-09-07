@@ -26,7 +26,23 @@ enum class AssetKind
     pod,
     objectDefinition,
     game,
-    scene
+    scene,
+    // A Suite-wide concept, not app-specific: one PLACEMENT's own entry,
+    // distinct from the reusable Content it places. An instance references
+    // an asset plus this-placement's own data (a Transform in a Creation
+    // Engine scene; a timeline position/trim/volume for a soundtrack clip
+    // in a video editor; whatever "where/how this asset is used here"
+    // means for the app placing it) -- it is never itself a reusable
+    // definition. The same WAV asset saved once in a DAW can have one
+    // instance as a video's soundtrack clip and another as a Creation
+    // Engine scene's SoundSource, each app's own instance living under its
+    // own VFS path (Source/Project/EngineGameDocument.cpp is the first
+    // real user, for Creation Engine scenes specifically -- other apps'
+    // own placement concepts reuse this same kind, not a new one each).
+    // Kept separate from Content kinds so catalog queries and any app's
+    // own browser can tell "things you can place" apart from "things
+    // already placed somewhere specific."
+    instance
 };
 
 enum class AssetReferenceMode
