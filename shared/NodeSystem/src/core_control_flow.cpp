@@ -205,6 +205,16 @@ void RegisterCoreVariableNodes(NodeTypeRegistry& registry)
     RegisterHostExternNode(registry, "core.entity.findByName", "Find Entity By Name",
         { In("name", Str()) }, { Out("entity", EntityType()) },
         "engine_entity_find_by_name");
+    // The real drag-onto-graph capability core.entity.findByName's own
+    // comment named as still-future work: dragging a placed scene instance
+    // onto a Pod's graph creates one of these, with instanceId's literal
+    // baked to that instance's stable scene::InstanceId (not its mutable,
+    // non-unique Name) at drop time. entity == -1 if no live entity
+    // currently carries that InstanceId (e.g. it was deleted since the Pod
+    // last saved).
+    RegisterHostExternNode(registry, "core.entity.findByInstanceId", "Scene Instance Reference",
+        { In("instanceId", Str()) }, { Out("entity", EntityType()) },
+        "engine_entity_find_by_instance_id");
     RegisterVariablePair(registry, "bool", "Bool", Bool(), "pod_get_variable_bool", "pod_set_variable_bool");
     RegisterVariablePair(registry, "int", "Int", Int(), "pod_get_variable_int", "pod_set_variable_int");
     RegisterVariablePair(registry, "string", "String", Str(), "pod_get_variable_string", "pod_set_variable_string");
