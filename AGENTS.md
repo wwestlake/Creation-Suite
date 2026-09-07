@@ -100,6 +100,25 @@ Each agent maintains exactly one standing, personally-named development branch p
 - Before starting new work in any repo, check whether your own `<agent>/development` branch already exists there and what's on it — real, completed work can be sitting there from an earlier session.
 - **The instant a PR from `<agent>/development` into `master`/`main` is reported merged (by the user, or confirmed via `gh pr view`), sync `<agent>/development` to the new `master` (fetch + fast-forward) before doing anything else in that repo** — not after the next task, not "whenever it comes up." A small follow-up fix discovered right after (a gitlink bump, a stale test assertion) gets committed onto that freshly-synced branch directly, same as any other task — never a fresh one-off branch off `master`. Violated repeatedly (2026-09-06): opened `master`-targeted PRs directly per small fix instead of working this branch, then failed to sync back after one merged and branched off `master` again for the next fix, compounding into exactly the branch sprawl this rule exists to prevent.
 
+### Submodule Gitlink Sync Rule
+
+A submodule's gitlink is a pinned commit, not a tracked branch — the umbrella repo does not "follow" `master` in `apps/CreationEngine` or any other submodule automatically. If you merge/pull inside a submodule and never come back to commit the resulting gitlink bump in the umbrella repo, the umbrella's `git status` will just say the submodule is "modified" with no detail, and it's easy to lose track of *why* -- this is the recurring cause of gitlink drift.
+
+Run once per fresh clone (already applied to every repo in this workspace as of 2026-09-07, but a new clone or another agent's checkout won't have it):
+
+```bash
+git config status.submodulesummary 1
+git config diff.submodule log
+git config push.recurseSubmodules check
+```
+
+- `status.submodulesummary`/`diff.submodule=log` make `git status`/`git diff` in the umbrella repo actually show the commit range a submodule moved by, instead of a bare "modified" flag.
+- `push.recurseSubmodules=check` refuses to push the umbrella repo if a submodule's checked-out commit isn't pushed to its own remote yet — catches the exact "gitlink points at a commit nobody else can see" bug before it happens.
+
+`scripts/agent-git-check.sh` applies all three automatically (self-healing, not just a warning) and reports any submodule whose checkout has drifted ahead of the recorded gitlink — run it instead of eyeballing `git status` across the umbrella repo and its submodules.
+
+The actual sequencing discipline this supports is unchanged, per the Personal Development Branch Rule above: commit in the submodule → open its PR → get it merged → sync that submodule to the new `master` → only then commit the gitlink bump in the umbrella repo. Never bump a gitlink to a commit that isn't merged and pushed on the submodule's own remote.
+
 ## Secrets Directory Rule
 
 The `Secrets/` directory contains critical credentials and private keys.
