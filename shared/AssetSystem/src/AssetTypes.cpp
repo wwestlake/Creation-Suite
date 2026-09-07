@@ -21,6 +21,7 @@ juce::String toStorageToken(AssetKind kind)
         case AssetKind::objectDefinition: return "objectDefinition";
         case AssetKind::game: return "game";
         case AssetKind::scene: return "scene";
+        case AssetKind::instance: return "instance";
         case AssetKind::unknown: break;
     }
 
@@ -45,6 +46,7 @@ AssetKind assetKindFromStorageToken(const juce::String& token)
     if (normalized == "objectdefinition") return AssetKind::objectDefinition;
     if (normalized == "game") return AssetKind::game;
     if (normalized == "scene") return AssetKind::scene;
+    if (normalized == "instance") return AssetKind::instance;
     return AssetKind::unknown;
 }
 
@@ -67,6 +69,7 @@ juce::String toDisplayName(AssetKind kind)
         case AssetKind::objectDefinition: return "Object Definition";
         case AssetKind::game: return "Game";
         case AssetKind::scene: return "Scene";
+        case AssetKind::instance: return "Instance";
         case AssetKind::unknown: break;
     }
 
