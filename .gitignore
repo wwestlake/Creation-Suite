@@ -1,4 +1,6 @@
 build/
+_build*/
+_tmp/
 build_shared/
 out/
 .vs/

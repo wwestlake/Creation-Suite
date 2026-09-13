@@ -25,6 +25,10 @@ enum class AssetKind
     binary,
     pod,
     objectDefinition,
+    // A suite-level character asset. Its category distinguishes reusable
+    // bases, editable recipes, published definitions, garments, policies,
+    // instances, and rosters without baking an Engine-only taxonomy here.
+    character,
     game,
     scene,
     // A Suite-wide concept, not app-specific: one PLACEMENT's own entry,

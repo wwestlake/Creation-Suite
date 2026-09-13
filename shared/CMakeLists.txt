@@ -3,6 +3,7 @@ if(MSVC)
 endif()
 
 add_subdirectory(AssetSystem)
+add_subdirectory(CharacterSystem)
 add_subdirectory(Services)
 add_subdirectory(UI)
 add_subdirectory(NodeSystem)

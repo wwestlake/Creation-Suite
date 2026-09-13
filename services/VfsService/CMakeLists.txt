@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-set(CREATION_SUITE_VFS_SERVICE_VERSION "0.0.1" CACHE STRING "Creation Suite VFS Service version")
+set(CREATION_SUITE_VFS_SERVICE_VERSION "0.0.1" CACHE STRING "Djehuti Suite VFS Service version")
 project(CreationSuiteVfsService VERSION ${CREATION_SUITE_VFS_SERVICE_VERSION} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -20,7 +20,7 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../shared/AssetSystem" Creation
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../shared/Services" CreationSuiteSharedServices)
 
 juce_add_console_app(CreationSuiteVfsService
-    PRODUCT_NAME "Creation Suite VFS Service"
+    PRODUCT_NAME "Djehuti Suite VFS Service"
     COMPANY_NAME "LagDaemon Software"
     BUNDLE_ID "com.lagdaemon.creationsuite.vfsservice"
 )
@@ -43,6 +43,13 @@ target_compile_definitions(CreationSuiteVfsService PRIVATE
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:CreationSuiteVfsService,JUCE_PRODUCT_NAME>"
     JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:CreationSuiteVfsService,JUCE_VERSION>"
 )
+
+# Keep this long-lived local service build predictable on Windows. MSVC's
+# /MP fan-out can race its own generated objects and PDBs when other suite
+# builds are active; the outer build already requests one worker as well.
+if(MSVC)
+    target_compile_options(CreationSuiteVfsService PRIVATE /MP1 /FS)
+endif()
 
 find_package(ZLIB REQUIRED)
 

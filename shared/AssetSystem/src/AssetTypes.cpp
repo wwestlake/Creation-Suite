@@ -19,6 +19,7 @@ juce::String toStorageToken(AssetKind kind)
         case AssetKind::binary: return "binary";
         case AssetKind::pod: return "pod";
         case AssetKind::objectDefinition: return "objectDefinition";
+        case AssetKind::character: return "character";
         case AssetKind::game: return "game";
         case AssetKind::scene: return "scene";
         case AssetKind::instance: return "instance";
@@ -44,6 +45,7 @@ AssetKind assetKindFromStorageToken(const juce::String& token)
     if (normalized == "binary") return AssetKind::binary;
     if (normalized == "pod") return AssetKind::pod;
     if (normalized == "objectdefinition") return AssetKind::objectDefinition;
+    if (normalized == "character") return AssetKind::character;
     if (normalized == "game") return AssetKind::game;
     if (normalized == "scene") return AssetKind::scene;
     if (normalized == "instance") return AssetKind::instance;
@@ -67,6 +69,7 @@ juce::String toDisplayName(AssetKind kind)
         case AssetKind::binary: return "Binary";
         case AssetKind::pod: return "Pod";
         case AssetKind::objectDefinition: return "Object Definition";
+        case AssetKind::character: return "Character";
         case AssetKind::game: return "Game";
         case AssetKind::scene: return "Scene";
         case AssetKind::instance: return "Instance";

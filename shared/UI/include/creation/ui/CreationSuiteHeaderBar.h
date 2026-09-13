@@ -73,6 +73,10 @@ public:
     void setTransportControlsVisible(bool shouldBeVisible);
     void setTransportButtonVisible(TransportButtonSlot slot, bool shouldBeVisible);
     void setTransportButtonEnabled(TransportButtonSlot slot, bool shouldBeEnabled);
+    // Audio applications may present Play/Pause as one changing button. A
+    // simulation editor benefits from distinct controls: Play starts or
+    // resumes, Pause freezes, and Stop discards the runtime state.
+    void setSeparatePauseButtonVisible(bool shouldBeVisible);
 
     void resized() override;
     void paint(juce::Graphics&) override;
@@ -130,6 +134,7 @@ private:
     MetronomeMode metronomeMode = MetronomeMode::off;
     bool metronomeAudible = false;
     bool transportControlsVisible = true;
+    bool separatePauseButtonVisible = false;
     TransportButtonConfig rewindButtonConfig;
     TransportButtonConfig fastForwardButtonConfig;
     TransportButtonConfig stopButtonConfig;
