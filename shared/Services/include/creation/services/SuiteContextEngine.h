@@ -6,7 +6,7 @@ namespace creation::services
 {
 // One retrievable piece of suite/project state. Contributed by any app
 // via a SuiteContextProvider -- the engine itself knows nothing about
-// what a CEL script or a DAW patch is, only that it's a document with a
+// what a FRust source or a DAW patch is, only that it's a document with a
 // category and a body.
 struct SuiteContextDocument
 {

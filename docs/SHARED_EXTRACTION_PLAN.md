@@ -7,7 +7,7 @@ Date: July 28, 2026
 The suite already has the right high-level architecture goal:
 
 - one suite-owned VFS and shared resource model
-- one CEL language core across apps
+- one FRust language core across apps
 - one BYOK and AI provider system across apps
 - one suite configuration surface
 - one shared shell UI where the apps should look and behave the same
@@ -17,7 +17,7 @@ What the code actually shows today is only partially aligned:
 - `Creation Station` still owns the main suite settings UI
 - `Creation Movie` has its own placeholder suite settings window
 - the suite header exists as duplicated local copies
-- CEL and LLVM ownership still lives primarily in `Creation Engine`
+- FRust and LLVM ownership still lives primarily in `Creation Engine`
 - Station still carries app-local AI provider settings and BYOK wiring
 
 This plan makes the suite repository the real source of truth.
@@ -62,12 +62,12 @@ Now started:
 
 - `creation_suite_services`
 
-### `shared/CEL`
+### `FRust`
 
 Will own:
 
-- CEL frontend
-- CEL runtime and JIT core
+- FRust frontend
+- FRust runtime and JIT core
 - shared LLVM-facing build contracts
 - shared domain policy hooks
 
@@ -81,7 +81,7 @@ Will own:
 
 - app-agnostic node graph substrate
 - graph serialization contracts
-- shared node catalog contracts used by CEL-backed apps
+- shared node catalog contracts used by FRust-backed apps
 
 Build target now scaffolded:
 
@@ -156,17 +156,17 @@ Provider planning baseline:
 - Ollama
 - custom OpenAI-compatible endpoints
 
-### Pass 4: CEL And LLVM Consolidation
+### Pass 4: FRust And LLVM Consolidation
 
-The suite should own the shared CEL stack, with apps supplying domain policy and domain intrinsics.
+The suite should own the shared FRust stack, with apps supplying domain policy and domain intrinsics.
 
 Move or mirror from `Creation Engine` into suite ownership:
 
-- CEL frontend
-- CEL runtime core
+- FRust frontend
+- FRust runtime core
 - LLVM discovery helper
 - domain gating contracts
-- node-to-CEL shared contracts
+- node-to-FRust shared contracts
 
 Keep per app:
 
@@ -181,7 +181,7 @@ Add suite-owned contracts for:
 - shared asset IDs
 - immutable version references
 - "track latest" references
-- CEL library references
+- FRust library references
 - non-destructive source preservation
 
 ### Pass 6: Declarative 3D Scene Asset System
@@ -200,7 +200,7 @@ This should support authoring paths from:
 - direct user editing
 - AI-generated scene/object descriptions
 - node graph generation
-- CEL-backed procedural generation
+- FRust-backed procedural generation
 - imports from interchange formats such as glTF
 
 The important architectural rule is that interchange formats are not the only truth. The Suite keeps its own editable scene description as the preserved source of record.
@@ -211,12 +211,12 @@ The important architectural rule is that interchange formats are not the only tr
 2. Wire `Creation Movie` to consume `creation_suite_ui` and delete the local suite settings placeholder.
 3. Extract Station's app-local AI provider settings into `shared/Services`.
 4. Add a suite-level LLVM helper so Station, Movie, Live, and Engine stop drifting.
-5. Begin moving CEL core targets under `shared/CEL`, with Engine remaining the reference implementation during the move.
+5. Begin moving FRust core targets under `FRust`, with Engine remaining the reference implementation during the move.
 6. Define the suite-native declarative 3D asset schema and shared compiler/normalizer layer under a new shared spatial asset module.
 
 ## Guardrails
 
 - Suite-owned code must not be re-copied into app-local folders.
 - App code may wrap shared components, but should not fork their implementation.
-- Shared CEL remains domain-neutral; apps add capabilities through policy and intrinsics.
+- Shared FRust remains domain-neutral; apps add capabilities through policy and intrinsics.
 - Shared VFS and interop rules must never destroy original artist source material.

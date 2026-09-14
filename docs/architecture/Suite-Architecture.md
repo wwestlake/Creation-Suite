@@ -34,7 +34,7 @@ Move into `shared/`:
 
 - Asset/VFS infrastructure
 - suite discovery/bootstrap configuration
-- CEL core language/runtime/JIT infrastructure
+- FRust core language/runtime/JIT infrastructure
 - cross-app interoperability contracts
 - shared CMake and dependency helpers
 
@@ -67,9 +67,9 @@ there is one level: the suite VFS):
   complete, and that setup flow is a single shared component every app
   defers to, not six separate copies of it.
 
-## CEL Strategy
+## FRust Strategy
 
-CEL core is shared.
+FRust core is shared.
 
 Apps do not share the same domain surface.
 

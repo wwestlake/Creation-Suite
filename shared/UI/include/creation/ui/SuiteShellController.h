@@ -32,11 +32,16 @@ public:
                 std::function<void(const juce::String&)> statusSink = {});
     void showSuiteSettings();
     void showProjectBrowser();
+    bool openProject(const juce::String& projectId);
     void showAssetManager();
     void showSuiteEula();
     void openSuiteSignIn();
     void openSuiteProfile();
     void clearShellProfile();
+
+    // The shell owns the currently selected Suite project. Applications may
+    // consume this session for their own assets after the open callback runs.
+    const creation::assets::ProjectSession& getActiveProjectSession() const noexcept { return activeProjectSession; }
 
     std::function<void(const juce::String& projectId)> onProjectOpenRequested;
 
@@ -67,6 +72,7 @@ private:
     creation::services::SuiteAiSettingsStore suiteAiSettingsStore;
     creation::suite::SuiteSettings suiteSettings;
     creation::services::SuiteAiSettings suiteAiSettings;
+    creation::assets::ProjectSession activeProjectSession;
     std::unique_ptr<juce::DocumentWindow> suiteSettingsWindow;
     std::unique_ptr<juce::DocumentWindow> projectBrowserWindow;
     std::unique_ptr<juce::DocumentWindow> assetManagerWindow;

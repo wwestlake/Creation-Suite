@@ -1,23 +1,25 @@
 #include "creation/services/SuiteVfsServiceClient.h"
 
 #include <creation/services/SuiteProcessRegistry.h>
+#include <creation/suite/SuiteSettings.h>
 
 namespace
 {
 constexpr const char* kServiceAppId = "CreationSuiteVfsService";
 
-// Matches services/VfsService/CMakeLists.txt's post-build copy step --
-// every suite executable lands in this shared bin directory.
+// Real bug fixed here: this used to be a hardcoded dev-tree literal
+// ("D:/CreationSuite-Workspaces/codex-{debug,release}-bin"), unreachable
+// by anything outside this exact dev machine's build layout -- including
+// an external process (a Blender add-on) that needs the same launch
+// capability. Now reads suiteExecutablesRoot from the suite's own
+// settings file (SuiteSettings.h), whose default value matches the old
+// hardcoded literal exactly, so behavior is unchanged until someone
+// actually configures a different location.
 juce::File findServiceExecutable()
 {
-#if JUCE_DEBUG
-    constexpr const char* kConfigDir = "codex-debug-bin";
-#else
-    constexpr const char* kConfigDir = "codex-release-bin";
-#endif
-    return juce::File("D:/CreationSuite-Workspaces")
-        .getChildFile(kConfigDir)
-        .getChildFile("CreationSuiteVfsService.exe");
+    juce::String loadError;
+    const auto settings = creation::suite::SuiteSettingsStore().load(loadError);
+    return juce::File(settings.suiteExecutablesRoot).getChildFile("CreationSuiteVfsService.exe");
 }
 }
 
@@ -111,6 +113,7 @@ bool SuiteVfsServiceClient::writeEntry(const juce::String& logicalPath, const ju
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("PUT")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/octet-stream\r\n")
             .withStatusCode(&statusCode));
 
     return stream != nullptr && statusCode == 200;
@@ -181,6 +184,7 @@ bool SuiteVfsServiceClient::createProject(creation::assets::SuiteAppDomain appDo
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("POST")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/json\r\n")
             .withStatusCode(&statusCode));
 
     if (stream == nullptr || statusCode != 200)
@@ -231,19 +235,20 @@ bool SuiteVfsServiceClient::writeManifest(const juce::String& projectId, const c
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("PUT")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/json\r\n")
             .withStatusCode(&statusCode));
 
     return stream != nullptr && statusCode == 200;
 }
 
-bool SuiteVfsServiceClient::listProjects(creation::assets::SuiteAppDomain appDomain, juce::Array<ProjectSummary>& outProjects) const
+bool SuiteVfsServiceClient::listProjects(juce::Array<ProjectSummary>& outProjects) const
 {
     outProjects.clear();
     if (httpPort_ <= 0)
         return false;
 
     int statusCode = 0;
-    auto stream = baseUrl("/project/list").withParameter("appDomain", creation::assets::toStorageToken(appDomain)).createInputStream(
+    auto stream = baseUrl("/project/list").createInputStream(
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withConnectionTimeoutMs(5000)
             .withStatusCode(&statusCode));
@@ -292,6 +297,7 @@ bool SuiteVfsServiceClient::cloneProject(const juce::String& sourceProjectId, co
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("POST")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/json\r\n")
             .withStatusCode(&statusCode));
 
     if (stream == nullptr || statusCode != 200)
@@ -367,6 +373,7 @@ bool SuiteVfsServiceClient::writeProjectEntry(const juce::String& projectId, con
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("PUT")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/octet-stream\r\n")
             .withStatusCode(&statusCode));
 
     return stream != nullptr && statusCode == 200;

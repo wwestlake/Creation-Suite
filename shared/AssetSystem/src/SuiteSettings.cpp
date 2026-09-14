@@ -18,6 +18,7 @@ juce::var createJsonObject(const creation::suite::SuiteSettings& settings)
 {
     auto* object = new juce::DynamicObject();
     object->setProperty("suiteVfsRoot", settings.suiteVfsRoot);
+    object->setProperty("suiteExecutablesRoot", settings.suiteExecutablesRoot);
     return juce::var(object);
 }
 
@@ -56,6 +57,7 @@ SuiteSettings SuiteSettingsStore::load(juce::String& errorMessage) const
     }
 
     assignIfPresent(parsed, "suiteVfsRoot", settings.suiteVfsRoot);
+    assignIfPresent(parsed, "suiteExecutablesRoot", settings.suiteExecutablesRoot);
     return settings;
 }
 
@@ -95,6 +97,14 @@ SuiteSettings SuiteSettingsStore::makeDefaultSettings() const
 
     SuiteSettings settings;
     settings.suiteVfsRoot = suiteRoot.getFullPathName();
+    // Matches SuiteVfsServiceClient.cpp's own former hardcoded literal
+    // exactly, per build config, so existing behavior is unchanged until
+    // someone actually overrides this in the settings file.
+#if JUCE_DEBUG
+    settings.suiteExecutablesRoot = "D:/CreationSuite-Workspaces/codex-debug-bin";
+#else
+    settings.suiteExecutablesRoot = "D:/CreationSuite-Workspaces/codex-release-bin";
+#endif
     return settings;
 }
 }

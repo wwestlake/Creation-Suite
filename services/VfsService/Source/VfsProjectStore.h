@@ -12,8 +12,11 @@
 // and keeping the implementation un-linkable from anywhere else makes that structural, not
 // just a documented convention. See docs/architecture/Suite-Shared-Project-Model.md.
 //
-// One project = one real folder:
-//   <suiteVfsRoot>/Project Containers/<AppDomain>/<sanitized-name>/
+// One project = one real folder, at the TOP of the VFS -- projects are not owned by, or
+// nested under, any app. appDomain is stamped into the manifest at creation time as pure
+// originating metadata; it is never a storage path segment or a listing filter. See
+// docs/architecture/Suite-Shared-Project-Model.md.
+//   <suiteVfsRoot>/Project Containers/<projectId>/
 //     Project/project-manifest.json   (creation::assets::ProjectContainerPaths::manifestPath)
 //     Assets/..., Metadata/..., Exports/...   (whatever entries the app writes)
 // The suite root project (small suite-wide settings entries) is just another instance of
@@ -56,8 +59,12 @@ public:
     bool writeManifest(const juce::String& projectId, const creation::assets::ProjectManifest& manifest,
                        juce::String& errorMessage);
 
-    bool listProjects(creation::assets::SuiteAppDomain appDomain, juce::Array<ProjectSummary>& outProjects) const;
+    bool listProjects(juce::Array<ProjectSummary>& outProjects) const;
     bool findProjectFolderById(const juce::String& projectId, juce::File& outFolder) const;
+
+    // One-shot startup migration off the old <AppDomain>/<projectId> nesting onto the flat
+    // <projectId> layout above. Safe to call every startup -- a no-op once migrated.
+    void migrateLegacyDomainNestedProjects();
 
     bool cloneProject(const juce::String& sourceProjectId, const juce::String& newProjectName,
                       juce::String& outNewProjectId, juce::String& errorMessage);

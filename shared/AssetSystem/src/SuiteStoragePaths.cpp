@@ -42,6 +42,7 @@ juce::String appDomainFolderName(creation::assets::SuiteAppDomain domain)
         case creation::assets::SuiteAppDomain::live: return "Creation Live";
         case creation::assets::SuiteAppDomain::texture: return "Creation Texture";
         case creation::assets::SuiteAppDomain::modeler: return "Creation Modeler";
+        case creation::assets::SuiteAppDomain::developer: return "Creation Developer";
         case creation::assets::SuiteAppDomain::suite: return "Suite";
         case creation::assets::SuiteAppDomain::unknown: break;
     }
@@ -83,28 +84,9 @@ juce::File getCacheDirectory(const SuiteSettings& settings)
     return getSuiteRootDirectory(settings).getChildFile("Cache");
 }
 
-juce::File getAppProjectsDirectory(const SuiteSettings& settings,
-                                   creation::assets::SuiteAppDomain domain)
-{
-    return getSuiteRootDirectory(settings)
-        .getChildFile("Projects")
-        .getChildFile(appDomainFolderName(domain));
-}
-
 juce::File getProjectContainerDirectory(const SuiteSettings& settings)
 {
     return getSuiteRootDirectory(settings).getChildFile("Project Containers");
-}
-
-juce::File getProjectContainerPath(const SuiteSettings& settings,
-                                   creation::assets::SuiteAppDomain domain,
-                                   const juce::String& projectName)
-{
-    if (domain == creation::assets::SuiteAppDomain::suite)
-        return getSuiteRootDirectory(settings).getChildFile("suite.csproj");
-
-    auto baseDirectory = getProjectContainerDirectory(settings).getChildFile(appDomainFolderName(domain));
-    return baseDirectory.getChildFile(sanitizeProjectName(projectName) + ".csproj");
 }
 
 juce::File getMaterializedFilesDirectory(const SuiteSettings& settings,

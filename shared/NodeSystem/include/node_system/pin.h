@@ -7,23 +7,30 @@
 namespace ce::node_system {
 
 // A pin either carries continuous/discrete data (dataflow graphs: materials,
-// animation blending, audio) or is an execution/trigger pin (control-flow
-// graphs: event/rule graphs). Both kinds coexist in the same graph so a
-// single node system serves every authoring domain (spec section 4.1).
+// animation blending, audio), is an execution/trigger pin (control-flow
+// graphs: event/rule graphs), or carries an ordered stream of values over
+// time (ported from Creation Engine's own former NodeSystem fork as part
+// of unifying onto this one shared copy -- see
+// docs/SHARED_EXTRACTION_PLAN.md and wwestlake/Creation-Suite#115; used by
+// Engine's FRust plugin manifest loader). All three kinds coexist in the
+// same graph so a single node system serves every authoring domain (spec
+// section 4.1).
 enum class PinKind {
     Data,
     Exec,
+    Stream,
 };
 
 // Data pin value types. Kept intentionally small; grows only when a domain
 // actually needs a new type, not speculatively.
 //
 // GS9: Entity added for the node catalog's OnStart/OnTick "self" output,
-// Spawn's result, and Get/SetPosition's entity input -- CEL's
+// Spawn's result, and Get/SetPosition's entity input -- the language's
 // ce::lang::Type::Entity (an opaque i64 handle, no arithmetic, no
 // literal syntax) had no DataType counterpart until a real node needed
 // to carry one across a wire.
 enum class DataType {
+    Any,
     Float,
     Vec2,
     Vec3,
@@ -37,14 +44,38 @@ enum class DataType {
     Texture,
     AudioSignal,
     Entity,
+    Function,
+    // Opaque i64-handle reference types (Node/Behavior Graph Foundations
+    // plan, Phase 3) -- same ABI shape Entity/Transform already use
+    // (EngineLifecycle.frust's engine_first_transform_entity() -> i64
+    // etc.): type safety lives entirely at this graph layer via
+    // IsConnectionCompatible, FrustType() maps all of these to plain i64.
+    Material,
+    Model,
+    Controller,
+};
+
+enum class MonadKind {
+    None,
+    Option,
+    Result,
+};
+
+struct MonadTypeDesc {
+    MonadKind kind = MonadKind::None;
+    DataType valueType = DataType::Any;
+    DataType errorType = DataType::Any;
+
+    bool operator==(const MonadTypeDesc&) const = default;
 };
 
 struct PinTypeDesc {
     PinKind kind = PinKind::Data;
     DataType dataType = DataType::Float;
+    MonadTypeDesc monad;
 
     bool operator==(const PinTypeDesc& other) const {
-        return kind == other.kind && dataType == other.dataType;
+        return kind == other.kind && dataType == other.dataType && monad == other.monad;
     }
 };
 
@@ -58,7 +89,23 @@ inline bool IsConnectionCompatible(const PinTypeDesc& output, const PinTypeDesc&
         return false;
     }
     if (output.kind == PinKind::Data) {
-        return output.dataType == input.dataType;
+        if (output.monad.kind != MonadKind::None || input.monad.kind != MonadKind::None) {
+            if (output.monad.kind != input.monad.kind)
+                return false;
+            const auto matches = [](DataType left, DataType right) {
+                return left == right || left == DataType::Any || right == DataType::Any;
+            };
+            return matches(output.monad.valueType, input.monad.valueType)
+                && matches(output.monad.errorType, input.monad.errorType);
+        }
+        return output.dataType == input.dataType || output.dataType == DataType::Any
+            || input.dataType == DataType::Any;
+    }
+    if (output.kind == PinKind::Stream) {
+        // Same payload-type matching as Data -- a stream is an ordered
+        // sequence of values over time, not a different type system.
+        return output.dataType == input.dataType || output.dataType == DataType::Any
+            || input.dataType == DataType::Any;
     }
     return true; // Exec -> Exec is always compatible.
 }

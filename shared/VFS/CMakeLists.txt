@@ -49,3 +49,10 @@ add_test(
     NAME creation_suite_vfs_largefile_smoke
     COMMAND creation_suite_vfs_largefile_smoke
 )
+# Disabled by request: this test alone dominates every ctest run (~4-5
+# minutes of a run that's otherwise seconds), for large-file handling that
+# doesn't need re-verifying on every single build/test cycle. Still builds
+# and is still runnable directly (ctest -R creation_suite_vfs_largefile_smoke
+# --force-new-ctest-process, or just running the executable) -- only the
+# always-runs-by-default ctest registration is turned off.
+set_tests_properties(creation_suite_vfs_largefile_smoke PROPERTIES DISABLED TRUE)

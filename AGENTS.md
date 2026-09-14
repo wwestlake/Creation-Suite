@@ -11,6 +11,20 @@ App-specific repositories under `apps/` may also have their own `AGENTS.md` file
 
 If they conflict, stop and ask the user which rule should govern the task.
 
+## USER CODE AUTHORSHIP RULE — READ THIS FIRST
+
+**THE USER DOES NOT WRITE CODE IN THIS PROJECT. THE USER IS NOT A CODE CONTRIBUTOR.**
+
+**ANY CODE, DOCUMENTATION, CONFIGURATION, OR OTHER UNCOMMITTED WORK FOUND IN THIS
+WORKSPACE WAS CREATED BY AN AI AGENT, UNLESS THE USER EXPLICITLY SAYS OTHERWISE.**
+
+**UNCOMMITTED WORK MUST BE TREATED AS AGENT WORK THAT WAS LEFT UNCOMMITTED — NEVER
+AS USER-AUTHORED CODE. PRESERVE IT, IDENTIFY IT, AND FINISH OR COMMIT IT SAFELY.**
+
+The user provides requirements, reviews results, and approves merges. Agents own the
+implementation and the responsibility to commit their work before reporting a task
+complete.
+
 ## Development Environment Rule
 
 This workspace is a development/evaluation environment by default.
@@ -84,6 +98,26 @@ Each agent maintains exactly one standing, personally-named development branch p
 - Only once `<agent>/development` builds and passes testing does it become eligible for a PR to `master`/`main` on the server — opening that PR still requires the same explicit push/merge authorization as any other push to a shared branch (see Push Authorization Rule below); reaching "buildable and tested" is a precondition for asking, not authorization by itself.
 - Short-lived task branches are still fine for isolating one piece of in-progress work, but they should merge into `<agent>/development` when done, not sit alongside it indefinitely as siblings nobody reconciles.
 - Before starting new work in any repo, check whether your own `<agent>/development` branch already exists there and what's on it — real, completed work can be sitting there from an earlier session.
+- **The instant a PR from `<agent>/development` into `master`/`main` is reported merged (by the user, or confirmed via `gh pr view`), sync `<agent>/development` to the new `master` (fetch + fast-forward) before doing anything else in that repo** — not after the next task, not "whenever it comes up." A small follow-up fix discovered right after (a gitlink bump, a stale test assertion) gets committed onto that freshly-synced branch directly, same as any other task — never a fresh one-off branch off `master`. Violated repeatedly (2026-09-06): opened `master`-targeted PRs directly per small fix instead of working this branch, then failed to sync back after one merged and branched off `master` again for the next fix, compounding into exactly the branch sprawl this rule exists to prevent.
+
+### Submodule Gitlink Sync Rule
+
+A submodule's gitlink is a pinned commit, not a tracked branch — the umbrella repo does not "follow" `master` in `apps/CreationEngine` or any other submodule automatically. If you merge/pull inside a submodule and never come back to commit the resulting gitlink bump in the umbrella repo, the umbrella's `git status` will just say the submodule is "modified" with no detail, and it's easy to lose track of *why* -- this is the recurring cause of gitlink drift.
+
+Run once per fresh clone (already applied to every repo in this workspace as of 2026-09-07, but a new clone or another agent's checkout won't have it):
+
+```bash
+git config status.submodulesummary 1
+git config diff.submodule log
+git config push.recurseSubmodules check
+```
+
+- `status.submodulesummary`/`diff.submodule=log` make `git status`/`git diff` in the umbrella repo actually show the commit range a submodule moved by, instead of a bare "modified" flag.
+- `push.recurseSubmodules=check` refuses to push the umbrella repo if a submodule's checked-out commit isn't pushed to its own remote yet — catches the exact "gitlink points at a commit nobody else can see" bug before it happens.
+
+`scripts/agent-git-check.sh` applies all three automatically (self-healing, not just a warning) and reports any submodule whose checkout has drifted ahead of the recorded gitlink — run it instead of eyeballing `git status` across the umbrella repo and its submodules.
+
+The actual sequencing discipline this supports is unchanged, per the Personal Development Branch Rule above: commit in the submodule → open its PR → get it merged → sync that submodule to the new `master` → only then commit the gitlink bump in the umbrella repo. Never bump a gitlink to a commit that isn't merged and pushed on the submodule's own remote.
 
 ## Secrets Directory Rule
 
@@ -217,7 +251,7 @@ The LLVM install at `apps/CreationEngine/vcpkg_installed/x64-windows/` is a cust
 - Never run `vcpkg install` in manifest mode anywhere `llvm` is a manifest dependency (this applies to `apps/CreationEngine/vcpkg.json` specifically, and any other manifest that lists `llvm`).
 - To add a *different* vcpkg dependency to a project that also depends on `llvm`, install the new package(s) into a completely separate install root / separate `vcpkg_installed` tree that CMake points at independently (its own `CMAKE_PREFIX_PATH` entry) — never touch the shared manifest or the existing LLVM install root.
 - Do not run `git fetch`/`git reset`/any history-rewriting operation on the vcpkg tool checkout itself to "fix" a compatibility error — that was part of the same chain of events.
-- Before running any command that touches `vcpkg`, `Language/`, or CEL/LLVM build setup in Creation Engine, read `apps/CreationEngine/README.md`'s **"Scripting language build (LLVM via vcpkg)"** section first, in full, every time — see the Documentation Index below.
+- Before running any command that touches `vcpkg`, `Language/`, or FRust/LLVM build setup in Creation Engine, read `apps/CreationEngine/README.md`'s **"Scripting language build (LLVM via vcpkg)"** section first, in full, every time — see the Documentation Index below.
 
 This rule has no exceptions and does not expire.
 
@@ -253,15 +287,15 @@ This file is a MAP, not a manual — it tells you which document governs a given
 - Project template scaffolding → [docs/Project-Template-Generator.md](docs/Project-Template-Generator.md), [docs/Suite-Project-Template-LLM-Instructions.md](docs/Suite-Project-Template-LLM-Instructions.md)
 - Cross-app migration history/plans → [docs/migration/Migration-Plan.md](docs/migration/Migration-Plan.md), [docs/migration/Station-Engine-First-Moves.md](docs/migration/Station-Engine-First-Moves.md)
 - LLM/agent infrastructure guide → [docs/LLM-INFRASTRUCTURE-GUIDE.md](docs/LLM-INFRASTRUCTURE-GUIDE.md)
-- Each `shared/*` library has its own `README.md` (`shared/README.md` for the overview, then `shared/AssetSystem`, `shared/CEL`, `shared/CMake`, `shared/Interop`, `shared/NodeSystem`, `shared/Services`, `shared/UI`) — read the specific one before changing that library.
+- Each `shared/*` library has its own `README.md` (`shared/README.md` for the overview, then `shared/AssetSystem`, `FRust`, `shared/CMake`, `shared/Interop`, `shared/NodeSystem`, `shared/Services`, `shared/UI`) — read the specific one before changing that library.
 - Suite VFS Browser (debug-only tool, suite Settings panel → "VFS Browser" tab, `#if JUCE_DEBUG`-gated) → [docs/Suite-VFS-Browser-Debug-Tool.md](docs/Suite-VFS-Browser-Debug-Tool.md) — what it shows, where it lives, known limitations.
-- CEL language design (types, memory model, functional-paradigm features, the real-time-safe execution profile, modules) → [shared/CEL/docs/CEL_V2_LANGUAGE_SPEC.md](shared/CEL/docs/CEL_V2_LANGUAGE_SPEC.md) — read before touching CEL's grammar, sema, or intrinsic surface; tracked as GitHub issues #49–#59 on Creation-Suite.
-- Hermes (CEL package manager/distribution, LagDaemon.com store) → [shared/CEL/docs/HERMES_PACKAGE_MANAGER_SPEC.md](shared/CEL/docs/HERMES_PACKAGE_MANAGER_SPEC.md) — quick-capture spec, not yet filed as issues; read before scoping any package-management work.
+- FRust language design (types, memory model, functional-paradigm features, the real-time-safe execution profile, modules) → [FRust/docs/FRust_V2_LANGUAGE_SPEC.md](FRust/docs/FRust_V2_LANGUAGE_SPEC.md) — read before touching FRust's grammar, sema, or intrinsic surface; tracked as GitHub issues #49–#59 on Creation-Suite.
+- Hermes (FRust package manager/distribution, LagDaemon.com store) → [FRust/docs/HERMES_PACKAGE_MANAGER_SPEC.md](FRust/docs/HERMES_PACKAGE_MANAGER_SPEC.md) — quick-capture spec, not yet filed as issues; read before scoping any package-management work.
 
 **Per app** (`apps/CreationEngine`, `apps/CreationMovie`, `apps/CreationStation`, `apps/CreationLive`): each has its own `AGENTS.md` (app-local policy, binding alongside this file per Scope above), `README.md` (build/setup instructions — e.g. Engine's LLVM/vcpkg section), and `docs/` folder. Always check for and read an app's own `README.md`/`AGENTS.md`/`docs/` before working in it; do not assume this index is exhaustive of what's there. Known app-specific docs as of this writing:
-- Creation Engine: [docs/CAPABILITIES.md](apps/CreationEngine/docs/CAPABILITIES.md) (scope/non-goals), [docs/GS_SCRIPTING_PLAN.md](apps/CreationEngine/docs/GS_SCRIPTING_PLAN.md) (CEL milestone plan), [docs/SCRIPTING_ABI.md](apps/CreationEngine/docs/SCRIPTING_ABI.md) (host ABI spec), [docs/CROSS_APP_LANGUAGE_DOMAINS.md](apps/CreationEngine/docs/CROSS_APP_LANGUAGE_DOMAINS.md) (intrinsic domain gating), [docs/CROSS_APP_ASSET_INTEROP.md](apps/CreationEngine/docs/CROSS_APP_ASSET_INTEROP.md)
+- Creation Engine: [docs/CAPABILITIES.md](apps/CreationEngine/docs/CAPABILITIES.md) (scope/non-goals), [docs/GS_SCRIPTING_PLAN.md](apps/CreationEngine/docs/GS_SCRIPTING_PLAN.md) (FRust milestone plan), [docs/SCRIPTING_ABI.md](apps/CreationEngine/docs/SCRIPTING_ABI.md) (host ABI spec), [docs/CROSS_APP_LANGUAGE_DOMAINS.md](apps/CreationEngine/docs/CROSS_APP_LANGUAGE_DOMAINS.md) (intrinsic domain gating), [docs/CROSS_APP_ASSET_INTEROP.md](apps/CreationEngine/docs/CROSS_APP_ASSET_INTEROP.md)
 - Creation Movie: [docs/CAPABILITIES.md](apps/CreationMovie/docs/CAPABILITIES.md), [docs/LANGUAGE_ROLLOUT.md](apps/CreationMovie/docs/LANGUAGE_ROLLOUT.md)
-- Creation Station: [docs/Creation-Shared-Language-Rollout.md](apps/CreationStation/docs/Creation-Shared-Language-Rollout.md), [docs/Creation-Suite-AssetSystem-Standard.md](apps/CreationStation/docs/Creation-Suite-AssetSystem-Standard.md), [docs/Creation-Suite-Interop-Spec.md](apps/CreationStation/docs/Creation-Suite-Interop-Spec.md), [docs/Studio-Grade-Audio-Routing-Checklist.md](apps/CreationStation/docs/Studio-Grade-Audio-Routing-Checklist.md), [docs/Creation-Station-0.5.0-Beta-Checklist.md](apps/CreationStation/docs/Creation-Station-0.5.0-Beta-Checklist.md), [docs/STATION_CONTROL_REGISTRY_SEED.md](apps/CreationStation/docs/STATION_CONTROL_REGISTRY_SEED.md) — concrete set_state/get_state entries for the CEL control registry, seeded from a real codebase investigation; [docs/Signal-Lab-Character-Macros-Spec.md](apps/CreationStation/docs/Signal-Lab-Character-Macros-Spec.md) — Signal Lab's high-level sound-character macro definitions and guardrails; [docs/Signal-Lab-Node-Graph-Spec.md](apps/CreationStation/docs/Signal-Lab-Node-Graph-Spec.md) — living spec for Signal Lab's node-graph system (port anatomy, connections, runtime model, Sources/Sinks); read before touching node/port/connection code, and keep it updated as requirements are given or changed
+- Creation Station: [docs/Creation-Shared-Language-Rollout.md](apps/CreationStation/docs/Creation-Shared-Language-Rollout.md), [docs/Creation-Suite-AssetSystem-Standard.md](apps/CreationStation/docs/Creation-Suite-AssetSystem-Standard.md), [docs/Creation-Suite-Interop-Spec.md](apps/CreationStation/docs/Creation-Suite-Interop-Spec.md), [docs/Studio-Grade-Audio-Routing-Checklist.md](apps/CreationStation/docs/Studio-Grade-Audio-Routing-Checklist.md), [docs/Creation-Station-0.5.0-Beta-Checklist.md](apps/CreationStation/docs/Creation-Station-0.5.0-Beta-Checklist.md), [docs/STATION_CONTROL_REGISTRY_SEED.md](apps/CreationStation/docs/STATION_CONTROL_REGISTRY_SEED.md) — concrete set_state/get_state entries for the FRust control registry, seeded from a real codebase investigation; [docs/Signal-Lab-Character-Macros-Spec.md](apps/CreationStation/docs/Signal-Lab-Character-Macros-Spec.md) — Signal Lab's high-level sound-character macro definitions and guardrails; [docs/Signal-Lab-Node-Graph-Spec.md](apps/CreationStation/docs/Signal-Lab-Node-Graph-Spec.md) — living spec for Signal Lab's node-graph system (port anatomy, connections, runtime model, Sources/Sinks); read before touching node/port/connection code, and keep it updated as requirements are given or changed
 
 **Task/status tracking:** GitHub Issues + the **Creation Suite Road Map** project board (Project #19) — see the GitHub Project Board Rule above, not a doc file.
 

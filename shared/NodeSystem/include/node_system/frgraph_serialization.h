@@ -14,7 +14,7 @@ namespace ce::node_system {
 // git-diffable, so two designers' graph edits show up as a normal text
 // diff/merge-conflict instead of an opaque blob. Roughly:
 //
-//   celg 1
+//   frgraph 1
 //   graph <name>
 //   node <id> <typeName> <domain> <editorX> <editorY>
 //   pin <nodeId> in|out <pinId> <name> exec|data [<dataType>] [default <kind> <value...>]
@@ -25,12 +25,12 @@ namespace ce::node_system {
 // SerializeGraph(*DeserializeGraph(SerializeGraph(g))) == SerializeGraph(g)
 // byte-for-byte -- via Node::AddInputWithId/AddOutputWithId and
 // Graph::AddNodeWithId/ConnectWithId, not freshly renumbered ids. This
-// is what GS8's format-stability regression test (a committed .celg
+// is what the format-stability regression test (a committed .frgraph
 // fixture that must load unchanged) actually depends on.
 
 std::string SerializeGraph(const Graph& graph);
 
-// Parses .celg text into a fresh Graph. Returns nullptr and fills
+// Parses .frgraph text into a fresh Graph. Returns nullptr and fills
 // `errorOut` with a human-readable message (including the 1-based line
 // number) on any malformed input -- an unknown domain/dataType/pin-kind
 // keyword, a duplicate id, a `pin`/`connection` line referencing a node

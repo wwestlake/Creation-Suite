@@ -2,7 +2,7 @@
 
 ## Why this exists
 
-The suite already has real CEL execution, real LLVM JIT, real domain
+The suite already has real FRust execution, real LLVM JIT, real domain
 gating, and a real engine-side simulation loop.
 
 What it does **not** have yet is one explicit authored-control boundary:
@@ -18,8 +18,8 @@ This plan defines that contract and the milestones to land it.
 
 ## What is already real
 
-- `shared/CEL` now contains the suite-level parser, sema, nodegen,
-  JIT/runtime sources, host-ABI helpers, and `celc`.
+- `FRust` now contains the suite-level parser, sema, nodegen,
+  JIT/runtime sources, host-ABI helpers, and `frustc`.
 - `shared/NodeSystem` is already a real suite target.
 - `EngineCore` already has the correct low-level runtime seam:
   `ScriptComponent`, `IScriptRuntime`, and `Simulation::Step`.
@@ -28,7 +28,7 @@ This plan defines that contract and the milestones to land it.
 - client/server script parity is already proven by the real simulation
   tests.
 
-So the problem is no longer "can CEL run?" The problem is "what is the
+So the problem is no longer "can FRust run?" The problem is "what is the
 official authored control surface of the suite?"
 
 ## The boundary
@@ -41,7 +41,7 @@ The control boundary is the layer between:
 
 In plain English:
 
-- CEL stays the shared language core
+- FRust stays the shared language core
 - nodes stay the shared authored representation where appropriate
 - each app exposes a host adapter
 - authored logic never talks straight to random app internals
@@ -58,9 +58,9 @@ The authored unit that the suite stores and moves around.
 
 Examples:
 
-- a `.cel` script
-- a `.celg` node graph that generates CEL
-- later, a timeline-driven event program that still targets CEL entry
+- a `.frust` script
+- a `.frgraph` node graph that generates FRust
+- later, a timeline-driven event program that still targets FRust entry
   points
 
 This is the portable logic artifact.
@@ -79,7 +79,7 @@ This is what makes one shared language safe across different apps.
 
 ### 3. Host adapter
 
-The app-owned layer that exposes safe functionality to CEL.
+The app-owned layer that exposes safe functionality to FRust.
 
 Examples:
 
@@ -140,13 +140,13 @@ Deliverable:
 
 Success means the next feature can be placed cleanly before coding.
 
-### Milestone 2: Make suite CEL/NodeSystem authoritative
+### Milestone 2: Make suite FRust/NodeSystem authoritative
 
 Finish the cutover already started:
 
 - Engine stops owning the active `Language/` and `NodeSystem/` source of
   truth
-- Engine consumes `shared/CEL` and `shared/NodeSystem`
+- Engine consumes `FRust` and `shared/NodeSystem`
 - Engine keeps only its host adapter and app policy
 
 Success means the language core is truly suite-owned.
@@ -158,8 +158,8 @@ Engine runtime seam.
 
 It should formalize:
 
-- what world actions CEL may request
-- what world queries CEL may read
+- what world actions FRust may request
+- what world queries FRust may read
 - which entry points are lifecycle-driven vs externally triggered
 - how faults, traces, and refusals are reported
 
@@ -174,7 +174,7 @@ and becomes a normal trigger source.
 The first version should:
 
 - schedule events against engine time
-- invoke CEL entry points deterministically
+- invoke FRust entry points deterministically
 - surface diagnostics and trace information
 - run through the same control boundary as simulation-driven scripts
 
@@ -192,7 +192,7 @@ Success means the suite has one language strategy instead of one per app.
 
 ## Immediate implementation order
 
-1. Finish the shared CEL/NodeSystem cutover so the suite really owns the
+1. Finish the shared FRust/NodeSystem cutover so the suite really owns the
    language core.
 2. Define the Engine host adapter contract in code and docs.
 3. Build the Engine event timeline on that contract.

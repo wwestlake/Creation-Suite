@@ -76,8 +76,9 @@ int main()
             if (session.getProjectId() != projectId)
                 fail("ProjectSession's projectId should match its manifest's projectId.");
 
+            // Flat layout -- projects are not nested under an app-domain
+            // folder (see docs/architecture/Suite-Shared-Project-Model.md).
             const auto realFolder = creation::suite::getProjectContainerDirectory(settings)
-                                        .getChildFile("Creation Station")
                                         .getChildFile(projectId);
             if (! realFolder.isDirectory())
                 fail("createNew should have created a real project folder on disk (not a packed container).");
@@ -268,11 +269,14 @@ int main()
             // listProjects/findProjectById read manifests through the VFS service, which
             // has no concept of an app "holding a project open" at all -- no need to close
             // the session above first, close() here is just for call-site symmetry.
+            // Unfiltered by design -- projects are not owned by any app.
             juce::String listError;
-            const auto modelerProjects = creation::assets::ProjectContainerService::listProjects(settings,
-                                                                                                 creation::assets::SuiteAppDomain::modeler,
-                                                                                                 listError);
-            if (modelerProjects.isEmpty())
+            const auto allProjectsFromService = creation::assets::ProjectContainerService::listProjects(settings, listError);
+            bool foundServiceProject = false;
+            for (const auto& summary : allProjectsFromService)
+                if (summary.projectId == serviceProjectId)
+                    foundServiceProject = true;
+            if (! foundServiceProject)
                 fail("ProjectContainerService listProjects did not find the created project.");
 
             creation::assets::ProjectContainerService::ProjectSummary foundProject;
@@ -335,10 +339,11 @@ int main()
 
         // Clean up this test's own project folders on the real, shared VFS root -- never
         // touch anything else under "Project Containers" (real projects may live alongside).
+        // Flat layout -- no app-domain subfolder to descend into.
         creation::suite::getProjectContainerDirectory(settings)
-            .getChildFile("Creation Station").getChildFile(projectId).deleteRecursively();
+            .getChildFile(projectId).deleteRecursively();
         creation::suite::getProjectContainerDirectory(settings)
-            .getChildFile("Creation Modeler").getChildFile(serviceProjectId).deleteRecursively();
+            .getChildFile(serviceProjectId).deleteRecursively();
         creation::suite::getMaterializedFilesDirectory(settings, projectId).deleteRecursively();
 
         tempRoot.deleteRecursively();
