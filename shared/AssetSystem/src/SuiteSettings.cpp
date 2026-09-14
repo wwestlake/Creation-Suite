@@ -97,14 +97,24 @@ SuiteSettings SuiteSettingsStore::makeDefaultSettings() const
 
     SuiteSettings settings;
     settings.suiteVfsRoot = suiteRoot.getFullPathName();
-    // Matches SuiteVfsServiceClient.cpp's own former hardcoded literal
-    // exactly, per build config, so existing behavior is unchanged until
-    // someone actually overrides this in the settings file.
-#if JUCE_DEBUG
-    settings.suiteExecutablesRoot = "D:/CreationSuite-Workspaces/codex-debug-bin";
-#else
-    settings.suiteExecutablesRoot = "D:/CreationSuite-Workspaces/codex-release-bin";
-#endif
+    // Was hardcoded to "codex-{debug,release}-bin" regardless of which
+    // agent's build was actually running -- every agent that never
+    // explicitly overrides this in suite-settings.json silently tried to
+    // launch/discover Codex's VFS service instead of its own, which is
+    // exactly what caused Djehuti Station to hang indefinitely on startup:
+    // whatever state Codex's own bin directory/service happened to be in
+    // (stale, locked, mid-rebuild by Codex's own session) determined
+    // whether every OTHER agent's app could even start.
+    //
+    // The build already copies each agent's own executables into its own
+    // <agent>-{debug,release}-bin directory (see
+    // creation_suite_get_shared_bin_dir/creation_suite_add_shared_bin_copy
+    // in CreationSuiteBuildSettings.cmake) -- so the currently-running
+    // executable's own directory is always the correct, per-agent default,
+    // with no need to separately know or hardcode which agent this is.
+    settings.suiteExecutablesRoot = juce::File::getSpecialLocation(juce::File::currentExecutableFile)
+                                         .getParentDirectory()
+                                         .getFullPathName();
     return settings;
 }
 }

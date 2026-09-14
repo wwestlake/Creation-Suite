@@ -46,7 +46,7 @@ void appendBootLog(const std::string& message)
 void appendServiceLog(const juce::String& message)
 {
     auto logFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                       .getChildFile("Creation Suite")
+                       .getChildFile("Djehuti Suite")
                        .getChildFile("Logs")
                        .getChildFile("CreationSuiteVfsService.log");
 
