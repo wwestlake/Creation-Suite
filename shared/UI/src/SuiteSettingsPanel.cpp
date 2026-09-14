@@ -49,7 +49,7 @@ SuiteSettingsPanel::SuiteSettingsPanel()
 {
     suiteLogo = creation::ui::getSuiteLogoImage(creation::ui::SuiteLogoId::suite);
 
-    titleLabel.setText("Creation Suite", juce::dontSendNotification);
+    titleLabel.setText("Djehuti Suite", juce::dontSendNotification);
     titleLabel.setFont(juce::Font(28.0f).boldened());
     titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(titleLabel);
@@ -88,7 +88,7 @@ SuiteSettingsPanel::SuiteSettingsPanel()
     addAndMakeVisible(scrollViewport);
 
     configureHintLabel(storageIntroLabel,
-                       "Set one suite VFS root here. Everything else in the Creation Suite is derived inside that VFS automatically.");
+                       "Set one suite VFS root here. Everything else in the Djehuti Suite is derived inside that VFS automatically.");
     scrollContent.addAndMakeVisible(storageIntroLabel);
 
     configureSectionTitle(storageSectionLabel, "Storage And VFS");

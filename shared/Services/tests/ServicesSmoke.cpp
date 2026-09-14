@@ -101,7 +101,7 @@ int main()
             loadedAi,
             creation::assets::SuiteAppDomain::live,
             liveRuntime,
-            "Creation Live");
+            "Djehuti Live");
         const auto resolvedLiveRuntime = creation::services::SuiteAiSettingsResolver::resolveRuntimeSettingsForApp(
             loadedAi, creation::assets::SuiteAppDomain::live);
         if (! resolvedLiveRuntime.isValid()

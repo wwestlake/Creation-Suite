@@ -78,7 +78,13 @@ HighlightGeometry getAppHighlightGeometry(creation::ui::SuiteLogoId logoId) noex
         case creation::ui::SuiteLogoId::engine: return makeAppHighlight(0.042f, 0.748f);
         case creation::ui::SuiteLogoId::movie: return makeAppHighlight(0.356f, 0.748f);
         case creation::ui::SuiteLogoId::live: return makeAppHighlight(0.646f, 0.748f);
-        case creation::ui::SuiteLogoId::suite: break;
+        case creation::ui::SuiteLogoId::suite:
+        case creation::ui::SuiteLogoId::engineer:
+        case creation::ui::SuiteLogoId::remote:
+            // Not placed on the splash background image's fixed grid yet --
+            // no highlight rectangle until real coordinates are chosen for
+            // these (matches how SuiteLogoId::suite itself has none).
+            break;
     }
 
     return {};

@@ -9,9 +9,9 @@ juce::File getDefaultSuiteDataRoot()
     auto appDataRoot = roamingAppData.getParentDirectory();
     auto localAppData = appDataRoot.getChildFile("Local");
     if (localAppData.isDirectory())
-        return localAppData.getChildFile("Creation Suite").getChildFile("Data");
+        return localAppData.getChildFile("Djehuti Suite").getChildFile("Data");
 
-    return roamingAppData.getChildFile("Creation Suite").getChildFile("Data");
+    return roamingAppData.getChildFile("Djehuti Suite").getChildFile("Data");
 }
 
 juce::var createJsonObject(const creation::suite::SuiteSettings& settings)
@@ -83,7 +83,7 @@ bool SuiteSettingsStore::save(const SuiteSettings& settings, juce::String& error
 juce::File SuiteSettingsStore::getSuiteConfigDirectory() const
 {
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile("Creation Suite");
+        .getChildFile("Djehuti Suite");
 }
 
 juce::File SuiteSettingsStore::getSuiteSettingsFile() const

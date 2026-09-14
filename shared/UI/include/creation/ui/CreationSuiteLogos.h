@@ -13,10 +13,12 @@ enum class SuiteLogoId
     movie,
     live,
     texture,
-    modeler
+    modeler,
+    engineer,
+    remote
 };
 
-std::array<SuiteLogoId, 7> getSuiteLogoIds();
+std::array<SuiteLogoId, 9> getSuiteLogoIds();
 juce::Image getSuiteLogoImage(SuiteLogoId logoId);
 juce::String getSuiteLogoDisplayName(SuiteLogoId logoId);
 juce::Colour getSuiteLogoAccentColour(SuiteLogoId logoId);

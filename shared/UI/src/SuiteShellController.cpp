@@ -12,9 +12,9 @@ juce::File getDefaultSuiteStorageBrowseRoot()
     auto appDataRoot = roamingAppData.getParentDirectory();
     auto localAppData = appDataRoot.getChildFile("Local");
     if (localAppData.isDirectory())
-        return localAppData.getChildFile("Creation Suite").getChildFile("Data");
+        return localAppData.getChildFile("Djehuti Suite").getChildFile("Data");
 
-    return roamingAppData.getChildFile("Creation Suite").getChildFile("Data");
+    return roamingAppData.getChildFile("Djehuti Suite").getChildFile("Data");
 }
 
 juce::String suiteAuthAppSlug(creation::assets::SuiteAppDomain domain)
@@ -28,6 +28,7 @@ juce::String suiteAuthAppSlug(creation::assets::SuiteAppDomain domain)
         case creation::assets::SuiteAppDomain::texture: return "creation-texture";
         case creation::assets::SuiteAppDomain::modeler: return "creation-modeler";
         case creation::assets::SuiteAppDomain::developer: return "creation-developer";
+        case creation::assets::SuiteAppDomain::engineer: return "creation-engineer";
         case creation::assets::SuiteAppDomain::unknown: break;
     }
 
@@ -71,7 +72,7 @@ public:
     explicit SuiteProjectBrowserPanel(creation::assets::SuiteAppDomain currentDomainToUse)
         : currentDomain(currentDomainToUse)
     {
-        titleLabel.setText("Creation Suite Project Manager", juce::dontSendNotification);
+        titleLabel.setText("Djehuti Suite Project Manager", juce::dontSendNotification);
         titleLabel.setFont(juce::Font(22.0f).boldened());
         titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
         addAndMakeVisible(titleLabel);
@@ -87,13 +88,14 @@ public:
         addAndMakeVisible(searchEditor);
 
         domainCombo.addItem("All Applications", 1);
-        domainCombo.addItem("Creation Station", 2);
-        domainCombo.addItem("Creation Engine", 3);
-        domainCombo.addItem("Creation Movie", 4);
-        domainCombo.addItem("Creation Live", 5);
-        domainCombo.addItem("Creation Texture", 6);
-        domainCombo.addItem("Creation Modeler", 7);
-        domainCombo.addItem("Creation Developer", 8);
+        domainCombo.addItem("Djehuti Station", 2);
+        domainCombo.addItem("Djehuti Engine", 3);
+        domainCombo.addItem("Djehuti Movie", 4);
+        domainCombo.addItem("Djehuti Live", 5);
+        domainCombo.addItem("Djehuti Texture", 6);
+        domainCombo.addItem("Djehuti Modeler", 7);
+        domainCombo.addItem("Djehuti Developer", 8);
+        domainCombo.addItem("Djehuti Engineer", 9);
         domainCombo.setSelectedId(1, juce::dontSendNotification);
         domainCombo.onChange = [this] { filterProjects(); };
         addAndMakeVisible(domainCombo);
@@ -203,6 +205,7 @@ public:
                         case 6: return creation::assets::SuiteAppDomain::texture;
                         case 7: return creation::assets::SuiteAppDomain::modeler;
                         case 8: return creation::assets::SuiteAppDomain::developer;
+                        case 9: return creation::assets::SuiteAppDomain::engineer;
                         default: return creation::assets::SuiteAppDomain::unknown;
                     }
                 }();
@@ -732,7 +735,7 @@ void SuiteShellController::showSuiteSettingsWindow()
     panel->onReadEulaRequested = [this] { showEulaWindow(); };
 
     auto* panelRaw = panel.get();
-    auto window = std::make_unique<ManagedDocumentWindow>("Creation Suite Control",
+    auto window = std::make_unique<ManagedDocumentWindow>("Djehuti Suite Control",
                                                           config.backgroundColour,
                                                           juce::DocumentWindow::allButtons,
                                                           [this] { closeSuiteSettingsWindow(); });
@@ -770,7 +773,7 @@ void SuiteShellController::showProjectBrowserWindow()
         // Defer destroying its window until that callback has returned.
         juce::MessageManager::callAsync([this] { closeProjectBrowserWindow(); });
     };
-    auto window = std::make_unique<ManagedDocumentWindow>("Creation Suite Project Manager",
+    auto window = std::make_unique<ManagedDocumentWindow>("Djehuti Suite Project Manager",
                                                           config.backgroundColour,
                                                           juce::DocumentWindow::allButtons,
                                                           [this] { closeProjectBrowserWindow(); });
@@ -801,7 +804,7 @@ void SuiteShellController::showAssetManagerWindow()
         capability.hostAppDisplayName = config.appDisplayName;
 
     auto panel = std::make_unique<SuiteAssetManagerPanel>(capability);
-    auto window = std::make_unique<ManagedDocumentWindow>("Creation Suite Asset Manager",
+    auto window = std::make_unique<ManagedDocumentWindow>("Djehuti Suite Asset Manager",
                                                           config.backgroundColour,
                                                           juce::DocumentWindow::allButtons,
                                                           [this] { closeAssetManagerWindow(); });
@@ -827,7 +830,7 @@ void SuiteShellController::showEulaWindow()
         return;
     }
 
-    auto window = std::make_unique<ManagedDocumentWindow>("Creation Suite EULA",
+    auto window = std::make_unique<ManagedDocumentWindow>("Djehuti Suite EULA",
                                                           config.backgroundColour,
                                                           juce::DocumentWindow::allButtons,
                                                           [this] { closeEulaWindow(); });
@@ -849,7 +852,7 @@ void SuiteShellController::chooseSuiteDirectory(const juce::String& fieldId)
 {
     juce::String currentPath = suiteSettings.suiteVfsRoot;
 
-    suiteDirectoryChooser = std::make_unique<juce::FileChooser>("Choose a folder for the Creation Suite",
+    suiteDirectoryChooser = std::make_unique<juce::FileChooser>("Choose a folder for the Djehuti Suite",
                                                                 currentPath.isNotEmpty()
                                                                     ? juce::File(currentPath)
                                                                     : getDefaultSuiteStorageBrowseRoot(),
