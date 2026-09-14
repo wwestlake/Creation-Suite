@@ -50,7 +50,7 @@ int main()
         descriptor.displayName = "Smoke Tone";
         descriptor.kind = creation::assets::AssetKind::audio;
         descriptor.logicalPath = "Assets/Source/smoke-tone.wav";
-        descriptor.sourceApp = "Creation Station";
+        descriptor.sourceApp = "Djehuti Station";
         descriptor.sourceTool = "SmokeTest";
         descriptor.createdAt = juce::Time::getCurrentTime();
         descriptor.modifiedAt = descriptor.createdAt;
@@ -189,7 +189,7 @@ int main()
             creation::assets::ProjectAssetService::ImportOptions importOptions;
             importOptions.kind = creation::assets::AssetKind::metadata;
             importOptions.displayName = "Imported Notes";
-            importOptions.sourceApp = "Creation Suite Smoke";
+            importOptions.sourceApp = "Djehuti Suite Smoke";
             importOptions.sourceTool = "AssetSystemSmoke";
             importOptions.tags.add("smoke");
 
@@ -304,7 +304,7 @@ int main()
         creation::assets::ProjectAssetService::ImportOptions workspaceImportOptions;
         workspaceImportOptions.kind = creation::assets::AssetKind::metadata;
         workspaceImportOptions.displayName = "Workspace Imported Asset";
-        workspaceImportOptions.sourceApp = "Creation Workspace";
+        workspaceImportOptions.sourceApp = "Djehuti Workspace";
         workspaceImportOptions.sourceTool = "WorkspaceService";
 
         creation::assets::AssetDescriptor workspaceDescriptor;

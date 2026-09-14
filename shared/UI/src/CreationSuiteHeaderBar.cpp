@@ -204,7 +204,7 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
     setName("CreationSuiteHeaderBar");
     setAppLogo(creation::ui::SuiteLogoId::suite);
 
-    titleLabel.setText("Creation Suite", juce::dontSendNotification);
+    titleLabel.setText("Djehuti Suite", juce::dontSendNotification);
     titleLabel.setJustificationType(juce::Justification::centredLeft);
     titleLabel.setFont(juce::Font(28.0f).boldened());
     titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);

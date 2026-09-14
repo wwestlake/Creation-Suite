@@ -11,7 +11,7 @@ juce::String fallbackIfEmpty(juce::String value, const juce::String& fallback)
 juce::File getInternalSuiteDataDirectory()
 {
     auto base = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                    .getChildFile("Creation Suite");
+                    .getChildFile("Djehuti Suite");
     return base;
 }
 }
@@ -36,13 +36,13 @@ juce::String appDomainFolderName(creation::assets::SuiteAppDomain domain)
 {
     switch (domain)
     {
-        case creation::assets::SuiteAppDomain::station: return "Creation Station";
-        case creation::assets::SuiteAppDomain::engine: return "Creation Engine";
-        case creation::assets::SuiteAppDomain::movie: return "Creation Movie";
-        case creation::assets::SuiteAppDomain::live: return "Creation Live";
-        case creation::assets::SuiteAppDomain::texture: return "Creation Texture";
-        case creation::assets::SuiteAppDomain::modeler: return "Creation Modeler";
-        case creation::assets::SuiteAppDomain::developer: return "Creation Developer";
+        case creation::assets::SuiteAppDomain::station: return "Djehuti Station";
+        case creation::assets::SuiteAppDomain::engine: return "Djehuti Engine";
+        case creation::assets::SuiteAppDomain::movie: return "Djehuti Movie";
+        case creation::assets::SuiteAppDomain::live: return "Djehuti Live";
+        case creation::assets::SuiteAppDomain::texture: return "Djehuti Texture";
+        case creation::assets::SuiteAppDomain::modeler: return "Djehuti Modeler";
+        case creation::assets::SuiteAppDomain::developer: return "Djehuti Developer";
         case creation::assets::SuiteAppDomain::suite: return "Suite";
         case creation::assets::SuiteAppDomain::unknown: break;
     }
@@ -54,7 +54,7 @@ juce::File getSuiteRootDirectory(const SuiteSettings& settings)
 {
     auto suiteRoot = fallbackIfEmpty(settings.suiteVfsRoot,
                                      juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                                         .getChildFile("Creation Suite")
+                                         .getChildFile("Djehuti Suite")
                                          .getFullPathName());
     return juce::File(suiteRoot);
 }

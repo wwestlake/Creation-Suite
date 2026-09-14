@@ -32,7 +32,7 @@ constexpr std::uint32_t sha256RoundConstants[] =
 namespace creation::ui
 {
 SuiteDesktopAuthSession::SuiteDesktopAuthSession(juce::String appSlugToUse)
-    : juce::Thread("Creation Suite Desktop Auth"), appSlug(std::move(appSlugToUse))
+    : juce::Thread("Djehuti Suite Desktop Auth"), appSlug(std::move(appSlugToUse))
 {
     loadFromDisk();
 }
@@ -202,7 +202,7 @@ void SuiteDesktopAuthSession::run()
 
                     if (returnedState == pendingState && code.isNotEmpty())
                     {
-                        responseBody = createHtmlResponse("Sign-in complete", "You can return to Creation Suite now.");
+                        responseBody = createHtmlResponse("Sign-in complete", "You can return to Djehuti Suite now.");
                         responseCode = 200;
                         responseText = "OK";
                     }

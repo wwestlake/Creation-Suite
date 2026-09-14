@@ -52,16 +52,16 @@ juce::String getSuiteLogoDisplayName(SuiteLogoId logoId)
 {
     switch (logoId)
     {
-        case SuiteLogoId::suite: return "Creation Suite";
-        case SuiteLogoId::station: return "Creation Station";
-        case SuiteLogoId::engine: return "Creation Engine";
-        case SuiteLogoId::movie: return "Creation Movie";
-        case SuiteLogoId::live: return "Creation Live";
-        case SuiteLogoId::texture: return "Creation Texture";
-        case SuiteLogoId::modeler: return "Creation Modeler";
+        case SuiteLogoId::suite: return "Djehuti Suite";
+        case SuiteLogoId::station: return "Djehuti Station";
+        case SuiteLogoId::engine: return "Djehuti Engine";
+        case SuiteLogoId::movie: return "Djehuti Movie";
+        case SuiteLogoId::live: return "Djehuti Live";
+        case SuiteLogoId::texture: return "Djehuti Texture";
+        case SuiteLogoId::modeler: return "Djehuti Modeler";
     }
 
-    return "Creation Suite";
+    return "Djehuti Suite";
 }
 
 juce::Colour getSuiteLogoAccentColour(SuiteLogoId logoId)

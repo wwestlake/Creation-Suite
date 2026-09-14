@@ -10,7 +10,7 @@ juce::Colour hintColour() { return juce::Colour(0xff97a9c1); }
 
 SuiteEulaPanel::SuiteEulaPanel()
 {
-    titleLabel.setText("Creation Suite EULA", juce::dontSendNotification);
+    titleLabel.setText("Djehuti Suite EULA", juce::dontSendNotification);
     titleLabel.setFont(juce::Font(24.0f).boldened());
     titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(titleLabel);

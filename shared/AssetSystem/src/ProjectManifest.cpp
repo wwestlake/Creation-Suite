@@ -50,14 +50,14 @@ juce::String toDisplayName(SuiteAppDomain domain)
 {
     switch (domain)
     {
-        case SuiteAppDomain::station: return "Creation Station";
-        case SuiteAppDomain::engine: return "Creation Engine";
-        case SuiteAppDomain::movie: return "Creation Movie";
-        case SuiteAppDomain::live: return "Creation Live";
-        case SuiteAppDomain::texture: return "Creation Texture";
-        case SuiteAppDomain::modeler: return "Creation Modeler";
-        case SuiteAppDomain::developer: return "Creation Developer";
-        case SuiteAppDomain::suite: return "Creation Suite";
+        case SuiteAppDomain::station: return "Djehuti Station";
+        case SuiteAppDomain::engine: return "Djehuti Engine";
+        case SuiteAppDomain::movie: return "Djehuti Movie";
+        case SuiteAppDomain::live: return "Djehuti Live";
+        case SuiteAppDomain::texture: return "Djehuti Texture";
+        case SuiteAppDomain::modeler: return "Djehuti Modeler";
+        case SuiteAppDomain::developer: return "Djehuti Developer";
+        case SuiteAppDomain::suite: return "Djehuti Suite";
         case SuiteAppDomain::unknown: break;
     }
 
