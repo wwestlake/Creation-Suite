@@ -10,4 +10,5 @@ out/
 *.VC.opendb
 Secrets/
 third_party/jolt-vcpkg/vcpkg_installed/
+services/VfsService/vcpkg_installed/
 wiki/

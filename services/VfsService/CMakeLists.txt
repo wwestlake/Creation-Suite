@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.22)
 set(CREATION_SUITE_VFS_SERVICE_VERSION "0.0.1" CACHE STRING "Djehuti Suite VFS Service version")
 project(CreationSuiteVfsService VERSION ${CREATION_SUITE_VFS_SERVICE_VERSION} LANGUAGES CXX)
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../shared/CMake/CreationSuiteBuildSettings.cmake")
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -71,12 +73,26 @@ target_link_libraries(CreationSuiteVfsService PRIVATE
     juce::juce_recommended_warning_flags
 )
 
+creation_suite_get_shared_bin_dir(CREATION_VFS_SHARED_BIN_DIR)
+
+# Was hardcoded to "codex-<config>-bin" regardless of which agent built it --
+# every other suite target uses this same dynamic per-agent helper (see
+# CreationSuiteBuildSettings.cmake's creation_suite_get_shared_bin_dir/
+# creation_suite_add_shared_bin_copy), which resolves the agent id from the
+# checkout's own directory name (CreationSuite-<Agent>). A hardcoded
+# destination here meant every agent's build silently overwrote (or, once
+# that destination was locked by another agent's running process, failed to
+# overwrite) Codex's copy instead of producing its own -- and a client built
+# against a *different* agent's already-stale VfsService binary is exactly
+# what caused Djehuti Station to hang on startup after the AppData folder
+# rename (the client's rebuilt code expected the new folder name; the old
+# service binary still assumed the old one).
 add_custom_command(TARGET CreationSuiteVfsService POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "D:/CreationSuite-Workspaces/codex-$<LOWER_CASE:$<CONFIG>>-bin"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:CreationSuiteVfsService>" "D:/CreationSuite-Workspaces/codex-$<LOWER_CASE:$<CONFIG>>-bin/"
-    COMMAND cmd /c "if exist \"${CREATION_VFS_DLL_COPY_PREFIX}\\bin\\z.dll\" copy /Y \"${CREATION_VFS_DLL_COPY_PREFIX}\\bin\\z.dll\" \"D:\\CreationSuite-Workspaces\\codex-$<LOWER_CASE:$<CONFIG>>-bin\\\" >nul"
-    COMMAND cmd /c "if exist \"${CREATION_VFS_DLL_COPY_PREFIX}\\debug\\bin\\zd.dll\" copy /Y \"${CREATION_VFS_DLL_COPY_PREFIX}\\debug\\bin\\zd.dll\" \"D:\\CreationSuite-Workspaces\\codex-$<LOWER_CASE:$<CONFIG>>-bin\\\" >nul"
-    COMMENT "Copying CreationSuiteVfsService (and its runtime DLLs) to the shared codex bin directory"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CREATION_VFS_SHARED_BIN_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:CreationSuiteVfsService>" "${CREATION_VFS_SHARED_BIN_DIR}/"
+    COMMAND cmd /c "if exist \"${CREATION_VFS_DLL_COPY_PREFIX}\\bin\\z.dll\" copy /Y \"${CREATION_VFS_DLL_COPY_PREFIX}\\bin\\z.dll\" \"${CREATION_VFS_SHARED_BIN_DIR}\\\" >nul"
+    COMMAND cmd /c "if exist \"${CREATION_VFS_DLL_COPY_PREFIX}\\debug\\bin\\zd.dll\" copy /Y \"${CREATION_VFS_DLL_COPY_PREFIX}\\debug\\bin\\zd.dll\" \"${CREATION_VFS_SHARED_BIN_DIR}\\\" >nul"
+    COMMENT "Copying CreationSuiteVfsService (and its runtime DLLs) to the shared per-agent bin directory"
 )
 
 install(TARGETS CreationSuiteVfsService
