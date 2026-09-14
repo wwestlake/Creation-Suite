@@ -16,6 +16,7 @@ enum class SuiteAppDomain
     texture,
     modeler,
     developer,
+    engineer,
     // Reserved for the suite's own root data (AI settings, auth session, etc.), stored
     // directly under the VFS root's "suite/" folder by services/VfsService::VfsProjectStore
     // -- not a project folder at all, so this domain value exists only to keep

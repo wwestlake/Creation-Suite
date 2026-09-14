@@ -43,6 +43,7 @@ juce::String appDomainFolderName(creation::assets::SuiteAppDomain domain)
         case creation::assets::SuiteAppDomain::texture: return "Djehuti Texture";
         case creation::assets::SuiteAppDomain::modeler: return "Djehuti Modeler";
         case creation::assets::SuiteAppDomain::developer: return "Djehuti Developer";
+        case creation::assets::SuiteAppDomain::engineer: return "Djehuti Engineer";
         case creation::assets::SuiteAppDomain::suite: return "Suite";
         case creation::assets::SuiteAppDomain::unknown: break;
     }
