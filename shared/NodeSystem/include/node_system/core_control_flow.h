@@ -10,7 +10,22 @@ namespace ce::node_system {
 
 // Registers the Suite's generic execution nodes. The catalog is deliberately
 // host-neutral; FRust lowering and host actions are separate concerns.
+// Includes core.randomSelect (ControlFlowKind::RandomSelect -- a 50/50
+// Branch whose condition is always a call to core_random_bool() rather
+// than a wired pin), the one node here that IS host-extern: a host wanting
+// to use it must register "core_random_bool" before loading the compiled
+// plugin, same as any other host-extern node type. CoreRandomBool() below
+// is a ready-made real implementation every host can just point at, so
+// this one primitive doesn't need N per-app reimplementations the way a
+// domain-specific host-extern (engine_*, foley_*) rightly does.
 void RegisterCoreControlFlowNodes(NodeTypeRegistry& registry);
+
+// Real implementation for core.randomSelect's "core_random_bool" host
+// function -- register with PluginRuntime::registerHostFunction under
+// exactly that name. A plain coin flip (uniform, not cryptographically
+// secure -- there's no requirement stronger than "looks random" for a
+// Sequence/RandomSelect-style authoring primitive).
+bool CoreRandomBool();
 
 // Registers the exec-output-only Event nodes (On Tick / On Begin Play / On
 // End Play) that give an exec chain an explicit, visible start -- Node/

@@ -19,6 +19,13 @@ enum class ControlFlowKind {
     Break,
     Continue,
     Return,
+    // Same "true"/"false" exec-output shape as Branch, but the condition is
+    // never a wired pin -- it's always a call to the node type's own
+    // frustEntryPoint (a zero-argument, bool-returning host-extern
+    // function; see frust_codegen.cpp's lowering). Lets a graph express "50/
+    // 50 pick" without forcing the author to separately wire a random-bool
+    // source node into a plain Branch every time.
+    RandomSelect,
 };
 
 enum class MonadOperation {

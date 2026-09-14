@@ -73,7 +73,7 @@ Will own:
 
 Build target now scaffolded:
 
-- `creation_suite_cel`
+- `creation_suite_frust_plugin_runtime` (`shared/FrustPluginRuntime`, wrapping `third_party/FrustLang`)
 
 ### `shared/NodeSystem`
 

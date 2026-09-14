@@ -1,6 +1,7 @@
 #include "node_system/core_control_flow.h"
 
 #include <cctype>
+#include <cstdlib>
 #include <string>
 #include <utility>
 
@@ -61,6 +62,24 @@ void RegisterCoreControlFlowNodes(NodeTypeRegistry& registry)
     RegisterControlFlowNode(registry, "core.break", "Break", { In("execute", Exec()) }, {}, ControlFlowKind::Break);
     RegisterControlFlowNode(registry, "core.continue", "Continue", { In("execute", Exec()) }, {}, ControlFlowKind::Continue);
     RegisterControlFlowNode(registry, "core.return", "Return", { In("execute", Exec()) }, {}, ControlFlowKind::Return);
+
+    {
+        NodeTypeDescriptor descriptor;
+        descriptor.typeName = "core.randomSelect";
+        descriptor.domain = Domain::Core;
+        descriptor.inputs = { In("execute", Exec()) };
+        descriptor.outputs = { Out("true", Exec()), Out("false", Exec()) };
+        descriptor.controlFlow = ControlFlowKind::RandomSelect;
+        descriptor.displayName = "Random Select";
+        descriptor.frustEntryPoint = "core_random_bool";
+        descriptor.isHostExtern = true;
+        registry.Register(std::move(descriptor));
+    }
+}
+
+bool CoreRandomBool()
+{
+    return (std::rand() % 2) == 0;
 }
 
 namespace {

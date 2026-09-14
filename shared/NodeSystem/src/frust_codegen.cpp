@@ -357,6 +357,30 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
                     return false;
                 }
                 importNodeModules(*type);
+                // Mid-chain callable host-extern action nodes (a Foley
+                // PlaySample/GainMix calling into the real audio engine, for
+                // instance) are a real, exec-chain-only shape the flat
+                // pure-node pass above never visits (Domain::Event nodes are
+                // explicitly skipped there) -- so unlike that pass, nothing
+                // else in this function ever adds this node's declaration to
+                // externDeclarationsByName. Exec-chain callables have no Data
+                // output pin to draw a return type from (same "nothing
+                // meaningful to hand back" shape as core_trigger()), so the
+                // declared return is always the same trivial i64 every other
+                // exec-only callable already uses.
+                if (type->isHostExtern && !externDeclarationsByName.contains(type->frustEntryPoint)) {
+                    std::ostringstream decl;
+                    decl << "extern fn " << type->frustEntryPoint << "(";
+                    bool firstParam = true;
+                    for (const Pin& input : node->Inputs()) {
+                        if (input.type.kind == PinKind::Exec) continue;
+                        if (!firstParam) decl << ", ";
+                        firstParam = false;
+                        decl << input.name << ": " << FrustType(input.type.dataType);
+                    }
+                    decl << ") -> i64;\n";
+                    externDeclarationsByName[type->frustEntryPoint] = decl.str();
+                }
                 body << "    " << type->frustEntryPoint << "(";
                 bool first = true;
                 for (const Pin& input : node->Inputs()) {
@@ -384,6 +408,25 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
                     return false;
                 }
                 body << "    if (" << condExpr << ") {\n";
+                if (const Connection* trueConn = ExecConnectionFromOutputNamed(graph, *node, "true"))
+                    if (!lowerExecChain(trueConn->toNode)) return false;
+                body << "    } else {\n";
+                if (const Connection* falseConn = ExecConnectionFromOutputNamed(graph, *node, "false"))
+                    if (!lowerExecChain(falseConn->toNode)) return false;
+                body << "    };\n";
+                current = 0;
+                break;
+            }
+            case ControlFlowKind::RandomSelect: {
+                if (!type->isHostExtern || type->frustEntryPoint.empty()) {
+                    result.error = "random-select node " + std::to_string(current) +
+                                    " must be a host-extern node naming a zero-argument, bool-returning function";
+                    return false;
+                }
+                if (!externDeclarationsByName.contains(type->frustEntryPoint))
+                    externDeclarationsByName[type->frustEntryPoint] = "extern fn " + type->frustEntryPoint + "() -> bool;\n";
+                importNodeModules(*type);
+                body << "    if (" << type->frustEntryPoint << "()) {\n";
                 if (const Connection* trueConn = ExecConnectionFromOutputNamed(graph, *node, "true"))
                     if (!lowerExecChain(trueConn->toNode)) return false;
                 body << "    } else {\n";
