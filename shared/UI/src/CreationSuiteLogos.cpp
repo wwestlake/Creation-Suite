@@ -79,4 +79,11 @@ juce::Colour getSuiteLogoAccentColour(SuiteLogoId logoId)
 
     return juce::Colours::white;
 }
+
+juce::String getSuiteCopyrightText()
+{
+    const auto year = juce::Time::getCurrentTime().getYear();
+    return juce::String(juce::CharPointer_UTF8("\xc2\xa9")) + " " + juce::String(year)
+         + " LagDaemon Software. All rights reserved.";
+}
 }

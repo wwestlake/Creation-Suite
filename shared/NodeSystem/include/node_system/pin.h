@@ -25,10 +25,10 @@ enum class PinKind {
 // actually needs a new type, not speculatively.
 //
 // GS9: Entity added for the node catalog's OnStart/OnTick "self" output,
-// Spawn's result, and Get/SetPosition's entity input -- the language's
-// ce::lang::Type::Entity (an opaque i64 handle, no arithmetic, no
-// literal syntax) had no DataType counterpart until a real node needed
-// to carry one across a wire.
+// Spawn's result, and Get/SetPosition's entity input -- an opaque i64
+// handle crossing the FRust ABI (no arithmetic, no literal syntax; see
+// frust_codegen.cpp's FrustType(DataType::Entity) -> "i64") had no
+// DataType counterpart until a real node needed to carry one across a wire.
 enum class DataType {
     Any,
     Float,

@@ -1,12 +1,12 @@
 # Creation Suite Editor — Functional Specification
 
-Status: planning only, nothing implemented under this name yet. A real, working reference implementation already exists inside Creation Engine (`Source/Views/ScriptPanel.h`, `Source/Views/CelCodeTokeniser.h/.cpp`) and should be the extraction source, not a from-scratch build.
+Status: planning only, nothing implemented under this name yet. A real, working reference implementation exists inside Creation Engine's Pod editor (`Source/Views/PodEditorPanel.h/.cpp` — see its `FrustCodeTokeniser` class and `juce::CodeEditorComponent` wiring) and should be the extraction source, not a from-scratch build.
 
 ## 1. Overview And Core Philosophy
 
-Every suite app that touches FRust, JSON, or Markdown currently has to solve text editing on its own — or worse, not solve it and get a plain `juce::TextEditor` with no syntax awareness. Creation Engine already built a real FRust-aware editor (tokeniser + script panel) for its own use. Per the suite's shared-first design rule (see [[Shared-First-Feature-Design]]), that's exactly the kind of capability that should not be re-invented per app.
+Every suite app that touches FRust, JSON, or Markdown currently has to solve text editing on its own — or worse, not solve it and get a plain `juce::TextEditor` with no syntax awareness. Creation Engine already built a real FRust-aware editor (tokeniser + Pod source editor) for its own use. Per the suite's shared-first design rule (see [[Shared-First-Feature-Design]]), that's exactly the kind of capability that should not be re-invented per app.
 
-This spec proposes a **shared editor core** — not a new standalone "Creation X" app — that any suite app can embed: Engine's FRust script panel, Station's Patina DSL editor, Texture's material-graph FRust nodes, and wiki/doc editing anywhere in the suite (including, pointedly, the very `.md` files this session has been hand-editing all day).
+This spec proposes a **shared editor core** — not a new standalone "Creation X" app — that any suite app can embed: Engine's Pod source editor, Station's Script (FRust) editor, Texture's material-graph FRust nodes, and wiki/doc editing anywhere in the suite (including, pointedly, the very `.md` files this session has been hand-editing all day).
 
 Guiding principle: **the editor has one core, and per-format intelligence plugs into it.** Adding a new format means writing a language-service plugin, not a new editor.
 
@@ -14,7 +14,7 @@ Guiding principle: **the editor has one core, and per-format intelligence plugs 
 
 | Format | Depth | Backing |
 |---|---|---|
-| FRust | Deep — real tokens, real diagnostics, real symbols | `FRust` frontend (lexer, `sema.h`, `diagnostics.h`) |
+| FRust | Deep — real tokens; diagnostics/symbols still TBD | `third_party/FrustLang`'s own frontend (`Lexer.h`, `AST.h`, `Codegen.h`) — note this doesn't expose a clean, embeddable diagnostics/sema library yet; see the Diagnostics note under §3 below |
 | JSON | Schema-aware | Validates against suite manifest schemas (`ProjectManifest`, `AssetCatalog`, etc.) where a document's type is known |
 | Markdown | Structural + preview | Heading/link/code-fence aware; live preview pane; this is the format the suite's own wikis and docs are written in |
 | Math notation (within Markdown) | Preview-rendered | KaTeX — inline `$...$` and block `$$...$$` LaTeX math rendered in the Markdown preview pane |
@@ -24,10 +24,10 @@ Non-goal: this is not meant to become a general-purpose C++/GLSL IDE. Other lang
 
 ## 3. Code-Level Editing Capabilities
 
-- syntax highlighting via a per-format `CodeTokeniser` (FRust's `CelCodeTokeniser` in Engine is the reference to extract, not reinvent)
-- real diagnostics, not guesses: for FRust, run the shared `ce::lang::DiagnosticEngine` (lexer/parser/sema) on edit-pause or save and surface `Diagnostic{code, severity, loc, message}` as inline squiggles + a problems list — this is a real compiler frontend already, not a heuristic linter
+- syntax highlighting via a per-format `CodeTokeniser` (Engine's `FrustCodeTokeniser`, `Source/Views/PodEditorPanel.cpp`, is the reference to extract, not reinvent)
+- real diagnostics, not guesses — **not yet possible for FRust as a live, edit-pause check**: FRust has no embeddable parse/sema library today, only the `frust_compiler` CLI (parses, runs sema/codegen, reports errors to stderr) and `frust_plugin_host`'s JIT load path (requires a `manifest "...";` declaration). Station's own DslPanel (`apps/CreationStation/Source/Views/DslPanel.cpp`) shells out to `frust_compiler --emit-obj` per Compile click as its current workaround — real inline-squiggle diagnostics would need either a genuinely embeddable FRust frontend library (doesn't exist yet) or a debounced background `frust_compiler` invocation per edit pause, not a design this spec should assume is trivial.
 - bracket/paren matching, auto-indent, code folding
-- symbol outline / go-to-definition for FRust, sourced from `sema` output, not regex
+- symbol outline / go-to-definition for FRust: not sourced from anything today (no sema output to source it from) — out of scope until the diagnostics gap above is resolved
 - multi-cursor editing
 - find/replace with regex support
 
@@ -76,18 +76,18 @@ public:
 ## 6. Suite Integration
 
 - documents open/save through `shared/AssetSystem`/VFS like every other suite asset — a `.frust` script, a project's JSON manifest, and a wiki page are all suite assets with identity, versioning, and provenance, not bare file-path edits (consistent with [[System-Architecture]] §1–2)
-- FRust diagnostics come from the real shared frontend once Engine's FRust migration lands (see [[Roadmap]] Phase 4) — until then, this can temporarily depend on Engine's local `Language/` build as a stopgap, clearly marked as such
+- FRust diagnostics come from a real shared frontend once one exists (see [[Roadmap]] Phase 4) — FRust itself doesn't yet expose an embeddable parse/sema library (see §3's diagnostics note); this item is blocked on that
 - AI-assist hooks route through `shared/Services` (`SuiteAiService`) for "explain this error," "suggest a fix," or "draft this doc section" — reusing the suite's existing AI/BYOK plumbing rather than a bespoke integration
 
 ## 7. Relationship To Existing Code
 
-Creation Engine's `Source/Views/ScriptPanel.h` and `Source/Views/CelCodeTokeniser.h/.cpp` are a **real, working reference implementation** of exactly this idea, scoped to one app. The recommended path is extraction, not parallel construction:
+Creation Engine's `Source/Views/PodEditorPanel.h/.cpp` (specifically its `FrustCodeTokeniser` class and `juce::CodeEditorComponent` wiring) is a **real, working reference implementation** of exactly this idea, scoped to one app. The recommended path is extraction, not parallel construction:
 
-1. Move `CelCodeTokeniser` into `shared/Editor` as the FRust `LanguageService`'s tokeniser, generalizing anything Engine-specific.
+1. Move `FrustCodeTokeniser` into `shared/Editor` as the FRust `LanguageService`'s tokeniser, generalizing anything Engine-specific.
 2. Build the generic `SuiteEditorPanel`/`EditorDocument`/`LanguageService` shell around it.
 3. Add `JsonLanguageService` and `MarkdownLanguageService`.
-4. Cut Engine's `ScriptPanel` over to consume `shared/Editor` instead of owning its tokeniser locally — same pattern as every other shared-extraction in [[Roadmap]].
-5. Offer the panel to Station (Patina), Texture (material-graph FRust), and wiki/doc editing wherever the suite ends up wanting an in-app markdown editor.
+4. Cut Engine's Pod editor over to consume `shared/Editor` instead of owning its tokeniser locally — same pattern as every other shared-extraction in [[Roadmap]].
+5. Offer the panel to Station (its own Script/FRust editor, `DslPanel`), Texture (material-graph FRust), and wiki/doc editing wherever the suite ends up wanting an in-app markdown editor.
 
 ## 8. Non-Goals
 
