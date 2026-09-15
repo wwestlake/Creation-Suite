@@ -34,6 +34,7 @@ public:
     void showProjectBrowser();
     bool openProject(const juce::String& projectId);
     void showAssetManager();
+    void showFratePods();
     void showSuiteEula();
     void openSuiteSignIn();
     void openSuiteProfile();
@@ -52,6 +53,8 @@ private:
     void closeProjectBrowserWindow();
     void showAssetManagerWindow();
     void closeAssetManagerWindow();
+    void showFratePodsWindow();
+    void closeFratePodsWindow();
     void showEulaWindow();
     void closeEulaWindow();
     void chooseSuiteDirectory(const juce::String& fieldId);
@@ -76,6 +79,7 @@ private:
     std::unique_ptr<juce::DocumentWindow> suiteSettingsWindow;
     std::unique_ptr<juce::DocumentWindow> projectBrowserWindow;
     std::unique_ptr<juce::DocumentWindow> assetManagerWindow;
+    std::unique_ptr<juce::DocumentWindow> frateWindow;
     std::unique_ptr<juce::DocumentWindow> eulaWindow;
     juce::Component::SafePointer<SuiteSettingsPanel> suiteSettingsPanel;
     std::unique_ptr<juce::FileChooser> suiteDirectoryChooser;
