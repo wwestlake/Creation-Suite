@@ -4,6 +4,8 @@
 
 #include <creation/suite/SuiteStoragePaths.h>
 
+#include <thread>
+
 namespace
 {
 juce::File getDefaultSuiteStorageBrowseRoot()
@@ -600,6 +602,224 @@ private:
     juce::TextButton deleteButton;
 };
 
+// Read-only browse of the public Frate pod registry -- no sign-in required,
+// matches GET /api/frate/browse (lagdaemon.com) never checking auth. Fetches
+// happen on a detached background thread; the result only ever touches this
+// component again via a SafePointer-guarded MessageManager::callAsync, so a
+// fetch that completes after the panel/window has already been closed is a
+// safe no-op instead of touching a dangling `this` (the class of bug fixed
+// in Djehuti Station's own feedback-system VFS calls).
+class FratePodsBrowserPanel final : public juce::Component,
+                                    public juce::ListBoxModel
+{
+public:
+    FratePodsBrowserPanel()
+    {
+        titleLabel.setText("Frate Pods", juce::dontSendNotification);
+        titleLabel.setFont(juce::Font(22.0f).boldened());
+        titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+        addAndMakeVisible(titleLabel);
+
+        subtitleLabel.setText("Browse the Frust package registry. No sign-in required to browse or install.",
+                              juce::dontSendNotification);
+        subtitleLabel.setColour(juce::Label::textColourId, juce::Colour(0xff8ba1bc));
+        addAndMakeVisible(subtitleLabel);
+
+        searchEditor.setTextToShowWhenEmpty("Search pods...", juce::Colour(0xff677b93));
+        searchEditor.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff16202c));
+        searchEditor.setColour(juce::TextEditor::outlineColourId, juce::Colour(0xff2d3e54));
+        searchEditor.setColour(juce::TextEditor::textColourId, juce::Colours::white);
+        searchEditor.onTextChange = [this] { startSearchDebounce(); };
+        addAndMakeVisible(searchEditor);
+
+        statusLabel.setColour(juce::Label::textColourId, juce::Colour(0xff8ba1bc));
+        statusLabel.setJustificationType(juce::Justification::centredRight);
+        addAndMakeVisible(statusLabel);
+
+        listBox.setModel(this);
+        listBox.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff121a24));
+        listBox.setColour(juce::ListBox::outlineColourId, juce::Colour(0xff253549));
+        listBox.setRowHeight(60);
+        addAndMakeVisible(listBox);
+
+        prevButton.setButtonText("< Prev");
+        prevButton.onClick = [this] { if (page > 1) { --page; fetchPage(); } };
+        addAndMakeVisible(prevButton);
+
+        nextButton.setButtonText("Next >");
+        nextButton.onClick = [this] { ++page; fetchPage(); };
+        addAndMakeVisible(nextButton);
+
+        pageLabel.setJustificationType(juce::Justification::centred);
+        pageLabel.setColour(juce::Label::textColourId, juce::Colour(0xff8ba1bc));
+        addAndMakeVisible(pageLabel);
+
+        fetchPage();
+    }
+
+    ~FratePodsBrowserPanel() override
+    {
+        // Any in-flight fetch's callAsync lambda holds a SafePointer, not a
+        // raw `this` -- it checks itself and no-ops if this has already been
+        // destroyed by the time it runs, so nothing to cancel here.
+    }
+
+    int getNumRows() override { return (int) entries.size(); }
+
+    void paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected) override
+    {
+        if (rowIsSelected)
+            g.fillAll(juce::Colour(0xff273e5e));
+        else if (rowNumber % 2 == 0)
+            g.fillAll(juce::Colour(0xff161f2c));
+        else
+            g.fillAll(juce::Colour(0xff1a2434));
+
+        if (! juce::isPositiveAndBelow(rowNumber, entries.size()))
+            return;
+
+        const auto& entry = entries[(size_t) rowNumber];
+
+        g.setColour(juce::Colours::white);
+        g.setFont(juce::Font(15.0f).boldened());
+        g.drawText(entry.name, 14, 4, width - 160, 20, juce::Justification::centredLeft, true);
+
+        g.setColour(juce::Colour(0xff74caff));
+        g.setFont(12.0f);
+        g.drawText("v" + entry.version + "  |  " + entry.license, width - 220, 4, 210, 20, juce::Justification::centredRight, true);
+
+        g.setColour(juce::Colour(0xff8da3c0));
+        g.setFont(12.0f);
+        g.drawText(entry.description, 14, 26, width - 28, 30, juce::Justification::topLeft, true);
+    }
+
+    void resized() override
+    {
+        auto area = getLocalBounds().reduced(18);
+        auto header = area.removeFromTop(32);
+        titleLabel.setBounds(header);
+
+        area.removeFromTop(4);
+        subtitleLabel.setBounds(area.removeFromTop(20));
+        area.removeFromTop(10);
+
+        auto searchRow = area.removeFromTop(28);
+        searchEditor.setBounds(searchRow.removeFromLeft(280));
+        searchRow.removeFromLeft(8);
+        statusLabel.setBounds(searchRow);
+        area.removeFromTop(10);
+
+        auto footer = area.removeFromBottom(30);
+        prevButton.setBounds(footer.removeFromLeft(90));
+        nextButton.setBounds(footer.removeFromRight(90));
+        pageLabel.setBounds(footer);
+        area.removeFromBottom(10);
+
+        listBox.setBounds(area);
+    }
+
+private:
+    struct PodEntry
+    {
+        juce::String name, description, version, license;
+    };
+
+    void startSearchDebounce()
+    {
+        ++searchGeneration;
+        auto myGeneration = searchGeneration;
+        juce::Component::SafePointer<FratePodsBrowserPanel> safeThis(this);
+        juce::Timer::callAfterDelay(300, [safeThis, myGeneration]
+        {
+            if (safeThis == nullptr || safeThis->searchGeneration != myGeneration)
+                return;
+            safeThis->page = 1;
+            safeThis->fetchPage();
+        });
+    }
+
+    void fetchPage()
+    {
+        auto query = searchEditor.getText();
+        auto requestedPage = page;
+        statusLabel.setText("Loading...", juce::dontSendNotification);
+
+        juce::Component::SafePointer<FratePodsBrowserPanel> safeThis(this);
+        std::thread([safeThis, query, requestedPage]
+        {
+            juce::String url = "https://lagdaemon.com/djehuti/api/frate/browse?page=" + juce::String(requestedPage) + "&pageSize=10";
+            if (query.isNotEmpty())
+                url += "&q=" + juce::URL::addEscapeChars(query, false);
+
+            int statusCode = 0;
+            std::unique_ptr<juce::InputStream> stream(juce::URL(url).createInputStream(
+                juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                    .withConnectionTimeoutMs(10000)
+                    .withStatusCode(&statusCode)));
+            juce::String responseStr = (stream != nullptr) ? stream->readEntireStreamAsString() : juce::String();
+            auto parsed = juce::JSON::parse(responseStr);
+
+            juce::MessageManager::callAsync([safeThis, parsed, statusCode, requestedPage]
+            {
+                if (safeThis == nullptr)
+                    return;
+                safeThis->applyFetchResult(parsed, statusCode, requestedPage);
+            });
+        }).detach();
+    }
+
+    void applyFetchResult(const juce::var& parsed, int statusCode, int requestedPage)
+    {
+        auto* obj = parsed.getDynamicObject();
+        if (statusCode != 200 || obj == nullptr)
+        {
+            statusLabel.setText("Could not reach the pod registry.", juce::dontSendNotification);
+            return;
+        }
+
+        page = requestedPage;
+        entries.clear();
+        total = (int) obj->getProperty("total");
+        if (auto* podsArr = obj->getProperty("pods").getArray())
+        {
+            for (auto& item : *podsArr)
+            {
+                if (auto* podObj = item.getDynamicObject())
+                {
+                    PodEntry entry;
+                    entry.name = podObj->getProperty("name").toString();
+                    entry.description = podObj->getProperty("description").toString();
+                    entry.version = podObj->getProperty("latestVersion").toString();
+                    entry.license = podObj->getProperty("license").toString();
+                    entries.push_back(entry);
+                }
+            }
+        }
+
+        listBox.updateContent();
+        prevButton.setEnabled(page > 1);
+        nextButton.setEnabled(page * 10 < total);
+        auto totalPages = juce::jmax(1, (total + 9) / 10);
+        pageLabel.setText("Page " + juce::String(page) + " of " + juce::String(totalPages) + " (" + juce::String(total) + " pods)",
+                          juce::dontSendNotification);
+        statusLabel.setText(entries.empty() ? "No pods found." : juce::String(), juce::dontSendNotification);
+    }
+
+    juce::Label titleLabel;
+    juce::Label subtitleLabel;
+    juce::TextEditor searchEditor;
+    juce::Label statusLabel;
+    juce::ListBox listBox;
+    juce::TextButton prevButton;
+    juce::TextButton nextButton;
+    juce::Label pageLabel;
+
+    std::vector<PodEntry> entries;
+    int page = 1;
+    int total = 0;
+    int searchGeneration = 0;
+};
+
 }
 
 namespace creation::ui
@@ -658,6 +878,7 @@ void SuiteShellController::attach(CreationSuiteHeaderBar& headerBarToUse,
     headerBar->onSuiteRequested = [this] { showSuiteSettingsWindow(); };
     headerBar->onProjectMenuRequested = [this] { showProjectBrowserWindow(); };
     headerBar->onAssetManagerRequested = [this] { showAssetManagerWindow(); };
+    headerBar->onPodsRequested = [this] { showFratePodsWindow(); };
     headerBar->onSignInRequested = [this] { beginSuiteSignIn(); };
     headerBar->onOpenProfilePageRequested = [this] { openLagDaemonProfile(); };
     headerBar->onLogoutRequested = [this] { logoutProfile(); };
@@ -696,6 +917,11 @@ bool SuiteShellController::openProject(const juce::String& projectId)
 void SuiteShellController::showAssetManager()
 {
     showAssetManagerWindow();
+}
+
+void SuiteShellController::showFratePods()
+{
+    showFratePodsWindow();
 }
 
 void SuiteShellController::showSuiteEula()
@@ -820,6 +1046,33 @@ void SuiteShellController::showAssetManagerWindow()
 void SuiteShellController::closeAssetManagerWindow()
 {
     assetManagerWindow.reset();
+}
+
+void SuiteShellController::showFratePodsWindow()
+{
+    if (frateWindow != nullptr)
+    {
+        frateWindow->toFront(true);
+        return;
+    }
+
+    auto panel = std::make_unique<FratePodsBrowserPanel>();
+    auto window = std::make_unique<ManagedDocumentWindow>("Frate Pods",
+                                                          config.backgroundColour,
+                                                          juce::DocumentWindow::allButtons,
+                                                          [this] { closeFratePodsWindow(); });
+    window->setUsingNativeTitleBar(true);
+    window->setResizable(true, true);
+    window->setContentOwned(panel.release(), true);
+    window->centreWithSize(720, 560);
+    window->setVisible(true);
+    frateWindow = std::move(window);
+    setStatus("Opened Frate pods browser.");
+}
+
+void SuiteShellController::closeFratePodsWindow()
+{
+    frateWindow.reset();
 }
 
 void SuiteShellController::showEulaWindow()
