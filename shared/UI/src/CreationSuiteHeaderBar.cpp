@@ -346,6 +346,10 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
     assetsButton.setTooltip("Open the Suite Asset Manager");
     addAndMakeVisible(assetsButton);
 
+    podsButton.onClick = [this, callback] { callback(onPodsRequested); };
+    podsButton.setTooltip("Browse Frate Pods");
+    addAndMakeVisible(podsButton);
+
     suiteButton.onClick = [this, callback] { callback(onSuiteRequested); };
     suiteButton.setTooltip("Open suite settings");
     addAndMakeVisible(suiteButton);
@@ -710,6 +714,7 @@ void CreationSuiteHeaderBar::resized()
     constexpr int suiteButtonWidth = 44;
     constexpr int audioButtonWidth = 72;
     constexpr int assetsButtonWidth = 72;
+    constexpr int podsButtonWidth = 64;
     constexpr int tourButtonWidth = 68;
     constexpr int aboutButtonWidth = 32;
     constexpr int utilityGap = 6;
@@ -720,9 +725,10 @@ void CreationSuiteHeaderBar::resized()
     const int reservedUtilityWidth = suiteButtonWidth
                                      + audioButtonWidth
                                      + assetsButtonWidth
+                                     + podsButtonWidth
                                      + tourButtonWidth
                                      + aboutButtonWidth
-                                     + (utilityGap * 4)
+                                     + (utilityGap * 5)
                                      + projectGap;
     const int availableProjectWidth = utilityRow.getWidth() - reservedUtilityWidth;
     const int projectWidth = availableProjectWidth >= minimumProjectWidth
@@ -746,6 +752,8 @@ void CreationSuiteHeaderBar::resized()
     audioButton.setBounds(utilityRow.removeFromLeft(juce::jmin(audioButtonWidth, utilityRow.getWidth())));
     placeUtilityGap(utilityGap);
     assetsButton.setBounds(utilityRow.removeFromLeft(juce::jmin(assetsButtonWidth, utilityRow.getWidth())));
+    placeUtilityGap(utilityGap);
+    podsButton.setBounds(utilityRow.removeFromLeft(juce::jmin(podsButtonWidth, utilityRow.getWidth())));
     placeUtilityGap(utilityGap);
     tourButton.setBounds(utilityRow.removeFromLeft(juce::jmin(tourButtonWidth, utilityRow.getWidth())));
     placeUtilityGap(utilityGap);
