@@ -634,6 +634,17 @@ public:
         nextButton.onClick = [this] { ++page; fetchPage(); };
         addAndMakeVisible(nextButton);
 
+        pageSizeCombo.addItem("10 / page", 10);
+        pageSizeCombo.addItem("20 / page", 20);
+        pageSizeCombo.setSelectedId(10, juce::dontSendNotification);
+        pageSizeCombo.onChange = [this]
+        {
+            pageSize = pageSizeCombo.getSelectedId();
+            page = 1;
+            fetchPage();
+        };
+        addAndMakeVisible(pageSizeCombo);
+
         pageLabel.setJustificationType(juce::Justification::centred);
         pageLabel.setColour(juce::Label::textColourId, juce::Colour(0xff8ba1bc));
         addAndMakeVisible(pageLabel);
@@ -690,6 +701,8 @@ public:
         auto searchRow = area.removeFromTop(28);
         searchEditor.setBounds(searchRow.removeFromLeft(280));
         searchRow.removeFromLeft(8);
+        pageSizeCombo.setBounds(searchRow.removeFromLeft(90));
+        searchRow.removeFromLeft(8);
         statusLabel.setBounds(searchRow);
         area.removeFromTop(10);
 
@@ -726,12 +739,13 @@ private:
     {
         auto query = searchEditor.getText();
         auto requestedPage = page;
+        auto requestedPageSize = pageSize;
         statusLabel.setText("Loading...", juce::dontSendNotification);
 
         juce::Component::SafePointer<FratePodsBrowserPanel> safeThis(this);
-        std::thread([safeThis, query, requestedPage]
+        std::thread([safeThis, query, requestedPage, requestedPageSize]
         {
-            juce::String url = "https://lagdaemon.com/djehuti/api/frate/browse?page=" + juce::String(requestedPage) + "&pageSize=10";
+            juce::String url = "https://lagdaemon.com/djehuti/api/frate/browse?page=" + juce::String(requestedPage) + "&pageSize=" + juce::String(requestedPageSize);
             if (query.isNotEmpty())
                 url += "&q=" + juce::URL::addEscapeChars(query, false);
 
@@ -782,8 +796,8 @@ private:
 
         listBox.updateContent();
         prevButton.setEnabled(page > 1);
-        nextButton.setEnabled(page * 10 < total);
-        auto totalPages = juce::jmax(1, (total + 9) / 10);
+        nextButton.setEnabled(page * pageSize < total);
+        auto totalPages = juce::jmax(1, (total + pageSize - 1) / pageSize);
         pageLabel.setText("Page " + juce::String(page) + " of " + juce::String(totalPages) + " (" + juce::String(total) + " pods)",
                           juce::dontSendNotification);
         statusLabel.setText(entries.empty() ? "No pods found." : juce::String(), juce::dontSendNotification);
@@ -797,9 +811,11 @@ private:
     juce::TextButton prevButton;
     juce::TextButton nextButton;
     juce::Label pageLabel;
+    juce::ComboBox pageSizeCombo;
 
     std::vector<PodEntry> entries;
     int page = 1;
+    int pageSize = 10;
     int total = 0;
     int searchGeneration = 0;
 };
