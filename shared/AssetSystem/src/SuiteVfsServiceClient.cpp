@@ -3,9 +3,38 @@
 #include <creation/services/SuiteProcessRegistry.h>
 #include <creation/suite/SuiteSettings.h>
 
+#include <atomic>
+#include <mutex>
+
 namespace
 {
 constexpr const char* kServiceAppId = "CreationSuiteVfsService";
+
+// Real bug fixed here: discover() used to be a genuine no-op only within a
+// single client instance's own lifetime. Every SuiteVfsJsonStore/
+// ProjectContainerService call constructs its own throwaway
+// SuiteVfsServiceClient, so when the service isn't already registered, each
+// of the many independent calls made during a single app startup (settings
+// load, project list, control-surface mappings, settings save, ...)
+// redundantly spawned another copy of the service process and blocked the
+// calling thread -- the message thread, during MainComponent's constructor
+// -- for up to its own fresh 10-second poll. Stacked across ~6+ call sites
+// that's a full minute or more of "Not Responding", which is what actually
+// produced the startup hang, not any one blocking call by itself. Caching
+// the launch attempt process-wide makes that spawn+poll happen at most once
+// per run; the cheap registry scan below still runs every call so a service
+// that comes up later (or was already found) is still picked up instantly.
+std::mutex& discoveryMutex()
+{
+    static std::mutex m;
+    return m;
+}
+
+std::atomic<bool>& launchAttempted()
+{
+    static std::atomic<bool> b { false };
+    return b;
+}
 
 // Real bug fixed here: this used to be a hardcoded dev-tree literal
 // ("D:/CreationSuite-Workspaces/codex-{debug,release}-bin"), unreachable
@@ -35,6 +64,27 @@ bool SuiteVfsServiceClient::discover(int timeoutMs)
             return true;
         }
     }
+
+    // Someone else already tried (and failed) to launch it this run -- don't
+    // pile on another spawn-and-wait. The scan above already covers the case
+    // where it came up in the meantime.
+    if (launchAttempted().load(std::memory_order_acquire))
+        return false;
+
+    std::lock_guard<std::mutex> lock(discoveryMutex());
+    if (launchAttempted().load(std::memory_order_acquire))
+        return false;
+
+    for (const auto& record : creation::services::SuiteProcessRegistry::EnumerateLiveProcesses())
+    {
+        if (record.appId == kServiceAppId && record.httpPort > 0)
+        {
+            httpPort_ = record.httpPort;
+            return true;
+        }
+    }
+
+    launchAttempted().store(true, std::memory_order_release);
 
     const auto serviceExe = findServiceExecutable();
     if (! serviceExe.existsAsFile())
