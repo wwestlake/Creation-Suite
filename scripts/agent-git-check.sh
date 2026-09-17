@@ -142,6 +142,33 @@ check_repo() {
             echo "$sm_drift" | sed 's/^/  /'
             repo_problem=1
         fi
+
+        # 6b. The OTHER direction, and the one that actually bit us
+        # (2026-09-17, after already happening once on 2026-09-14): a
+        # gitlink can look perfectly "in sync" (checked-out commit matches
+        # the index exactly) while still pointing at a commit that was
+        # never merged into that submodule's own origin/master -- a
+        # feature-branch tip pushed and gitlink-bumped to *before* its PR
+        # was actually merged. `git submodule status` alone cannot catch
+        # this; it only compares checked-out-vs-recorded, never checks
+        # against the submodule's remote history. For each submodule with
+        # a recorded gitlink, confirm that commit is an ancestor of the
+        # submodule's own origin/master -- if not, whoever committed this
+        # gitlink bump did it before that submodule's PR was merged.
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            local sm_path sm_commit
+            sm_commit=$(echo "$line" | awk '{print $1}' | sed 's/^[+-]//')
+            sm_path=$(echo "$line" | awk '{print $2}')
+            [[ -z "$sm_path" || ! -d "$repo/$sm_path/.git" && ! -f "$repo/$sm_path/.git" ]] && continue
+            if ! git -C "$repo/$sm_path" cat-file -e "$sm_commit" 2>/dev/null; then
+                continue # not fetched locally -- can't check, don't false-flag
+            fi
+            if ! git -C "$repo/$sm_path" merge-base --is-ancestor "$sm_commit" origin/master 2>/dev/null; then
+                echo "${RED}${sm_path}: recorded gitlink ${sm_commit:0:12} is NOT an ancestor of its origin/master${RESET} -- this gitlink was bumped to a pre-merge branch tip, not the real merged commit. Fix: sync ${sm_path} to origin/master, then re-commit the gitlink."
+                repo_problem=1
+            fi
+        done < <(git -C "$repo" submodule status 2>/dev/null)
     fi
 
     if [[ $repo_problem -ne 0 ]]; then
