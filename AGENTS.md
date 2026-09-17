@@ -197,6 +197,10 @@ Use `Debug` builds by default for normal development, testing, and troubleshooti
 - Do not assume `Release` just because a build is meant to be runnable.
 - When reporting a build result, name the configuration you actually built.
 
+### Single-Core Build Rule
+
+Do not build with multi-core/parallel flags (`/m`, `--parallel`, `-j`) unless the user explicitly asks for a parallel build in that conversation. Build single-core by default — e.g. `cmake --build . --config Debug --target <Target> -- /m:1` for MSBuild-generated projects. This applies per-invocation and also means not running multiple app builds concurrently in the background at once; run builds one at a time. Requested directly by the user on 2026-08-22 after concurrent/multi-core background builds were making the machine sluggish during an active session.
+
 ### Shared Bin Directory Rule
 
 Every agent maintains its own workspace-level shared bin directories, one per build configuration, at `D:\CreationSuite-Workspaces\<agent>-debug-bin\` and `D:\CreationSuite-Workspaces\<agent>-release-bin\` (e.g. Claude's are `claude-debug-bin`/`claude-release-bin`). These give a stable, no-need-to-hunt-for-it path to the latest built executable of every app in the suite, regardless of which app's build tree it actually lives in.
