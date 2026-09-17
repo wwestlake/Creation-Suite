@@ -59,6 +59,14 @@ public:
     PodResolveStatus resolve(const std::string& name, const std::string& version,
                               juce::File& outPodDir);
 
+    // This resolver's extraction root has the exact same <root>/<name>/
+    // <version>/ shape frate::FrateCache uses -- a caller that wants
+    // `frate build` itself to see pods this resolver already materialized
+    // (via the FRATE_CACHE_DIR environment variable frate::FrateCache
+    // already honors as its highest-priority override) can point it
+    // straight here instead of re-deriving the path.
+    const juce::File& localExtractRoot() const noexcept { return localExtractRoot_; }
+
 private:
     creation::services::SuiteVfsServiceClient& vfsClient_;
     frate::FrateRegistryClient& registryClient_;

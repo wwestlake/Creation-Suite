@@ -17,6 +17,7 @@ endif()
 
 add_library(creation_suite_frate_pod_cache STATIC
     src/FratePodVfsResolver.cpp
+    src/SuiteFrateBuildService.cpp
 )
 
 if(NOT TARGET frate_pod_cache)
@@ -39,3 +40,21 @@ target_link_libraries(CreationSuiteFratePodCacheSmoke PRIVATE
     creation_suite_frate_pod_cache
 )
 add_test(NAME creation_suite_frate_pod_cache_smoke COMMAND CreationSuiteFratePodCacheSmoke)
+
+if(NOT TARGET frate_cli)
+    message(FATAL_ERROR "FratePodCache's build-service smoke test requires the frate_cli target (add shared/FrustPluginRuntime first, which pulls it in transitively).")
+endif()
+
+add_executable(CreationSuiteFrateBuildServiceSmoke
+    tests/SuiteFrateBuildServiceSmoke.cpp
+)
+target_link_libraries(CreationSuiteFrateBuildServiceSmoke PRIVATE
+    creation_suite_frate_pod_cache
+)
+# The real, already-built frate.exe from this same CMake tree -- not a
+# guessed relative path, and not a second build of frate_cli.
+target_compile_definitions(CreationSuiteFrateBuildServiceSmoke PRIVATE
+    FRATE_EXECUTABLE_PATH="$<TARGET_FILE:frate_cli>"
+)
+add_dependencies(CreationSuiteFrateBuildServiceSmoke frate_cli)
+add_test(NAME creation_suite_frate_build_service_smoke COMMAND CreationSuiteFrateBuildServiceSmoke)
