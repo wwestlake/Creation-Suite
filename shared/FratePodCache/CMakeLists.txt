@@ -1,0 +1,41 @@
+cmake_minimum_required(VERSION 3.22)
+project(CreationSuiteFratePodCache LANGUAGES CXX)
+
+# Depends on frate_lib (FrateRegistryClient -- brought in transitively by
+# shared/FrustPluginRuntime, which already add_subdirectory's
+# third_party/FrustLang/projects/05_frate) and creation_suite_asset_system
+# (SuiteVfsServiceClient). Deliberately NOT added by shared/CMakeLists.txt
+# unconditionally -- same reasoning as shared/NodeLibraryLoader: a
+# consuming app's own CMakeLists.txt must add_subdirectory both of those
+# (guarded the same way) before this one.
+if(NOT TARGET frate_lib)
+    message(FATAL_ERROR "FratePodCache requires frate_lib (add shared/FrustPluginRuntime first).")
+endif()
+if(NOT TARGET creation_suite_asset_system)
+    message(FATAL_ERROR "FratePodCache requires creation_suite_asset_system's SuiteVfsServiceClient to already exist.")
+endif()
+
+add_library(creation_suite_frate_pod_cache STATIC
+    src/FratePodVfsResolver.cpp
+)
+
+if(NOT TARGET frate_pod_cache)
+    add_library(frate_pod_cache ALIAS creation_suite_frate_pod_cache)
+endif()
+
+target_include_directories(creation_suite_frate_pod_cache PUBLIC include)
+target_compile_features(creation_suite_frate_pod_cache PUBLIC cxx_std_20)
+target_link_libraries(creation_suite_frate_pod_cache
+    PUBLIC
+        frate_lib
+        creation_suite_asset_system
+        juce::juce_core
+)
+
+add_executable(CreationSuiteFratePodCacheSmoke
+    tests/FratePodVfsResolverSmoke.cpp
+)
+target_link_libraries(CreationSuiteFratePodCacheSmoke PRIVATE
+    creation_suite_frate_pod_cache
+)
+add_test(NAME creation_suite_frate_pod_cache_smoke COMMAND CreationSuiteFratePodCacheSmoke)
