@@ -7,6 +7,7 @@ juce::String toStorageToken(AssetKind kind)
     switch (kind)
     {
         case AssetKind::audio: return "audio";
+        case AssetKind::video: return "video";
         case AssetKind::render: return "render";
         case AssetKind::patch: return "patch";
         case AssetKind::foleyPatch: return "foleyPatch";
@@ -33,6 +34,7 @@ AssetKind assetKindFromStorageToken(const juce::String& token)
 {
     auto normalized = token.trim().toLowerCase();
     if (normalized == "audio") return AssetKind::audio;
+    if (normalized == "video") return AssetKind::video;
     if (normalized == "render") return AssetKind::render;
     if (normalized == "patch") return AssetKind::patch;
     if (normalized == "foleypatch") return AssetKind::foleyPatch;
@@ -57,6 +59,7 @@ juce::String toDisplayName(AssetKind kind)
     switch (kind)
     {
         case AssetKind::audio: return "Audio";
+        case AssetKind::video: return "Video";
         case AssetKind::render: return "Render";
         case AssetKind::patch: return "Patch";
         case AssetKind::foleyPatch: return "Foley Patch";

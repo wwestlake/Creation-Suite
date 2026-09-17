@@ -13,6 +13,7 @@ enum class AssetKind
 {
     unknown,
     audio,
+    video,
     render,
     patch,
     foleyPatch,
