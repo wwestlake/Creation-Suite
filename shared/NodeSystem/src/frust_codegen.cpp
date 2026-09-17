@@ -13,7 +13,8 @@ namespace {
 
 std::string FrustType(DataType type) {
     switch (type) {
-    case DataType::Float: return "f64";
+    case DataType::Float:
+    case DataType::AudioSignal: return "f64";
     case DataType::Bool: return "bool";
     case DataType::Int: return "i64";
     case DataType::String: return "String";
@@ -224,7 +225,8 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
         // single-value data nodes. For's "index" data output is the one
         // exception with no home in either pass; see the For case below.
         if (type != nullptr && type->controlFlow != ControlFlowKind::None) continue;
-        if (!node || !type || type->domain != Domain::Core || type->outputs.size() != 1 ||
+        const bool isPureValueDomain = type != nullptr && (type->domain == Domain::Core || type->domain == Domain::Audio);
+        if (!node || !type || !isPureValueDomain || type->outputs.size() != 1 ||
             type->outputs.front().type.kind != PinKind::Data || type->frustEntryPoint.empty()) {
             result.error = "node " + std::to_string(id) + " is not a pure single-value FRust node";
             return result;

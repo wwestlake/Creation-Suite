@@ -4,16 +4,8 @@
 
 namespace creation::node_editor_ui {
 
-NodePalette::NodePalette(const ce::node_system::NodeTypeRegistry& registry) : listBox_({}, this) {
-    for (const auto& [typeName, descriptor] : registry.Types()) {
-        entries_.push_back({typeName, descriptor.displayName.empty() ? typeName : descriptor.displayName, descriptor.category});
-    }
-    std::sort(entries_.begin(), entries_.end(), [](const Entry& a, const Entry& b) {
-        return a.category != b.category ? a.category < b.category : a.displayName < b.displayName;
-    });
-    for (const auto& entry : entries_) {
-        categoryExpanded_.emplace(entry.category, true);
-    }
+NodePalette::NodePalette(const ce::node_system::NodeTypeRegistry& registry) : registry_(registry), listBox_({}, this) {
+    RefreshFromRegistry();
 
     titleLabel_.setFont(juce::Font(juce::FontOptions(15.0f)).boldened());
     titleLabel_.setColour(juce::Label::textColourId, juce::Colours::white);
@@ -34,12 +26,24 @@ NodePalette::NodePalette(const ce::node_system::NodeTypeRegistry& registry) : li
     addAndMakeVisible(listBox_);
 
     RebuildRows();
-    // ListBox caches its row count -- it doesn't poll getNumRows() on its
-    // own, only on an explicit updateContent(). Every OTHER call site
-    // that touches rows_ (filter typing, header click) already calls
-    // this; the first build here needs it too, or the list stays empty
-    // even though rows_ is fully populated.
     listBox_.updateContent();
+}
+
+void NodePalette::RefreshFromRegistry() {
+    entries_.clear();
+    for (const auto& [typeName, descriptor] : registry_.Types()) {
+        entries_.push_back({typeName, descriptor.displayName.empty() ? typeName : descriptor.displayName, descriptor.category});
+    }
+    std::sort(entries_.begin(), entries_.end(), [](const Entry& a, const Entry& b) {
+        return a.category != b.category ? a.category < b.category : a.displayName < b.displayName;
+    });
+    for (const auto& entry : entries_) {
+        categoryExpanded_.emplace(entry.category, true);
+    }
+
+    RebuildRows();
+    listBox_.updateContent();
+    repaint();
 }
 
 void NodePalette::RebuildRows() {

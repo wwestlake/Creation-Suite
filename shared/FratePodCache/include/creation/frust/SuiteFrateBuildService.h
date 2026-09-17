@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <mutex>
 
 #include <frate/FrateRegistryClient.h>
 #include <creation/frust/FratePodVfsResolver.h>
@@ -65,6 +66,7 @@ public:
     BuildResult build(const juce::File& podDir);
 
 private:
+    static std::mutex processEnvironmentMutex_;
     creation::services::SuiteVfsServiceClient& vfsClient_;
     frate::FrateRegistryClient& registryClient_;
     juce::File frateExecutable_;

@@ -18,6 +18,7 @@ endif()
 add_library(creation_suite_frate_pod_cache STATIC
     src/FratePodVfsResolver.cpp
     src/SuiteFrateBuildService.cpp
+    src/SuiteFratePodWorkspace.cpp
 )
 
 if(NOT TARGET frate_pod_cache)
@@ -58,3 +59,15 @@ target_compile_definitions(CreationSuiteFrateBuildServiceSmoke PRIVATE
 )
 add_dependencies(CreationSuiteFrateBuildServiceSmoke frate_cli)
 add_test(NAME creation_suite_frate_build_service_smoke COMMAND CreationSuiteFrateBuildServiceSmoke)
+
+add_executable(CreationSuiteFratePodWorkspaceSmoke
+    tests/SuiteFratePodWorkspaceSmoke.cpp
+)
+target_link_libraries(CreationSuiteFratePodWorkspaceSmoke PRIVATE
+    creation_suite_frate_pod_cache
+)
+target_compile_definitions(CreationSuiteFratePodWorkspaceSmoke PRIVATE
+    FRATE_EXECUTABLE_PATH="$<TARGET_FILE:frate_cli>"
+)
+add_dependencies(CreationSuiteFratePodWorkspaceSmoke frate_cli)
+add_test(NAME creation_suite_frate_pod_workspace_smoke COMMAND CreationSuiteFratePodWorkspaceSmoke)
