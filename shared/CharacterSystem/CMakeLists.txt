@@ -20,3 +20,7 @@ if(MSVC)
 endif()
 
 add_test(NAME creation_suite_character_system_smoke COMMAND creation_suite_character_system_smoke)
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_character_system_smoke PROPERTIES OUTPUT_NAME "djehuti_suite_character_system_smoke")
+set_target_properties(creation_suite_character_system PROPERTIES OUTPUT_NAME "djehuti_suite_character_system")

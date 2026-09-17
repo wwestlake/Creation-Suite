@@ -22,7 +22,7 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../shared/AssetSystem" Creation
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../shared/Services" CreationSuiteSharedServices)
 
 juce_add_console_app(CreationSuiteVfsService
-    PRODUCT_NAME "Djehuti Suite VFS Service"
+    PRODUCT_NAME "DjehutiSuiteVFSService"
     COMPANY_NAME "LagDaemon Software"
     BUNDLE_ID "com.lagdaemon.creationsuite.vfsservice"
 )

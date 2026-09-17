@@ -14,3 +14,6 @@ add_library(creation_suite_node_editor_ui STATIC
 target_include_directories(creation_suite_node_editor_ui PUBLIC include)
 target_link_libraries(creation_suite_node_editor_ui PUBLIC node_system juce::juce_gui_basics)
 target_compile_features(creation_suite_node_editor_ui PUBLIC cxx_std_20)
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_node_editor_ui PROPERTIES OUTPUT_NAME "djehuti_suite_node_editor_ui")

@@ -41,3 +41,7 @@ if(WIN32)
         COMMAND creation_suite_video_smoke
     )
 endif()
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_video_smoke PROPERTIES OUTPUT_NAME "djehuti_suite_video_smoke")
+set_target_properties(creation_suite_video PROPERTIES OUTPUT_NAME "djehuti_suite_video")

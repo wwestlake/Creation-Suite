@@ -33,3 +33,7 @@ add_test(
     NAME creation_suite_node_system_smoke
     COMMAND creation_suite_node_system_smoke
 )
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_node_system PROPERTIES OUTPUT_NAME "djehuti_suite_node_system")
+set_target_properties(creation_suite_node_system_smoke PROPERTIES OUTPUT_NAME "djehuti_suite_node_system_smoke")

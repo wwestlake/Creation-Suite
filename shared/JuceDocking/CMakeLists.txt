@@ -33,3 +33,6 @@ endif()
 # of JUCE/CMake's generated MultiProcessorCompilation setting and prevents
 # concurrent writers to CreationDock.pdb.
 set_target_properties(CreationDock PROPERTIES UNITY_BUILD ON UNITY_BUILD_BATCH_SIZE 1)
+
+# Auto-generated output name overrides
+set_target_properties(CreationDock PROPERTIES OUTPUT_NAME "DjehutiDock")

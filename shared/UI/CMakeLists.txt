@@ -38,3 +38,6 @@ target_compile_features(creation_suite_ui PUBLIC cxx_std_20)
 if(MSVC)
     target_compile_options(creation_suite_ui PRIVATE /FS)
 endif()
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_ui PROPERTIES OUTPUT_NAME "djehuti_suite_ui")

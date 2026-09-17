@@ -68,3 +68,8 @@ add_test(
     NAME creation_suite_project_handoff_multiprocess_smoke
     COMMAND creation_suite_project_handoff_multiprocess_smoke
 )
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_services_smoke PROPERTIES OUTPUT_NAME "djehuti_suite_services_smoke")
+set_target_properties(creation_suite_project_handoff_multiprocess_smoke PROPERTIES OUTPUT_NAME "djehuti_suite_project_handoff_multiprocess_smoke")
+set_target_properties(creation_suite_services PROPERTIES OUTPUT_NAME "djehuti_suite_services")

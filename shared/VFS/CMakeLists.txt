@@ -56,3 +56,8 @@ add_test(
 # --force-new-ctest-process, or just running the executable) -- only the
 # always-runs-by-default ctest registration is turned off.
 set_tests_properties(creation_suite_vfs_largefile_smoke PROPERTIES DISABLED TRUE)
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_vfs_smoke PROPERTIES OUTPUT_NAME "djehuti_suite_vfs_smoke")
+set_target_properties(creation_suite_vfs PROPERTIES OUTPUT_NAME "djehuti_suite_vfs")
+set_target_properties(creation_suite_vfs_largefile_smoke PROPERTIES OUTPUT_NAME "djehuti_suite_vfs_largefile_smoke")

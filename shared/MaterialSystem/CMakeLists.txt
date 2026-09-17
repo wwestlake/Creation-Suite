@@ -18,3 +18,7 @@ target_compile_features(creation_suite_material_system PUBLIC cxx_std_20)
 add_executable(creation_suite_material_system_smoke tests/MaterialSystemSmoke.cpp)
 target_link_libraries(creation_suite_material_system_smoke PRIVATE creation_suite_material_system)
 add_test(NAME creation_suite_material_system_smoke COMMAND creation_suite_material_system_smoke)
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_material_system PROPERTIES OUTPUT_NAME "djehuti_suite_material_system")
+set_target_properties(creation_suite_material_system_smoke PROPERTIES OUTPUT_NAME "djehuti_suite_material_system_smoke")
