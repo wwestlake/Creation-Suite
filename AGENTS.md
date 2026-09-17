@@ -119,6 +119,8 @@ git config push.recurseSubmodules check
 
 The actual sequencing discipline this supports is unchanged, per the Personal Development Branch Rule above: commit in the submodule → open its PR → get it merged → sync that submodule to the new `master` → only then commit the gitlink bump in the umbrella repo. Never bump a gitlink to a commit that isn't merged and pushed on the submodule's own remote.
 
+**When a batch of work touches multiple submodules at once, this applies per-batch, not per-submodule: get every submodule PR in the batch merged first, THEN cut one umbrella PR with all the resulting gitlink bumps together.** Do not open or push an umbrella-repo gitlink change while any submodule PR in the same batch is still open — that is exactly how a gitlink ends up pointing at a pre-merge branch tip instead of the real post-merge master commit, which then has to be found and fixed later. Stated directly by the user, repeatedly (2026-09-17): "You should not PR the suite until after all submodule PRs are merged, then cut the PR to the suite and you will never have this issue."
+
 ## Secrets Directory Rule
 
 The `Secrets/` directory contains critical credentials and private keys.
