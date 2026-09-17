@@ -30,6 +30,8 @@ class NodePalette final : public juce::Component, private juce::ListBoxModel {
 public:
     explicit NodePalette(const ce::node_system::NodeTypeRegistry& registry);
 
+    void RefreshFromRegistry();
+
     void resized() override;
     void paint(juce::Graphics& g) override;
 
@@ -47,6 +49,7 @@ private:
     // set one (existing FRust node types, mid-migration to this field).
     struct Entry { std::string typeName, displayName, category; };
     std::vector<Entry> entries_;
+    const ce::node_system::NodeTypeRegistry& registry_;
 
     // One synthesized row, either a collapsible category header or a
     // reference back into entries_ -- rebuilt whenever a header is

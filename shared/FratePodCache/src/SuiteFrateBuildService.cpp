@@ -4,6 +4,8 @@
 
 namespace creation::frust {
 
+std::mutex SuiteFrateBuildService::processEnvironmentMutex_;
+
 SuiteFrateBuildService::SuiteFrateBuildService(creation::services::SuiteVfsServiceClient& vfsClient,
                                                 frate::FrateRegistryClient& registryClient,
                                                 juce::File frateExecutable,
@@ -107,9 +109,16 @@ BuildResult SuiteFrateBuildService::build(const juce::File& podDir) {
     // promptForCacheRootIfUnset) and juce::File::getCurrentWorkingDirectory()
     // (frate.json is always resolved relative to CWD, never passed as an
     // argument). Both need setting before the child process launches.
-    _putenv_s("FRATE_CACHE_DIR", localCacheMirror_.getFullPathName().toRawUTF8());
-
+    // Both CWD and the environment are process-global on Windows. Serialize
+    // this small launch window and restore both values before returning so a
+    // background pod build cannot perturb unrelated Station work.
+    const std::scoped_lock processLock(processEnvironmentMutex_);
     const auto previousCwd = juce::File::getCurrentWorkingDirectory();
+    const auto* previousCacheValue = std::getenv("FRATE_CACHE_DIR");
+    const std::string previousCache = previousCacheValue != nullptr ? previousCacheValue : "";
+    const bool hadPreviousCache = previousCacheValue != nullptr;
+
+    _putenv_s("FRATE_CACHE_DIR", localCacheMirror_.getFullPathName().toRawUTF8());
     podDir.setAsCurrentWorkingDirectory();
 
     juce::ChildProcess process;
@@ -119,12 +128,25 @@ BuildResult SuiteFrateBuildService::build(const juce::File& podDir) {
     juce::String output;
     int exitCode = -1;
     if (started) {
+        // A negative timeout is not consistently treated as an infinite
+        // wait by every JUCE/Windows combination. Give a real upper bound,
+        // then drain output only after the process has completed so an
+        // early empty pipe cannot be mistaken for build completion.
+        if (!process.waitForProcessToFinish(10 * 60 * 1000)) {
+            process.kill();
+            output = "frate build timed out after 10 minutes.\n" + process.readAllProcessOutput();
+            previousCwd.setAsCurrentWorkingDirectory();
+            _putenv_s("FRATE_CACHE_DIR", hadPreviousCache ? previousCache.c_str() : "");
+            result.status = BuildStatus::CompileFailed;
+            result.output = output;
+            return result;
+        }
         output = process.readAllProcessOutput();
-        process.waitForProcessToFinish(-1);
         exitCode = process.getExitCode();
     }
 
     previousCwd.setAsCurrentWorkingDirectory();
+    _putenv_s("FRATE_CACHE_DIR", hadPreviousCache ? previousCache.c_str() : "");
 
     if (!started) {
         result.status = BuildStatus::FrateProcessFailedToStart;
@@ -144,6 +166,11 @@ BuildResult SuiteFrateBuildService::build(const juce::File& podDir) {
     if (config.load(podDir.getChildFile("frate.json"))) {
         result.builtObjectFile = podDir.getChildFile("build")
                                       .getChildFile(juce::String(config.getMetadata().name) + ".o");
+    }
+    if (!result.builtObjectFile.existsAsFile()) {
+        result.status = BuildStatus::CompileFailed;
+        result.output = output + "\nfrate exited successfully but did not produce the expected object file.";
+        return result;
     }
     result.status = BuildStatus::Success;
     return result;

@@ -32,9 +32,8 @@ bool writeTestPod(const juce::File& podDir) {
     if (!srcDir.createDirectory())
         return false;
     const juce::String mainSource =
-        "use core;\n\n"
-        "pub fn smoke_abs(x: i64) -> i64 = {\n"
-        "    core::abs_i64(x)\n"
+        "pub fn smoke_identity(x: i64) -> i64 = {\n"
+        "    x\n"
         "}\n";
     return srcDir.getChildFile("lib.fr").replaceWithText(mainSource);
 }
