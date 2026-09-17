@@ -1,0 +1,101 @@
+[
+    {
+        "id": "connector:bracket-2020",
+        "displayName": "Corner Bracket (2020)",
+        "kind": "cornerBracket",
+        "compatibleFamilyName": "2020",
+        "sizeMmX": 20.0,
+        "sizeMmY": 20.0,
+        "sizeMmZ": 17.0,
+        "defaultMaterialId": "material:6061-t6",
+        "source": { "kind": "builtinGeneric", "manufacturer": "", "partNumber": "", "notes": "Generic 90-degree corner bracket sized for 20-series T-slot." }
+    },
+    {
+        "id": "connector:tnut-2020",
+        "displayName": "Drop-In T-Nut (2020, M5)",
+        "kind": "tNut",
+        "compatibleFamilyName": "2020",
+        "sizeMmX": 12.0,
+        "sizeMmY": 9.0,
+        "sizeMmZ": 6.0,
+        "defaultMaterialId": "material:a36-steel",
+        "source": { "kind": "builtinGeneric", "manufacturer": "", "partNumber": "", "notes": "Generic M5 drop-in T-nut sized for 20-series T-slot's 6mm slot opening." }
+    },
+    {
+        "id": "connector:bracket-3030",
+        "displayName": "Corner Bracket (3030)",
+        "kind": "cornerBracket",
+        "compatibleFamilyName": "3030",
+        "sizeMmX": 30.0,
+        "sizeMmY": 30.0,
+        "sizeMmZ": 25.0,
+        "defaultMaterialId": "material:6061-t6",
+        "source": { "kind": "builtinGeneric", "manufacturer": "", "partNumber": "", "notes": "Generic 90-degree corner bracket sized for 30-series T-slot." }
+    },
+    {
+        "id": "connector:tnut-3030",
+        "displayName": "Drop-In T-Nut (3030, M6)",
+        "kind": "tNut",
+        "compatibleFamilyName": "3030",
+        "sizeMmX": 15.0,
+        "sizeMmY": 12.5,
+        "sizeMmZ": 8.0,
+        "defaultMaterialId": "material:a36-steel",
+        "source": { "kind": "builtinGeneric", "manufacturer": "", "partNumber": "", "notes": "Generic M6 drop-in T-nut sized for 30-series T-slot's 8mm slot opening." }
+    },
+    {
+        "id": "connector:bracket-4040",
+        "displayName": "Corner Bracket (4040)",
+        "kind": "cornerBracket",
+        "compatibleFamilyName": "4040",
+        "sizeMmX": 40.0,
+        "sizeMmY": 40.0,
+        "sizeMmZ": 32.0,
+        "defaultMaterialId": "material:6061-t6",
+        "source": { "kind": "builtinGeneric", "manufacturer": "", "partNumber": "", "notes": "Generic 90-degree corner bracket sized for 40-series T-slot." }
+    },
+    {
+        "id": "connector:tnut-4040",
+        "displayName": "Drop-In T-Nut (4040, M8)",
+        "kind": "tNut",
+        "compatibleFamilyName": "4040",
+        "sizeMmX": 18.0,
+        "sizeMmY": 12.5,
+        "sizeMmZ": 10.0,
+        "defaultMaterialId": "material:a36-steel",
+        "source": { "kind": "builtinGeneric", "manufacturer": "", "partNumber": "", "notes": "Generic M8 drop-in T-nut sized for 40-series T-slot's 8mm slot opening." }
+    },
+    {
+        "id": "connector:dinmodule-terminal-block",
+        "displayName": "Terminal Block Module (~17.5mm)",
+        "kind": "dinModule",
+        "compatibleFamilyName": "TS35x7.5",
+        "sizeMmX": 30.0,
+        "sizeMmY": 17.5,
+        "sizeMmZ": 45.0,
+        "defaultMaterialId": "material:a36-steel",
+        "source": { "kind": "builtinGeneric", "manufacturer": "", "partNumber": "", "notes": "Generic ~17.5mm terminal-block module width -- a commonly-cited public figure that varies by manufacturer/product line, not tied to one vendor." }
+    },
+    {
+        "id": "connector:dinmodule-breaker-1p",
+        "displayName": "Single-Pole Breaker Module Footprint (~18mm)",
+        "kind": "dinModule",
+        "compatibleFamilyName": "TS35x7.5",
+        "sizeMmX": 30.0,
+        "sizeMmY": 18.0,
+        "sizeMmZ": 65.0,
+        "defaultMaterialId": "material:a36-steel",
+        "source": { "kind": "builtinGeneric", "manufacturer": "", "partNumber": "", "notes": "Generic ~18mm single-module miniature-circuit-breaker footprint -- the widely-cited public standard module width, not tied to one vendor." }
+    },
+    {
+        "id": "connector:dinmodule-enclosure-90mm",
+        "displayName": "DIN-Mount Enclosure Housing (~90mm wide)",
+        "kind": "dinModule",
+        "compatibleFamilyName": "TS35x15",
+        "sizeMmX": 35.0,
+        "sizeMmY": 90.0,
+        "sizeMmZ": 60.0,
+        "defaultMaterialId": "material:a36-steel",
+        "source": { "kind": "builtinGeneric", "manufacturer": "", "partNumber": "", "notes": "Generic DIN-mount enclosure footprint sized for the deeper TS35x15 rail -- a representative generic size, not tied to one vendor. Mounts and renders exactly like any other dinModule connector; not a separate enclosure system." }
+    }
+]

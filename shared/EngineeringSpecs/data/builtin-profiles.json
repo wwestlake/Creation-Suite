@@ -1,0 +1,107 @@
+[
+    {
+        "id": "profile:tslot-2020",
+        "displayName": "T-Slot 2020 (20x20mm, single slot per side)",
+        "kind": "tSlotExtrusion",
+        "familyName": "2020",
+        "outerWidthMm": 20.0,
+        "outerHeightMm": 20.0,
+        "slotOpeningWidthMm": 6.0,
+        "slotChannelWidthMm": 10.0,
+        "slotDepthMm": 6.5,
+        "wallThicknessMm": 1.5,
+        "centerBoreDiameterMm": 4.2,
+        "slotsPerSide": 1,
+        "defaultMaterialId": "material:6063-t5",
+        "source": {
+            "kind": "builtinGeneric",
+            "manufacturer": "",
+            "partNumber": "",
+            "notes": "Generic, multi-vendor-interoperable 20-series T-slot envelope -- common public dimensional family, not one manufacturer's proprietary catalog entry."
+        }
+    },
+    {
+        "id": "profile:tslot-3030",
+        "displayName": "T-Slot 3030 (30x30mm, single slot per side)",
+        "kind": "tSlotExtrusion",
+        "familyName": "3030",
+        "outerWidthMm": 30.0,
+        "outerHeightMm": 30.0,
+        "slotOpeningWidthMm": 8.0,
+        "slotChannelWidthMm": 12.5,
+        "slotDepthMm": 8.0,
+        "wallThicknessMm": 2.0,
+        "centerBoreDiameterMm": 6.0,
+        "slotsPerSide": 1,
+        "defaultMaterialId": "material:6063-t5",
+        "source": {
+            "kind": "builtinGeneric",
+            "manufacturer": "",
+            "partNumber": "",
+            "notes": "Generic, multi-vendor-interoperable 30-series T-slot envelope -- common public dimensional family, not one manufacturer's proprietary catalog entry."
+        }
+    },
+    {
+        "id": "profile:tslot-4040",
+        "displayName": "T-Slot 4040 (40x40mm, single slot per side)",
+        "kind": "tSlotExtrusion",
+        "familyName": "4040",
+        "outerWidthMm": 40.0,
+        "outerHeightMm": 40.0,
+        "slotOpeningWidthMm": 8.0,
+        "slotChannelWidthMm": 12.5,
+        "slotDepthMm": 10.0,
+        "wallThicknessMm": 2.5,
+        "centerBoreDiameterMm": 6.6,
+        "slotsPerSide": 1,
+        "defaultMaterialId": "material:6063-t5",
+        "source": {
+            "kind": "builtinGeneric",
+            "manufacturer": "",
+            "partNumber": "",
+            "notes": "Generic, multi-vendor-interoperable 40-series T-slot envelope -- common public dimensional family, not one manufacturer's proprietary catalog entry."
+        }
+    },
+    {
+        "id": "profile:dinrail-ts35x7.5",
+        "displayName": "DIN Rail TS35x7.5 (top hat, IEC/EN 60715)",
+        "kind": "dinRailTopHat",
+        "familyName": "TS35x7.5",
+        "outerWidthMm": 35.0,
+        "outerHeightMm": 7.5,
+        "slotOpeningWidthMm": 0.0,
+        "slotChannelWidthMm": 0.0,
+        "slotDepthMm": 0.0,
+        "wallThicknessMm": 1.0,
+        "centerBoreDiameterMm": 0.0,
+        "slotsPerSide": 0,
+        "defaultMaterialId": "material:a36-steel",
+        "source": {
+            "kind": "builtinGeneric",
+            "manufacturer": "",
+            "partNumber": "",
+            "notes": "Standard IEC/EN 60715 35x7.5mm top-hat rail envelope -- a generic/public defining dimension of the standard itself, not one manufacturer's proprietary catalog entry."
+        }
+    },
+    {
+        "id": "profile:dinrail-ts35x15",
+        "displayName": "DIN Rail TS35x15 (deep top hat, IEC/EN 60715)",
+        "kind": "dinRailTopHat",
+        "familyName": "TS35x15",
+        "outerWidthMm": 35.0,
+        "outerHeightMm": 15.0,
+        "slotOpeningWidthMm": 0.0,
+        "slotChannelWidthMm": 0.0,
+        "slotDepthMm": 0.0,
+        "wallThicknessMm": 1.2,
+        "centerBoreDiameterMm": 0.0,
+        "slotsPerSide": 0,
+        "defaultMaterialId": "material:a36-steel",
+        "source": {
+            "kind": "builtinGeneric",
+            "manufacturer": "",
+            "partNumber": "",
+            "notes": "Standard IEC/EN 60715 35x15mm deep top-hat rail envelope -- a generic/public defining dimension of the standard itself, not one manufacturer's proprietary catalog entry."
+        }
+    }
+]
