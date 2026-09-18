@@ -98,3 +98,5 @@ add_custom_command(TARGET CreationSuiteVfsService POST_BUILD
 install(TARGETS CreationSuiteVfsService
     RUNTIME DESTINATION .
 )
+
+set_target_properties(CreationSuiteVfsService PROPERTIES OUTPUT_NAME "DjehutiSuiteVfsService")

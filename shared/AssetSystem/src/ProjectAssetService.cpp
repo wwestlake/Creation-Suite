@@ -159,7 +159,7 @@ bool ProjectAssetService::saveGeneratedAsset(ProjectSession& session,
 
     if (! session.writeEntry(options.logicalPath, data, descriptor.modifiedAt, options.compressionLevel))
     {
-        errorMessage = "Could not write the generated asset into the project.";
+        errorMessage = "Could not write the " + toDisplayName(options.kind) + " asset into the project.";
         return false;
     }
 

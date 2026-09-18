@@ -91,6 +91,9 @@ void DockZone::setActivePanel(DockPanel* panel)
     activePanel = panel;
     tabStrip.setActivePanel(panel);
 
+    if (onPanelActivated && activePanel != nullptr)
+        onPanelActivated(activePanel);
+
     for (auto& p : ownedPanels)
         p->setVisible(p.get() == activePanel);
 

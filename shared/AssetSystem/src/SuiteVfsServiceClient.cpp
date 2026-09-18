@@ -48,7 +48,7 @@ juce::File findServiceExecutable()
 {
     juce::String loadError;
     const auto settings = creation::suite::SuiteSettingsStore().load(loadError);
-    return juce::File(settings.suiteExecutablesRoot).getChildFile("CreationSuiteVfsService.exe");
+    return juce::File(settings.suiteExecutablesRoot).getChildFile("DjehutiSuiteVfsService.exe");
 }
 }
 

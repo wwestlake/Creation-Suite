@@ -21,6 +21,16 @@ DockManager::DockManager(juce::Component& topLevelWindow)
 {
     addAndMakeVisible(container);
     addAndMakeVisible(overlay);
+
+    auto notifyActivation = [this](DockPanel* p) {
+        if (onPanelActivated && p != nullptr)
+            onPanelActivated(p->getPanelID());
+    };
+
+    container.getCenterZone()->onPanelActivated = notifyActivation;
+    container.getLeftZone()->onPanelActivated = notifyActivation;
+    container.getRightZone()->onPanelActivated = notifyActivation;
+    container.getBottomZone()->onPanelActivated = notifyActivation;
 }
 
 DockManager::~DockManager()

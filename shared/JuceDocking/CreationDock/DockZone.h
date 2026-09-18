@@ -30,6 +30,8 @@ public:
     // one in this zone and hides the rest.
     void setActivePanel(DockPanel* panel);
 
+    std::function<void(DockPanel*)> onPanelActivated;
+
     // Re-measures/repaints the tab strip (e.g. after a panel's title changed).
     void refreshLayout();
 
