@@ -23,10 +23,11 @@ public:
     // currently lives (a zone; a floating window is not searched, same
     // limitation as extractPanel()) and lets it be destroyed, unlike
     // dockPanel()/floatPanel() which only ever relocate a panel. For panels
-    // that are meant to exist only while something is open in them (e.g. an
-    // asset's editor), not as permanent dock fixtures.
+    // Re-measures/repaints the tab strip (e.g. after a panel's title changed).
     void unregisterPanel(const juce::String& id);
     bool isRegistered(const juce::String& id) const { return findPanelById(id) != nullptr; }
+
+    std::function<void(const juce::String&)> onPanelActivated;
 
     void floatPanel(DockPanel* panel);
     void dockPanel(DockPanel* panel, DockTargetZone zone);

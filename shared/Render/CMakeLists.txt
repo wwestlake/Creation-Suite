@@ -31,3 +31,6 @@ target_compile_features(creation_suite_render PUBLIC cxx_std_20)
 if(MSVC)
     target_compile_options(creation_suite_render PRIVATE /FS)
 endif()
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_render PROPERTIES OUTPUT_NAME "djehuti_suite_render")

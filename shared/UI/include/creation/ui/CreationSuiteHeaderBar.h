@@ -45,6 +45,7 @@ public:
     std::function<void()> onRewindToStart;
     std::function<void()> onFastForwardToEnd;
     std::function<void(bool)> onLoopChanged;
+    std::function<void(double)> onLoopDelayChanged;
     std::function<void(MetronomeMode)> onMetronomeModeChanged;
     std::function<void()> onSignInRequested;
     std::function<void()> onOpenProfilePageRequested;
@@ -106,6 +107,7 @@ public:
     juce::TextButton stopButton { "Stop" };
     juce::TextButton recordButton { "Record" };
     juce::ToggleButton loopButton { "Loop" };
+    juce::Slider loopDelaySlider;
     juce::ToggleButton clickButton { "Click" };
     juce::TextButton rewindButton { "Rew" };
     juce::TextButton fastForwardButton { "Fwd" };

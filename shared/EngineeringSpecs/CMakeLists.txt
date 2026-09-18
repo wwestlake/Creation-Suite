@@ -39,3 +39,7 @@ add_test(
     NAME creation_suite_engineering_specs_smoke
     COMMAND creation_suite_engineering_specs_smoke
 )
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_engineering_specs_smoke PROPERTIES OUTPUT_NAME "djehuti_suite_engineering_specs_smoke")
+set_target_properties(creation_suite_engineering_specs PROPERTIES OUTPUT_NAME "djehuti_suite_engineering_specs")

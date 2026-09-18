@@ -324,6 +324,19 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
         if (onLoopChanged)
             onLoopChanged(loopButton.getToggleState());
     };
+
+    loopDelaySlider.setSliderStyle(juce::Slider::IncDecButtons);
+    loopDelaySlider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 50, 20);
+    loopDelaySlider.setRange(0.0, 10.0, 0.1);
+    loopDelaySlider.setValue(0.0, juce::dontSendNotification);
+    loopDelaySlider.setTextValueSuffix("s");
+    loopDelaySlider.setTooltip("Delay between loops");
+    loopDelaySlider.onValueChange = [this]
+    {
+        if (onLoopDelayChanged)
+            onLoopDelayChanged(loopDelaySlider.getValue());
+    };
+    addAndMakeVisible(loopDelaySlider);
     clickButton.setClickingTogglesState(false);
     clickButton.onClick = [this]
     {
@@ -799,6 +812,16 @@ void CreationSuiteHeaderBar::resized()
         pauseButton.setVisible(transportControlsVisible && playPauseButtonConfig.visible && playbackIsPlaying);
     }
     placeTransportButton(loopButton, 64, transportControlsVisible && loopButtonConfig.visible);
+    if (transportControlsVisible && loopButtonConfig.visible)
+    {
+        transportRow.removeFromLeft(4);
+        loopDelaySlider.setBounds(transportRow.removeFromLeft(75).reduced(0, 3));
+        transportRow.removeFromLeft(8);
+    }
+    else
+    {
+        loopDelaySlider.setBounds({});
+    }
     placeTransportButton(clickButton, 64, transportControlsVisible && clickButtonConfig.visible);
     placeTransportButton(recordButton, 82, transportControlsVisible && recordButtonConfig.visible);
 
@@ -905,6 +928,7 @@ void CreationSuiteHeaderBar::refreshTransportButtonPresentation()
     rewindButton.setVisible(transportControlsVisible && rewindButtonConfig.visible);
     fastForwardButton.setVisible(transportControlsVisible && fastForwardButtonConfig.visible);
     loopButton.setVisible(transportControlsVisible && loopButtonConfig.visible);
+    loopDelaySlider.setVisible(transportControlsVisible && loopButtonConfig.visible);
     clickButton.setVisible(transportControlsVisible && clickButtonConfig.visible);
     recordButton.setVisible(transportControlsVisible && recordButtonConfig.visible);
 

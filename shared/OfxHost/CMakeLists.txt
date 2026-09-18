@@ -25,3 +25,7 @@ add_test(
     NAME creation_suite_ofxhost_smoke
     COMMAND creation_suite_ofxhost_smoke
 )
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_ofxhost PROPERTIES OUTPUT_NAME "djehuti_suite_ofxhost")
+set_target_properties(creation_suite_ofxhost_smoke PROPERTIES OUTPUT_NAME "djehuti_suite_ofxhost_smoke")

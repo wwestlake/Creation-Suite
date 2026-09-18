@@ -41,3 +41,6 @@ add_library(creation_suite_frust_plugin_runtime STATIC
 
 target_include_directories(creation_suite_frust_plugin_runtime PUBLIC include)
 target_link_libraries(creation_suite_frust_plugin_runtime PUBLIC frust_plugin_host)
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_frust_plugin_runtime PROPERTIES OUTPUT_NAME "djehuti_suite_frust_plugin_runtime")

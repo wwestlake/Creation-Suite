@@ -19,3 +19,7 @@ add_test(
     NAME creation_suite_interop_smoke
     COMMAND creation_suite_interop_smoke
 )
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_interop PROPERTIES OUTPUT_NAME "djehuti_suite_interop")
+set_target_properties(creation_suite_interop_smoke PROPERTIES OUTPUT_NAME "djehuti_suite_interop_smoke")

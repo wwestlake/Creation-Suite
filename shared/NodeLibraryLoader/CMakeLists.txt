@@ -29,3 +29,6 @@ target_link_libraries(creation_suite_node_library_loader
         creation_suite_frust_plugin_runtime
         juce::juce_core
 )
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_node_library_loader PROPERTIES OUTPUT_NAME "djehuti_suite_node_library_loader")

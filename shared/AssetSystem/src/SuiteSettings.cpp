@@ -112,9 +112,24 @@ SuiteSettings SuiteSettingsStore::makeDefaultSettings() const
     // in CreationSuiteBuildSettings.cmake) -- so the currently-running
     // executable's own directory is always the correct, per-agent default,
     // with no need to separately know or hardcode which agent this is.
-    settings.suiteExecutablesRoot = juce::File::getSpecialLocation(juce::File::currentExecutableFile)
-                                         .getParentDirectory()
-                                         .getFullPathName();
+    auto currentDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
+    if (currentDir.getChildFile("DjehutiSuiteVfsService.exe").existsAsFile())
+    {
+        settings.suiteExecutablesRoot = currentDir.getFullPathName();
+    }
+    else
+    {
+        juce::String currentPath = currentDir.getFullPathName();
+        juce::String agentPrefix = "gemini";
+        if (currentPath.containsIgnoreCase("CreationSuite-Claude")) agentPrefix = "claude";
+        else if (currentPath.containsIgnoreCase("CreationSuite-Codex")) agentPrefix = "codex";
+
+#if JUCE_DEBUG
+        settings.suiteExecutablesRoot = "D:/CreationSuite-Workspaces/" + agentPrefix + "-debug-bin";
+#else
+        settings.suiteExecutablesRoot = "D:/CreationSuite-Workspaces/" + agentPrefix + "-release-bin";
+#endif
+    }
     return settings;
 }
 }
