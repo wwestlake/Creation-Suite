@@ -6,10 +6,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-include("${CMAKE_CURRENT_SOURCE_DIR}/shared/CMake/CreationSuiteBuildSettings.cmake")
-creation_suite_require_juce()
-
 enable_testing()
+
+if(NOT DEFINED JUCE_DIR)
+    message(FATAL_ERROR "Set JUCE_DIR to your JUCE root directory before configuring Creation Suite shared libraries.")
+endif()
 
 add_subdirectory("${JUCE_DIR}" juce)
 add_subdirectory(shared)

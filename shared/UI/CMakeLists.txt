@@ -18,7 +18,6 @@ juce_add_binary_data(creation_suite_ui_assets
         assets/creation_suite.png
         assets/creation_station.png
         assets/creation_engine.png
-        assets/creation_engineer.png
         assets/creation_movie.png
         assets/creation_live.png
         assets/creation_texture.png
@@ -39,3 +38,6 @@ target_compile_features(creation_suite_ui PUBLIC cxx_std_20)
 if(MSVC)
     target_compile_options(creation_suite_ui PRIVATE /FS)
 endif()
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_ui PROPERTIES OUTPUT_NAME "djehuti_suite_ui")

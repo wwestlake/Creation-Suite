@@ -17,22 +17,16 @@ listed at the bottom.
   one; title/body updated this session to reflect the full accumulated scope, not
   just its original two-bug-fix description).
 - **Creation-Movie#30**, **Creation-Modeler#2**, **Creation-Texture#2** — smaller,
-  mostly shared/CEL + shared/NodeSystem wiring and suite AI plumbing for those three
+  mostly FRust + shared/NodeSystem wiring and suite AI plumbing for those three
   apps, plus `onProjectOpenRequested` wiring so their Open Project button actually
   works.
 
 `apps/CreationEngine` and `apps/CreationLive` don't have open PRs — their work this
 stretch (Engine's real-folder VFS project storage migration; Live's suite-shell
-wiring: header, settings, Open/New Project) was committed directly to their own
-default branches (`master`/`main`) by an earlier session instead of to
-`claude/development`, so it's already merged/pushed there - nothing pending
-review. **That direct-to-master/main pattern was wrong** (violates this repo's own
-branch-ownership convention: work belongs on `<agent>/development`, integrator
-merges to `master`/`main` from there, not the other way around) and has been
-corrected this session: a fresh `claude/development` was cut off the current tip
-of `master` (Engine) and `main` (Live) in both repos and pushed. Any further
-Claude-side work in either repo lands on `claude/development` from here on, same
-as every other repo in this suite - not back onto `master`/`main` directly.
+wiring: header, settings, Open/New Project) was already committed directly to
+their own default branches (`master`/`main`) by an earlier session, not to
+`claude/development`, so it's already merged as of this push - nothing pending
+review there.
 
 **Note for whoever pulls this repo next**: those two submodules' commits existed
 only in this local checkout until this session pushed them (see "Dangling
@@ -53,42 +47,16 @@ introduced this stretch): `apps/CreationEngine`'s `master` and
 referenced those local-only SHAs. Fixed by pushing both (clean fast-forwards,
 verified via `git merge-base --is-ancestor` before pushing - no force needed).
 
-**`third_party/asio-sdk` is not broken - leave the gitlink alone, but `.gitmodules`
-is genuinely missing an entry for it.** Corrected from an earlier, wrong pass in
-this session (which first misread it as orphaned and removed it via `git rm
---cached`, then reverted that - `248d9c4` - net no-op on the gitlink itself).
-Actual state, confirmed by inspecting Codex's real checkout:
+Also found and removed a genuinely broken, unrelated gitlink:
+`third_party/asio-sdk` was a `160000` tree entry with **no corresponding
+`.gitmodules` entry, ever** (checked full history) and an empty directory on
+disk - a dangling reference from some earlier accidental `git add` of a nested
+repo, not a real submodule. Removed via `git rm --cached`.
 
-- Steinberg's ASIO SDK is dual-licensed - proprietary Steinberg terms, or GPLv3,
-  your choice. This suite uses the **GPLv3 path**, vendored from a real public
-  mirror: `https://github.com/audiosdk/asio.git`. The pinned commit
-  (`496a0765b8bb9c26f764f22f9a9712a937177db2`, set 2026-08-07 in `2889ea2 "chore:
-  sync codex workspace updates"`) is confirmed to be `HEAD`/`refs/heads/main` on
-  that public remote right now - it is fully fetchable, not proprietary-locked.
-- Nobody has ever added a `[submodule "third_party/asio-sdk"]` block to
-  `.gitmodules` for it, on any branch (checked `claude/development` and
-  `codex/development`). That's a real gap, not intentional design - the fix is a
-  three-line addition to `.gitmodules` (`path = third_party/asio-sdk`, `url =
-  https://github.com/audiosdk/asio.git`, matching the other six entries' style),
-  which would make `git submodule update --init --recursive` fully self-sufficient
-  for this path on a plain clone instead of silently skipping it.
-- That fix was drafted but deliberately **not committed** this session - per this
-  repo's `AGENTS.md` Integration Rule, updating umbrella-repo submodule pointers /
-  `.gitmodules` is integrator-only, and I'm not the integrator here. Leaving this
-  as a flagged TODO for whoever is.
-
-If you hit `no submodule mapping found in .gitmodules for path
-'third_party/asio-sdk'`: that error is expected and harmless on a plain clone
-until the `.gitmodules` entry above is added - `git submodule update --init
---recursive` will skip it and correctly initialize the other six real submodules
-regardless. To get the real ASIO source locally in the meantime, either wait for
-the `.gitmodules` fix or manually `git clone https://github.com/audiosdk/asio.git
-third_party/asio-sdk` and check out `496a0765b8bb9c26f764f22f9a9712a937177db2`.
-
-If you hit `upload-pack: not our ref` again: `git ls-tree HEAD <path>` to see what
-commit the superproject expects, then in that submodule check `git merge-base
---is-ancestor <that-sha> origin/<branch>` - if it says NO, someone has unpushed
-local work the superproject
+If you hit `upload-pack: not our ref` or `no submodule mapping found in
+.gitmodules` again: `git ls-tree HEAD <path>` to see what commit the superproject
+expects, then in that submodule check `git merge-base --is-ancestor <that-sha>
+origin/<branch>` - if it says NO, someone has unpushed local work the superproject
 already depends on; push it (after confirming it's a real fast-forward, not
 diverged history).
 
@@ -146,7 +114,7 @@ The legacy Foley Stage (`ArrangeView`) was retired outright. Replaced with:
   Foundation, NV12 texture → BT.709 HLSL compositing — deliberately **not**
   `juce_video`), thumbnail-strip rendering, scrub preview overlay.
 - A new node-graph-driven Foley setup (trigger/PlaySample/gain/Sequence/Branch/
-  random-select/Delay nodes), CEL codegen, saved as a named project asset.
+  random-select/Delay nodes), FRust codegen, saved as a named project asset.
 - Shared groundwork for this: `shared/Timeline` (generic track/clip core, pulled
   out of CreationStation), `shared/NodeEditorUI` (generic node-graph canvas/
   inspector/palette, pulled out of CreationEngine), `shared/Video` (native D3D11

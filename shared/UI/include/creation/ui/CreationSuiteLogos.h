@@ -10,11 +10,11 @@ enum class SuiteLogoId
     suite,
     station,
     engine,
-    engineer,
     movie,
     live,
     texture,
     modeler,
+    engineer,
     remote
 };
 

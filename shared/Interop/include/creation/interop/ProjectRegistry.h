@@ -13,9 +13,10 @@ struct ProjectRecord
     creation::assets::ProjectManifest manifest;
 };
 
+// Deliberately no appDomain field -- projects are not owned by any app, so app-domain is never
+// a valid filter axis. See docs/architecture/Suite-Shared-Project-Model.md.
 struct ProjectQuery
 {
-    std::optional<creation::assets::SuiteAppDomain> appDomain;
     juce::String searchText;
 };
 

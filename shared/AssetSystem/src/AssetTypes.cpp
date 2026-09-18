@@ -7,6 +7,7 @@ juce::String toStorageToken(AssetKind kind)
     switch (kind)
     {
         case AssetKind::audio: return "audio";
+        case AssetKind::video: return "video";
         case AssetKind::render: return "render";
         case AssetKind::patch: return "patch";
         case AssetKind::foleyPatch: return "foleyPatch";
@@ -17,6 +18,12 @@ juce::String toStorageToken(AssetKind kind)
         case AssetKind::samplePack: return "samplePack";
         case AssetKind::midi: return "midi";
         case AssetKind::binary: return "binary";
+        case AssetKind::pod: return "pod";
+        case AssetKind::objectDefinition: return "objectDefinition";
+        case AssetKind::character: return "character";
+        case AssetKind::game: return "game";
+        case AssetKind::scene: return "scene";
+        case AssetKind::instance: return "instance";
         case AssetKind::unknown: break;
     }
 
@@ -27,6 +34,7 @@ AssetKind assetKindFromStorageToken(const juce::String& token)
 {
     auto normalized = token.trim().toLowerCase();
     if (normalized == "audio") return AssetKind::audio;
+    if (normalized == "video") return AssetKind::video;
     if (normalized == "render") return AssetKind::render;
     if (normalized == "patch") return AssetKind::patch;
     if (normalized == "foleypatch") return AssetKind::foleyPatch;
@@ -37,6 +45,12 @@ AssetKind assetKindFromStorageToken(const juce::String& token)
     if (normalized == "samplepack") return AssetKind::samplePack;
     if (normalized == "midi") return AssetKind::midi;
     if (normalized == "binary") return AssetKind::binary;
+    if (normalized == "pod") return AssetKind::pod;
+    if (normalized == "objectdefinition") return AssetKind::objectDefinition;
+    if (normalized == "character") return AssetKind::character;
+    if (normalized == "game") return AssetKind::game;
+    if (normalized == "scene") return AssetKind::scene;
+    if (normalized == "instance") return AssetKind::instance;
     return AssetKind::unknown;
 }
 
@@ -45,6 +59,7 @@ juce::String toDisplayName(AssetKind kind)
     switch (kind)
     {
         case AssetKind::audio: return "Audio";
+        case AssetKind::video: return "Video";
         case AssetKind::render: return "Render";
         case AssetKind::patch: return "Patch";
         case AssetKind::foleyPatch: return "Foley Patch";
@@ -55,6 +70,12 @@ juce::String toDisplayName(AssetKind kind)
         case AssetKind::samplePack: return "Sample Pack";
         case AssetKind::midi: return "MIDI";
         case AssetKind::binary: return "Binary";
+        case AssetKind::pod: return "Pod";
+        case AssetKind::objectDefinition: return "Object Definition";
+        case AssetKind::character: return "Character";
+        case AssetKind::game: return "Game";
+        case AssetKind::scene: return "Scene";
+        case AssetKind::instance: return "Instance";
         case AssetKind::unknown: break;
     }
 
@@ -79,5 +100,25 @@ AssetReferenceMode assetReferenceModeFromStorageToken(const juce::String& token)
     if (normalized == "compatiblelatest") return AssetReferenceMode::compatibleLatest;
     if (normalized == "latest") return AssetReferenceMode::latest;
     return AssetReferenceMode::exact;
+}
+
+juce::String toStorageToken(AssetDerivationKind kind)
+{
+    switch (kind)
+    {
+        case AssetDerivationKind::computed: return "computed";
+        case AssetDerivationKind::referential: return "referential";
+        case AssetDerivationKind::root: break;
+    }
+
+    return "root";
+}
+
+AssetDerivationKind assetDerivationKindFromStorageToken(const juce::String& token)
+{
+    auto normalized = token.trim().toLowerCase();
+    if (normalized == "computed") return AssetDerivationKind::computed;
+    if (normalized == "referential") return AssetDerivationKind::referential;
+    return AssetDerivationKind::root;
 }
 }

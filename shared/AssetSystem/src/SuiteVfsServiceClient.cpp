@@ -1,36 +1,54 @@
 #include "creation/services/SuiteVfsServiceClient.h"
 
 #include <creation/services/SuiteProcessRegistry.h>
+#include <creation/suite/SuiteSettings.h>
+
+#include <atomic>
+#include <mutex>
 
 namespace
 {
 constexpr const char* kServiceAppId = "CreationSuiteVfsService";
 
-// Matches services/VfsService/CMakeLists.txt's post-build copy step --
-// every suite executable lands in this shared bin directory.
+// Real bug fixed here: discover() used to be a genuine no-op only within a
+// single client instance's own lifetime. Every SuiteVfsJsonStore/
+// ProjectContainerService call constructs its own throwaway
+// SuiteVfsServiceClient, so when the service isn't already registered, each
+// of the many independent calls made during a single app startup (settings
+// load, project list, control-surface mappings, settings save, ...)
+// redundantly spawned another copy of the service process and blocked the
+// calling thread -- the message thread, during MainComponent's constructor
+// -- for up to its own fresh 10-second poll. Stacked across ~6+ call sites
+// that's a full minute or more of "Not Responding", which is what actually
+// produced the startup hang, not any one blocking call by itself. Caching
+// the launch attempt process-wide makes that spawn+poll happen at most once
+// per run; the cheap registry scan below still runs every call so a service
+// that comes up later (or was already found) is still picked up instantly.
+std::mutex& discoveryMutex()
+{
+    static std::mutex m;
+    return m;
+}
+
+std::atomic<bool>& launchAttempted()
+{
+    static std::atomic<bool> b { false };
+    return b;
+}
+
+// Real bug fixed here: this used to be a hardcoded dev-tree literal
+// ("D:/CreationSuite-Workspaces/codex-{debug,release}-bin"), unreachable
+// by anything outside this exact dev machine's build layout -- including
+// an external process (a Blender add-on) that needs the same launch
+// capability. Now reads suiteExecutablesRoot from the suite's own
+// settings file (SuiteSettings.h), whose default value matches the old
+// hardcoded literal exactly, so behavior is unchanged until someone
+// actually configures a different location.
 juce::File findServiceExecutable()
 {
-    const auto currentExeDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
-    const auto siblingService = currentExeDir.getChildFile("CreationSuiteVfsService.exe");
-    if (siblingService.existsAsFile())
-        return siblingService;
-
-    if (const auto configuredBinDir = juce::String(CREATION_SUITE_SHARED_BIN_DIR); configuredBinDir.isNotEmpty())
-    {
-        const auto configuredService = juce::File(configuredBinDir).getChildFile("CreationSuiteVfsService.exe");
-        if (configuredService.existsAsFile())
-            return configuredService;
-    }
-
-    if (const auto envBinDir = juce::SystemStats::getEnvironmentVariable("CREATION_SUITE_SHARED_BIN_DIR", {});
-        envBinDir.isNotEmpty())
-    {
-        const auto configuredService = juce::File(envBinDir).getChildFile("CreationSuiteVfsService.exe");
-        if (configuredService.existsAsFile())
-            return configuredService;
-    }
-
-    return {};
+    juce::String loadError;
+    const auto settings = creation::suite::SuiteSettingsStore().load(loadError);
+    return juce::File(settings.suiteExecutablesRoot).getChildFile("DjehutiSuiteVfsService.exe");
 }
 }
 
@@ -46,6 +64,27 @@ bool SuiteVfsServiceClient::discover(int timeoutMs)
             return true;
         }
     }
+
+    // Someone else already tried (and failed) to launch it this run -- don't
+    // pile on another spawn-and-wait. The scan above already covers the case
+    // where it came up in the meantime.
+    if (launchAttempted().load(std::memory_order_acquire))
+        return false;
+
+    std::lock_guard<std::mutex> lock(discoveryMutex());
+    if (launchAttempted().load(std::memory_order_acquire))
+        return false;
+
+    for (const auto& record : creation::services::SuiteProcessRegistry::EnumerateLiveProcesses())
+    {
+        if (record.appId == kServiceAppId && record.httpPort > 0)
+        {
+            httpPort_ = record.httpPort;
+            return true;
+        }
+    }
+
+    launchAttempted().store(true, std::memory_order_release);
 
     const auto serviceExe = findServiceExecutable();
     if (! serviceExe.existsAsFile())
@@ -124,6 +163,7 @@ bool SuiteVfsServiceClient::writeEntry(const juce::String& logicalPath, const ju
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("PUT")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/octet-stream\r\n")
             .withStatusCode(&statusCode));
 
     return stream != nullptr && statusCode == 200;
@@ -194,6 +234,7 @@ bool SuiteVfsServiceClient::createProject(creation::assets::SuiteAppDomain appDo
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("POST")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/json\r\n")
             .withStatusCode(&statusCode));
 
     if (stream == nullptr || statusCode != 200)
@@ -244,19 +285,20 @@ bool SuiteVfsServiceClient::writeManifest(const juce::String& projectId, const c
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("PUT")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/json\r\n")
             .withStatusCode(&statusCode));
 
     return stream != nullptr && statusCode == 200;
 }
 
-bool SuiteVfsServiceClient::listProjects(creation::assets::SuiteAppDomain appDomain, juce::Array<ProjectSummary>& outProjects) const
+bool SuiteVfsServiceClient::listProjects(juce::Array<ProjectSummary>& outProjects) const
 {
     outProjects.clear();
     if (httpPort_ <= 0)
         return false;
 
     int statusCode = 0;
-    auto stream = baseUrl("/project/list").withParameter("appDomain", creation::assets::toStorageToken(appDomain)).createInputStream(
+    auto stream = baseUrl("/project/list").createInputStream(
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withConnectionTimeoutMs(5000)
             .withStatusCode(&statusCode));
@@ -305,6 +347,7 @@ bool SuiteVfsServiceClient::cloneProject(const juce::String& sourceProjectId, co
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("POST")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/json\r\n")
             .withStatusCode(&statusCode));
 
     if (stream == nullptr || statusCode != 200)
@@ -380,6 +423,7 @@ bool SuiteVfsServiceClient::writeProjectEntry(const juce::String& projectId, con
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("PUT")
             .withConnectionTimeoutMs(5000)
+            .withExtraHeaders("Content-Type: application/octet-stream\r\n")
             .withStatusCode(&statusCode));
 
     return stream != nullptr && statusCode == 200;

@@ -31,13 +31,12 @@ constexpr int kLivenessCheckIntervalMs = 5000;
 
 void appendBootLog(const std::string& message)
 {
-    const auto logsDirectory = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                                   .getChildFile("Creation Suite")
-                                   .getChildFile("Logs");
-    logsDirectory.createDirectory();
+    const char* appData = std::getenv("APPDATA");
+    const std::string base = appData != nullptr ? appData : "C:\\Users\\wwestlake\\AppData\\Roaming";
+    const std::string logsDirectory = base + "\\Creation Suite\\Logs";
+    juce::File(logsDirectory).createDirectory();
 
-    std::ofstream out(logsDirectory.getChildFile("CreationSuiteVfsService-boot.log").getFullPathName().toStdString(),
-                      std::ios::app);
+    std::ofstream out(logsDirectory + "\\CreationSuiteVfsService-boot.log", std::ios::app);
     if (! out.is_open())
         return;
 
@@ -47,7 +46,7 @@ void appendBootLog(const std::string& message)
 void appendServiceLog(const juce::String& message)
 {
     auto logFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                       .getChildFile("Creation Suite")
+                       .getChildFile("Djehuti Suite")
                        .getChildFile("Logs")
                        .getChildFile("CreationSuiteVfsService.log");
 
@@ -136,6 +135,7 @@ int main(int, char*[])
 
     juce::CriticalSection storeLock;
     VfsProjectStore store(settings);
+    store.migrateLegacyDomainNestedProjects();
     appendBootLog("main: project store ready");
     appendServiceLog("project store ready; suite root folder=" + store.suiteRootFolder().getFullPathName());
 
@@ -323,19 +323,14 @@ int main(int, char*[])
         res.set_content("{\"status\":\"ok\"}", "application/json");
     });
 
-    http.Get("/project/list", [&](const httplib::Request& req, httplib::Response& res)
+    http.Get("/project/list", [&](const httplib::Request&, httplib::Response& res)
     {
-        if (! req.has_param("appDomain"))
-        {
-            res.status = 400;
-            return;
-        }
-
-        const auto appDomain = creation::assets::suiteAppDomainFromStorageToken(juce::String(req.get_param_value("appDomain")));
+        // Unfiltered by design -- projects are not owned by any app. See
+        // docs/architecture/Suite-Shared-Project-Model.md.
         juce::Array<VfsProjectStore::ProjectSummary> summaries;
         {
             const juce::ScopedLock lock(storeLock);
-            store.listProjects(appDomain, summaries);
+            store.listProjects(summaries);
         }
 
         juce::Array<juce::var> array;

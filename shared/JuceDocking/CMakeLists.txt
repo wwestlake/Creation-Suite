@@ -11,30 +11,28 @@ add_library(CreationDock STATIC
 )
 
 target_compile_definitions(CreationDock PUBLIC JUCE_WEB_BROWSER=0)
-
-target_include_directories(CreationDock PUBLIC include)
-
+target_include_directories(CreationDock PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(CreationDock PUBLIC
     juce::juce_core
     juce::juce_graphics
     juce::juce_gui_basics
     juce::juce_gui_extra
 )
-
-# On Linux, JUCE modules are recompiled from source for every target that
-# links them (no shared "libjuce" - each target gets its own translation
-# units) - so juce_gui_extra.cpp gets compiled here too, and needs GTK3's
-# headers, which live under a non-default include path
-# (/usr/include/gtk-3.0/gtk/gtk.h) that installing libgtk-3-dev alone
-# doesn't add to the compiler's default search. Not needed on Windows/Mac.
-if(UNIX AND NOT APPLE)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
-    target_include_directories(CreationDock PRIVATE ${GTK3_INCLUDE_DIRS})
-endif()
-
 target_compile_features(CreationDock PUBLIC cxx_std_20)
 
+# The suite's documented build contract is single-worker on Windows. JUCE's
+# generated projects may otherwise add /MP independently of MSBuild's /m:1,
+# causing several cl.exe instances to contend for CreationDock.pdb and
+# making the desktop host needlessly saturate the machine.
 if(MSVC)
-    target_compile_options(CreationDock PRIVATE /FS)
+    target_compile_options(CreationDock PRIVATE /MP1 /FS)
 endif()
+
+# Keep this small shared library as one compiler translation unit on the
+# Visual Studio generator. That makes the single-worker contract independent
+# of JUCE/CMake's generated MultiProcessorCompilation setting and prevents
+# concurrent writers to CreationDock.pdb.
+set_target_properties(CreationDock PROPERTIES UNITY_BUILD ON UNITY_BUILD_BATCH_SIZE 1)
+
+# Auto-generated output name overrides
+set_target_properties(CreationDock PROPERTIES OUTPUT_NAME "DjehutiDock")

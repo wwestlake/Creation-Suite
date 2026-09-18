@@ -71,11 +71,20 @@ int main()
         if (! foundStation || ! foundMovie)
             fail("Project registry missed one or more manifests.");
 
+        // appDomain is manifest metadata, never a query filter (there is no such thing as an
+        // app owning a project) -- confirm queryProjects still returns everything, and that the
+        // originating domain survived round-trip on the manifest itself.
         creation::interop::ProjectQuery query;
-        query.appDomain = creation::assets::SuiteAppDomain::movie;
-        auto movieProjects = creation::interop::ProjectRegistry::queryProjects(settings, query, errorMessage);
-        if (movieProjects.size() != 1 || movieProjects[0].manifest.projectName != "Movie Project")
-            fail("Project registry domain query returned the wrong result.");
+        auto allQueriedProjects = creation::interop::ProjectRegistry::queryProjects(settings, query, errorMessage);
+        if (allQueriedProjects.size() != 2)
+            fail("Project registry query unexpectedly filtered by app domain.");
+
+        bool movieManifestHasMovieDomain = false;
+        for (const auto& project : allQueriedProjects)
+            if (project.manifest.projectName == "Movie Project")
+                movieManifestHasMovieDomain = project.manifest.appDomain == creation::assets::SuiteAppDomain::movie;
+        if (! movieManifestHasMovieDomain)
+            fail("Movie project's manifest lost its originating app domain.");
 
         tempRoot.deleteRecursively();
         return 0;

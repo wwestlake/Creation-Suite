@@ -204,7 +204,7 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
     setName("CreationSuiteHeaderBar");
     setAppLogo(creation::ui::SuiteLogoId::suite);
 
-    titleLabel.setText("Creation Suite", juce::dontSendNotification);
+    titleLabel.setText("Djehuti Suite", juce::dontSendNotification);
     titleLabel.setJustificationType(juce::Justification::centredLeft);
     titleLabel.setFont(juce::Font(28.0f).boldened());
     titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
@@ -324,6 +324,19 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
         if (onLoopChanged)
             onLoopChanged(loopButton.getToggleState());
     };
+
+    loopDelaySlider.setSliderStyle(juce::Slider::IncDecButtons);
+    loopDelaySlider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 50, 20);
+    loopDelaySlider.setRange(0.0, 10.0, 0.1);
+    loopDelaySlider.setValue(0.0, juce::dontSendNotification);
+    loopDelaySlider.setTextValueSuffix("s");
+    loopDelaySlider.setTooltip("Delay between loops");
+    loopDelaySlider.onValueChange = [this]
+    {
+        if (onLoopDelayChanged)
+            onLoopDelayChanged(loopDelaySlider.getValue());
+    };
+    addAndMakeVisible(loopDelaySlider);
     clickButton.setClickingTogglesState(false);
     clickButton.onClick = [this]
     {
@@ -562,6 +575,13 @@ void CreationSuiteHeaderBar::setTransportButtonEnabled(TransportButtonSlot slot,
     refreshTransportButtonPresentation();
 }
 
+void CreationSuiteHeaderBar::setSeparatePauseButtonVisible(bool shouldBeVisible)
+{
+    separatePauseButtonVisible = shouldBeVisible;
+    refreshTransportButtonPresentation();
+    resized();
+}
+
 void CreationSuiteHeaderBar::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colour(0xff0f1115));
@@ -780,10 +800,28 @@ void CreationSuiteHeaderBar::resized()
     placeTransportButton(rewindButton, 62, transportControlsVisible && rewindButtonConfig.visible);
     placeTransportButton(fastForwardButton, 62, transportControlsVisible && fastForwardButtonConfig.visible);
     placeTransportButton(stopButton, 66, transportControlsVisible && stopButtonConfig.visible);
-    placeTransportButton(playButton, 82, transportControlsVisible && playPauseButtonConfig.visible);
-    pauseButton.setBounds((transportControlsVisible && playPauseButtonConfig.visible) ? playButton.getBounds() : juce::Rectangle<int>());
-    pauseButton.setVisible(transportControlsVisible && playPauseButtonConfig.visible && playbackIsPlaying);
+    placeTransportButton(playButton, 82, transportControlsVisible && playPauseButtonConfig.visible
+                                           && (separatePauseButtonVisible || !playbackIsPlaying));
+    if (separatePauseButtonVisible)
+    {
+        placeTransportButton(pauseButton, 82, transportControlsVisible && playPauseButtonConfig.visible);
+    }
+    else
+    {
+        pauseButton.setBounds((transportControlsVisible && playPauseButtonConfig.visible) ? playButton.getBounds() : juce::Rectangle<int>());
+        pauseButton.setVisible(transportControlsVisible && playPauseButtonConfig.visible && playbackIsPlaying);
+    }
     placeTransportButton(loopButton, 64, transportControlsVisible && loopButtonConfig.visible);
+    if (transportControlsVisible && loopButtonConfig.visible)
+    {
+        transportRow.removeFromLeft(4);
+        loopDelaySlider.setBounds(transportRow.removeFromLeft(75).reduced(0, 3));
+        transportRow.removeFromLeft(8);
+    }
+    else
+    {
+        loopDelaySlider.setBounds({});
+    }
     placeTransportButton(clickButton, 64, transportControlsVisible && clickButtonConfig.visible);
     placeTransportButton(recordButton, 82, transportControlsVisible && recordButtonConfig.visible);
 
@@ -876,18 +914,21 @@ void CreationSuiteHeaderBar::refreshTransportButtonPresentation()
     rewindButton.setEnabled(rewindButtonConfig.enabled);
     fastForwardButton.setEnabled(fastForwardButtonConfig.enabled);
     stopButton.setEnabled(stopButtonConfig.enabled);
-    playButton.setEnabled(playPauseButtonConfig.enabled);
-    pauseButton.setEnabled(playPauseButtonConfig.enabled);
+    playButton.setEnabled(playPauseButtonConfig.enabled && (!separatePauseButtonVisible || !playbackIsPlaying));
+    pauseButton.setEnabled(playPauseButtonConfig.enabled && (!separatePauseButtonVisible || playbackIsPlaying));
     loopButton.setEnabled(loopButtonConfig.enabled);
     clickButton.setEnabled(clickButtonConfig.enabled);
     recordButton.setEnabled(recordButtonConfig.enabled);
 
-    playButton.setVisible(transportControlsVisible && playPauseButtonConfig.visible && ! playbackIsPlaying);
-    pauseButton.setVisible(transportControlsVisible && playPauseButtonConfig.visible && playbackIsPlaying);
+    playButton.setVisible(transportControlsVisible && playPauseButtonConfig.visible
+                          && (separatePauseButtonVisible || ! playbackIsPlaying));
+    pauseButton.setVisible(transportControlsVisible && playPauseButtonConfig.visible
+                           && (separatePauseButtonVisible || playbackIsPlaying));
     stopButton.setVisible(transportControlsVisible && stopButtonConfig.visible);
     rewindButton.setVisible(transportControlsVisible && rewindButtonConfig.visible);
     fastForwardButton.setVisible(transportControlsVisible && fastForwardButtonConfig.visible);
     loopButton.setVisible(transportControlsVisible && loopButtonConfig.visible);
+    loopDelaySlider.setVisible(transportControlsVisible && loopButtonConfig.visible);
     clickButton.setVisible(transportControlsVisible && clickButtonConfig.visible);
     recordButton.setVisible(transportControlsVisible && recordButtonConfig.visible);
 

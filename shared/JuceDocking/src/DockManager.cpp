@@ -1,5 +1,7 @@
 #include "CreationDock/DockManager.h"
 
+#include <algorithm>
+
 namespace CreationDock {
 
 namespace {
@@ -19,6 +21,16 @@ DockManager::DockManager(juce::Component& topLevelWindow)
 {
     addAndMakeVisible(container);
     addAndMakeVisible(overlay);
+
+    auto notifyActivation = [this](DockPanel* p) {
+        if (onPanelActivated && p != nullptr)
+            onPanelActivated(p->getPanelID());
+    };
+
+    container.getCenterZone()->onPanelActivated = notifyActivation;
+    container.getLeftZone()->onPanelActivated = notifyActivation;
+    container.getRightZone()->onPanelActivated = notifyActivation;
+    container.getBottomZone()->onPanelActivated = notifyActivation;
 }
 
 DockManager::~DockManager()
@@ -43,19 +55,7 @@ DockPanel* DockManager::registerPanel(const juce::String& id, const juce::String
     auto* rawPtr = panel.get();
 
     panel->onFloatRequested = [this](DockPanel* p) {
-        juce::Component::SafePointer<DockPanel> safePanel(p);
-        juce::MessageManager::callAsync([this, safePanel] {
-            if (safePanel != nullptr)
-                floatPanel(safePanel.getComponent());
-        });
-    };
-
-    panel->onCloseRequested = [this](DockPanel* p) {
-        juce::Component::SafePointer<DockPanel> safePanel(p);
-        juce::MessageManager::callAsync([this, safePanel] {
-            if (safePanel != nullptr)
-                closePanel(safePanel.getComponent());
-        });
+        floatPanel(p);
     };
 
     panel->onTitleBarDragged = [this](DockPanel* p, const juce::MouseEvent& e) {
@@ -78,10 +78,29 @@ DockPanel* DockManager::registerPanel(const juce::String& id, const juce::String
 
     registeredPanels.push_back(std::move(panel));
     defaultLayout.push_back({ id, initialZone });
-    rememberZone(id, initialZone);
 
     dockPanel(rawPtr, initialZone);
     return rawPtr;
+}
+
+void DockManager::unregisterPanel(const juce::String& id)
+{
+    auto* panel = findPanelById(id);
+    if (panel == nullptr) return;
+
+    defaultLayout.erase(std::remove_if(defaultLayout.begin(), defaultLayout.end(),
+                                        [&](const auto& entry) { return entry.first == id; }),
+                         defaultLayout.end());
+
+    // extractPanel returns ownership to us as a unique_ptr and falls out of
+    // scope immediately -- that's the actual destruction, there's no
+    // separate "delete" step. If the panel is currently floating this is a
+    // no-op (extractPanel doesn't search floating windows, same as its
+    // other callers) -- closing a floated panel goes through
+    // handleFloatingWindowClosed instead, which re-docks rather than
+    // destroys; extending that path is out of scope here.
+    extractPanel(panel);
+    container.resized();
 }
 
 std::unique_ptr<DockPanel> DockManager::extractPanel(DockPanel* panel)
@@ -112,103 +131,18 @@ void DockManager::dockPanel(DockPanel* panel, DockTargetZone zone)
     if (zone == DockTargetZone::Right) targetZone = container.getRightZone();
     if (zone == DockTargetZone::Bottom) targetZone = container.getBottomZone();
 
-    rememberZone(extractedPanel->getPanelID(), zone);
     targetZone->addPanel(std::move(extractedPanel));
     container.resized();
 }
 
-void DockManager::closePanel(DockPanel* panel)
-{
-    if (panel == nullptr)
-        return;
-
-    auto rememberedZone = getRememberedZone(panel->getPanelID(), DockTargetZone::CenterTab);
-
-    for (auto it = floatingWindows.begin(); it != floatingWindows.end(); ++it)
-    {
-        if (auto* floatingPanel = (*it)->getPanel(); floatingPanel == panel)
-        {
-            auto detached = (*it)->detachPanel();
-            floatingWindows.erase(it);
-            if (detached)
-            {
-                rememberZone(detached->getPanelID(), rememberedZone);
-                hiddenPanels.push_back(std::move(detached));
-            }
-
-            container.resized();
-            return;
-        }
-    }
-
-    auto currentZone = zoneContainingPanel(panel);
-    auto detached = extractPanel(panel);
-    if (!detached)
-        return;
-
-    rememberZone(detached->getPanelID(), currentZone);
-    hiddenPanels.push_back(std::move(detached));
-    container.resized();
-}
-
-void DockManager::closePanel(const juce::String& id)
-{
-    if (auto* panel = findPanelById(id))
-        closePanel(panel);
-}
-
-void DockManager::showPanel(const juce::String& id, DockTargetZone fallbackZone)
-{
-    if (findPanelById(id) != nullptr)
-    {
-        activatePanel(id);
-        return;
-    }
-
-    for (auto it = hiddenPanels.begin(); it != hiddenPanels.end(); ++it)
-    {
-        if ((*it)->getPanelID() != id)
-            continue;
-
-        auto panel = std::move(*it);
-        hiddenPanels.erase(it);
-        auto* rawPanel = panel.get();
-        auto zone = getRememberedZone(id, fallbackZone);
-        registeredPanels.push_back(std::move(panel));
-        dockPanel(rawPanel, zone);
-        activatePanel(id);
-        return;
-    }
-}
-
 void DockManager::activatePanel(const juce::String& id)
 {
-    for (auto& floatingWindow : floatingWindows)
-    {
-        if (auto* panel = floatingWindow->getPanel(); panel != nullptr && panel->getPanelID() == id)
-        {
-            floatingWindow->toFront(true);
-            return;
-        }
-    }
-
     auto* panel = findPanelById(id);
-    if (panel == nullptr)
-        return;
-
+    if (panel == nullptr) return;
     if (container.getLeftZone()->containsPanel(panel)) container.getLeftZone()->setActivePanel(panel);
     else if (container.getRightZone()->containsPanel(panel)) container.getRightZone()->setActivePanel(panel);
     else if (container.getBottomZone()->containsPanel(panel)) container.getBottomZone()->setActivePanel(panel);
-    else container.getCenterZone()->setActivePanel(panel);
-}
-
-bool DockManager::isPanelOpen(const juce::String& id) const
-{
-    for (const auto& panel : hiddenPanels)
-        if (panel->getPanelID() == id)
-            return false;
-
-    return findPanelById(id) != nullptr;
+    else if (container.getCenterZone()->containsPanel(panel)) container.getCenterZone()->setActivePanel(panel);
 }
 
 void DockManager::floatPanel(DockPanel* panel)
@@ -219,7 +153,6 @@ void DockManager::floatPanel(DockPanel* panel)
 void DockManager::floatPanelAt(DockPanel* panel, juce::Point<int> screenPos)
 {
     auto originZone = zoneContainingPanel(panel);
-    rememberZone(panel->getPanelID(), originZone);
 
     auto detached = extractPanel(panel);
     if (!detached) return;
@@ -248,29 +181,6 @@ void DockManager::floatPanelAt(DockPanel* panel, juce::Point<int> screenPos)
     container.resized();
 }
 
-DockTargetZone DockManager::getRememberedZone(const juce::String& id, DockTargetZone fallback) const
-{
-    for (const auto& entry : lastKnownLayout)
-        if (entry.first == id)
-            return entry.second;
-
-    return fallback;
-}
-
-void DockManager::rememberZone(const juce::String& id, DockTargetZone zone)
-{
-    for (auto& entry : lastKnownLayout)
-    {
-        if (entry.first == id)
-        {
-            entry.second = zone;
-            return;
-        }
-    }
-
-    lastKnownLayout.push_back({ id, zone });
-}
-
 void DockManager::handlePanelTitleDrag(DockPanel* panel, const juce::MouseEvent& e)
 {
     auto screenPos = e.getEventRelativeTo(&ownerWindow).getScreenPosition();
@@ -293,19 +203,11 @@ void DockManager::handlePanelDragEnded(DockPanel* panel, const juce::MouseEvent&
 
     if (targetZone == DockTargetZone::None) {
         auto screenPos = e.getEventRelativeTo(&ownerWindow).getScreenPosition();
-        juce::Component::SafePointer<DockPanel> safePanel(panel);
-        juce::MessageManager::callAsync([this, safePanel, screenPos] {
-            if (safePanel != nullptr)
-                floatPanelAt(safePanel.getComponent(), screenPos);
-        });
+        floatPanelAt(panel, screenPos);
         return;
     }
 
-    juce::Component::SafePointer<DockPanel> safePanel(panel);
-    juce::MessageManager::callAsync([this, safePanel, targetZone] {
-        if (safePanel != nullptr)
-            dockPanel(safePanel.getComponent(), targetZone);
-    });
+    dockPanel(panel, targetZone);
 }
 
 void DockManager::handleFloatingWindowClosed(FloatingDockWindow* window, DockTargetZone redockZone)

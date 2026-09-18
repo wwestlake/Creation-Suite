@@ -106,7 +106,7 @@ If two agents must work on `Creation Suite` itself:
 
 Use clear branch names with an owner/topic shape, for example:
 
-- `codex/cel-suite-cutover`
+- `codex/frust-suite-cutover`
 - `claude/movie-transport-pass`
 - `gemini/texture-domain-spec`
 
@@ -116,7 +116,7 @@ Each branch should have one main purpose.
 
 Good:
 
-- shared CEL migration
+- shared FRust migration
 - Movie shell fixes
 - Station remote-control MVP planning
 
@@ -181,9 +181,9 @@ When one agent hands work to another, the handoff must say:
 Short example:
 
 `Repo: Creation Suite`
-`Branch: codex/cel-suite-cutover`
-`Touched: shared/CEL, shared/NodeSystem, wiki/Roadmap.md`
-`Done: suite CEL targets wired`
+`Branch: codex/frust-suite-cutover`
+`Touched: FRust, shared/NodeSystem, wiki/Roadmap.md`
+`Done: suite FRust targets wired`
 `Risk: LLVM environment still rebuilding`
 `Verified: configure logic updated, source copied`
 `Not verified: clean JIT build yet`
@@ -229,7 +229,7 @@ For the current team setup, the least painful process is:
 
 1. assign one agent as suite integrator
 2. keep Movie, Texture, and other app-local work on separate agents
-3. keep shared CEL / shared platform work on one agent only
+3. keep shared FRust / shared platform work on one agent only
 4. let app-local agents merge only inside their app repos unless told otherwise
 5. have the suite integrator update the umbrella repo and submodule pointers after review
 
@@ -251,7 +251,7 @@ Use this workspace policy:
 
 For the Creation Suite as of July 29, 2026:
 
-- keep one agent on suite/shared/CEL integration
+- keep one agent on suite/FRust integration
 - keep other agents on isolated app repos only
 - do not let multiple agents write to the umbrella repo working tree at the same time
 - do not treat untracked files in a shared checkout as authoritative work unless the owning agent confirms them

@@ -109,6 +109,7 @@ struct TimelineTrack
     TrackKind kind = TrackKind::audio;
     TrackChannelMode channelMode = TrackChannelMode::mono;
     int parentTrackIndex = -1;
+    juce::String videoInputDevice;
     bool folded = false;
     AutomationTarget automationTarget; // meaningful only when kind == automation
     AutomationRecordMode automationRecordMode = AutomationRecordMode::touch;

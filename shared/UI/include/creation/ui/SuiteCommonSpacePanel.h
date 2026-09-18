@@ -42,7 +42,7 @@ private:
     Mode mode = Mode::splash;
     SuiteLogoId selectedLogoId = SuiteLogoId::suite;
     juce::Image backgroundImage;
-    juce::String statusText { "Loading Creation Suite..." };
+    juce::String statusText { "Loading Djehuti Suite..." };
     juce::String footerText;
     juce::String versionText;
     juce::String copyrightText;

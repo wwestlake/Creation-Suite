@@ -20,11 +20,12 @@ juce::String toStorageToken(SuiteAppDomain domain)
     {
         case SuiteAppDomain::station: return "station";
         case SuiteAppDomain::engine: return "engine";
-        case SuiteAppDomain::engineer: return "engineer";
         case SuiteAppDomain::movie: return "movie";
         case SuiteAppDomain::live: return "live";
         case SuiteAppDomain::texture: return "texture";
         case SuiteAppDomain::modeler: return "modeler";
+        case SuiteAppDomain::developer: return "developer";
+        case SuiteAppDomain::engineer: return "engineer";
         case SuiteAppDomain::suite: return "suite";
         case SuiteAppDomain::unknown: break;
     }
@@ -37,11 +38,12 @@ SuiteAppDomain suiteAppDomainFromStorageToken(const juce::String& token)
     const auto normalized = token.trim().toLowerCase();
     if (normalized == "station") return SuiteAppDomain::station;
     if (normalized == "engine") return SuiteAppDomain::engine;
-    if (normalized == "engineer") return SuiteAppDomain::engineer;
     if (normalized == "movie") return SuiteAppDomain::movie;
     if (normalized == "live") return SuiteAppDomain::live;
     if (normalized == "texture") return SuiteAppDomain::texture;
     if (normalized == "modeler") return SuiteAppDomain::modeler;
+    if (normalized == "developer") return SuiteAppDomain::developer;
+    if (normalized == "engineer") return SuiteAppDomain::engineer;
     if (normalized == "suite") return SuiteAppDomain::suite;
     return SuiteAppDomain::unknown;
 }
@@ -50,14 +52,15 @@ juce::String toDisplayName(SuiteAppDomain domain)
 {
     switch (domain)
     {
-        case SuiteAppDomain::station: return "Creation Station";
-        case SuiteAppDomain::engine: return "Creation Engine";
-        case SuiteAppDomain::engineer: return "Creation Engineer";
-        case SuiteAppDomain::movie: return "Creation Movie";
-        case SuiteAppDomain::live: return "Creation Live";
-        case SuiteAppDomain::texture: return "Creation Texture";
-        case SuiteAppDomain::modeler: return "Creation Modeler";
-        case SuiteAppDomain::suite: return "Creation Suite";
+        case SuiteAppDomain::station: return "Djehuti Station";
+        case SuiteAppDomain::engine: return "Djehuti Engine";
+        case SuiteAppDomain::movie: return "Djehuti Movie";
+        case SuiteAppDomain::live: return "Djehuti Live";
+        case SuiteAppDomain::texture: return "Djehuti Texture";
+        case SuiteAppDomain::modeler: return "Djehuti Modeler";
+        case SuiteAppDomain::developer: return "Djehuti Developer";
+        case SuiteAppDomain::engineer: return "Djehuti Engineer";
+        case SuiteAppDomain::suite: return "Djehuti Suite";
         case SuiteAppDomain::unknown: break;
     }
 

@@ -21,6 +21,9 @@ target_include_directories(creation_suite_services PUBLIC include)
 target_link_libraries(creation_suite_services PUBLIC creation_suite_asset_system juce::juce_core juce::juce_data_structures)
 target_compile_features(creation_suite_services PUBLIC cxx_std_20)
 
+# JUCE's recommended flags enable parallel compilation under MSVC. This
+# library's generated sources share a debug-symbol database, so serialize
+# PDB access rather than intermittently failing with C1041 during a build.
 if(MSVC)
     target_compile_options(creation_suite_services PRIVATE /FS)
 endif()
@@ -65,3 +68,8 @@ add_test(
     NAME creation_suite_project_handoff_multiprocess_smoke
     COMMAND creation_suite_project_handoff_multiprocess_smoke
 )
+
+# Auto-generated output name overrides
+set_target_properties(creation_suite_services_smoke PROPERTIES OUTPUT_NAME "djehuti_suite_services_smoke")
+set_target_properties(creation_suite_project_handoff_multiprocess_smoke PROPERTIES OUTPUT_NAME "djehuti_suite_project_handoff_multiprocess_smoke")
+set_target_properties(creation_suite_services PROPERTIES OUTPUT_NAME "djehuti_suite_services")

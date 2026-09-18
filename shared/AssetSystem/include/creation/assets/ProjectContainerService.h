@@ -29,12 +29,10 @@ public:
                             ProjectSession& outSession,
                             juce::String& errorMessage);
 
+    // Unfiltered by design -- projects are not owned by any app. See
+    // docs/architecture/Suite-Shared-Project-Model.md.
     static juce::Array<ProjectSummary> listProjects(const creation::suite::SuiteSettings& settings,
-                                                    SuiteAppDomain appDomain,
                                                     juce::String& errorMessage);
-
-    static juce::Array<ProjectSummary> listAllProjects(const creation::suite::SuiteSettings& settings,
-                                                       juce::String& errorMessage);
 
     static bool findProjectById(const creation::suite::SuiteSettings& settings,
                                 const juce::String& projectId,

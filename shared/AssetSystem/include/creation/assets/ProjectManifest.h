@@ -11,16 +11,16 @@ enum class SuiteAppDomain
     unknown,
     station,
     engine,
-    engineer,
     movie,
     live,
     texture,
     modeler,
+    developer,
+    engineer,
     // Reserved for the suite's own root data (AI settings, auth session, etc.), stored
     // directly under the VFS root's "suite/" folder by services/VfsService::VfsProjectStore
     // -- not a project folder at all, so this domain value exists only to keep
-    // SuiteAppDomain exhaustive elsewhere; it's never passed to listProjects/
-    // listAllProjects/findProjectById.
+    // SuiteAppDomain exhaustive elsewhere; it's never stamped onto a real project's manifest.
     suite
 };
 
@@ -47,6 +47,12 @@ struct ProjectContainerPaths
     static constexpr const char* derivedAssetRoot = "Assets/Derived/";
     static constexpr const char* metadataRoot = "Metadata/";
     static constexpr const char* exportsRoot = "Exports/";
+    // Djehuti Bridge engine-side handoff: an external tool (a Blender add-on)
+    // drops a file here via VfsService's existing PUT /project/entry; the
+    // engine's DjehutiImportWatcher picks it up. ".results/" beneath this
+    // is where the watcher writes back {ok, assetId, error} JSON, keyed by
+    // the original dropped file's name.
+    static constexpr const char* importsRoot = "Imports/";
 };
 
 juce::String toStorageToken(SuiteAppDomain domain);

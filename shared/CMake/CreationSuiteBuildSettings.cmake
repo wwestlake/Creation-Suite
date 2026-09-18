@@ -30,7 +30,7 @@ function(creation_suite_init_build_settings)
 
         string(TOLOWER "${_agent_id}" _agent_id)
         set(CREATION_SUITE_AGENT_ID "${_agent_id}" CACHE STRING
-            "Agent/workspace identifier used for shared suite bin folders (for example codex, claude, gemini)" FORCE)
+            "Agent/workspace identifier used for shared suite bin folders" FORCE)
     endif()
 
     if((NOT DEFINED JUCE_DIR OR JUCE_DIR STREQUAL "") AND DEFINED ENV{JUCE_DIR} AND NOT "$ENV{JUCE_DIR}" STREQUAL "")
@@ -54,15 +54,11 @@ function(creation_suite_require_juce)
     creation_suite_init_build_settings()
 
     if(NOT DEFINED JUCE_DIR OR JUCE_DIR STREQUAL "")
-        message(FATAL_ERROR
-            "JUCE_DIR is not set.\n"
-            "Set JUCE_DIR in the environment or pass -DJUCE_DIR=<path-to-JUCE> when configuring.")
+        message(FATAL_ERROR "JUCE_DIR is not set. Set JUCE_DIR in the environment or pass -DJUCE_DIR=<path-to-JUCE> when configuring.")
     endif()
 
     if(NOT EXISTS "${JUCE_DIR}/CMakeLists.txt")
-        message(FATAL_ERROR
-            "JUCE_DIR is set to '${JUCE_DIR}', but ${JUCE_DIR}/CMakeLists.txt was not found.\n"
-            "Point JUCE_DIR at the root of a JUCE checkout.")
+        message(FATAL_ERROR "JUCE_DIR is set to '${JUCE_DIR}', but ${JUCE_DIR}/CMakeLists.txt was not found.")
     endif()
 endfunction()
 

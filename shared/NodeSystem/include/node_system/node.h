@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,7 @@ enum class Domain {
     Event,
     Audio,
     Video,
+    Input,
 };
 
 class Node {
@@ -35,8 +37,8 @@ public:
     PinId AddInput(const std::string& name, PinTypeDesc type, PinDefaultValue defaultValue = {});
     PinId AddOutput(const std::string& name, PinTypeDesc type, PinDefaultValue defaultValue = {});
 
-    // GS8: for reconstructing a node from a .celg file (see
-    // celg_serialization.h) with its pins' ORIGINAL ids intact, so a
+    // For reconstructing a node from a serialized FRust graph with its
+    // pins' ORIGINAL ids intact, so a
     // save/load/save round trip is byte-identical rather than
     // renumbering everything. Also advances the internal
     // next-auto-assigned-id counter past `id` if needed, so a later
@@ -55,13 +57,27 @@ public:
 
     // GS8: canvas position for the node editor (GS10) -- purely
     // presentational, never consulted by graph structure/validation/
-    // codegen. Persisted through .celg so a saved layout survives a
+    // codegen. Persisted through the graph format so a saved layout survives a
     // reload.
     float EditorX() const { return editorX_; }
     float EditorY() const { return editorY_; }
     void SetEditorPosition(float x, float y) {
         editorX_ = x;
         editorY_ = y;
+    }
+
+    // Per-instance resolution for a generic node type's own type
+    // parameters (NodeTypeDescriptor::genericParams) -- e.g. {"T":
+    // DataType::Float} for one placed instance of a generic `identity<T>`
+    // node, {"T": DataType::Int} for another. Same category as
+    // PinDefaultValue: instance data layered on a shared static
+    // descriptor, not a new subsystem. Empty/no entry for a given
+    // parameter name means "unresolved" -- see ResolveEffectivePinType
+    // and CompileBehaviorGraphToFrust's own "every type parameter must be
+    // resolved before compiling" check.
+    const std::map<std::string, DataType>& GenericBindings() const { return genericBindings_; }
+    void SetGenericBinding(const std::string& genericParamName, DataType type) {
+        genericBindings_[genericParamName] = type;
     }
 
 private:
@@ -73,6 +89,7 @@ private:
     PinId nextPinId_ = 1;
     float editorX_ = 0.0f;
     float editorY_ = 0.0f;
+    std::map<std::string, DataType> genericBindings_;
 };
 
 } // namespace ce::node_system

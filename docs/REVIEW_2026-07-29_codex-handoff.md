@@ -7,7 +7,7 @@ Scope: findings from a code-vs-wiki audit pass across Station/Engine/Movie/Live 
 **File:** `apps/CreationEngine/build/CMakeCache.txt`
 **Problem:** the configured cache still resolves `EnTT_SOURCE_DIR` and `LLVM_DIR` to fallback paths under `D:/000 Creation Engine/...` — that directory does not exist on this machine. `apps/CreationEngine/third_party/entt` (submodule) is unpopulated (empty dir).
 
-**Consequence:** every existing built executable in `apps/CreationEngine/build/` (`CreationEngineServer.exe`, `celc.exe`, `Creation Engine.exe`) predates both the 2026-07-29 shared-header-bar commit and the latest CMake reconfigure. **Nothing has successfully rebuilt since the shared-AssetSystem VFS cutover landed.** The cutover itself looks correct in source (see §4), but it is unverified by any actual build.
+**Consequence:** every existing built executable in `apps/CreationEngine/build/` (`CreationEngineServer.exe`, `frustc.exe`, `Creation Engine.exe`) predates both the 2026-07-29 shared-header-bar commit and the latest CMake reconfigure. **Nothing has successfully rebuilt since the shared-AssetSystem VFS cutover landed.** The cutover itself looks correct in source (see §4), but it is unverified by any actual build.
 
 **Action needed:** either populate `third_party/entt` (submodule init/update) and point `LLVM_DIR` at a real local LLVM/vcpkg install, or delete `build/` and do a clean reconfigure with correct paths, then do one full build to confirm the AssetSystem cutover actually compiles.
 

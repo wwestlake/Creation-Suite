@@ -65,6 +65,23 @@ public:
         centreWithSize(1040, 620);
     }
 
+    // Updates the splash in place and forces an immediate repaint. Needed
+    // because createMainWindow() runs synchronously on the message thread --
+    // there's no gap in that call for JUCE's normal paint cycle to run, so a
+    // subclass reporting real progress from inside its MainComponent's
+    // constructor would otherwise never actually see it drawn until the
+    // whole thing returns. Ported from CreationEngine's own hand-rolled
+    // splash, which already solved this the same way.
+    void report(const juce::String& statusText, float progress)
+    {
+        panel.setStatusText(statusText);
+        panel.setProgress(progress);
+        panel.repaint();
+        repaint();
+        if (auto* peer = getPeer(); peer != nullptr)
+            peer->performAnyPendingRepaintsNow();
+    }
+
 private:
     SuiteCommonSpacePanel panel;
 };
@@ -142,7 +159,22 @@ void SuiteJUCEApplication::timerCallback()
 
 void SuiteJUCEApplication::closeSplash()
 {
+    if (splashWindow_ == nullptr)
+        return;
+
+    // Real user feedback: the instant swap from splash to main window read as
+    // broken/jarring. fadeOut() takes its own internal proxy snapshot, so
+    // it's documented-safe to drop the real window immediately after
+    // starting it -- the animation keeps playing on the proxy regardless.
+    constexpr int kSplashFadeOutMs = 250;
+    juce::Desktop::getInstance().getAnimator().fadeOut(splashWindow_.get(), kSplashFadeOutMs);
     splashWindow_ = nullptr;
+}
+
+void SuiteJUCEApplication::reportSplashProgress(const juce::String& statusText, float progress)
+{
+    if (splashWindow_ != nullptr)
+        splashWindow_->report(statusText, progress);
 }
 
 void SuiteJUCEApplication::shutdown()

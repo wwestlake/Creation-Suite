@@ -5,17 +5,19 @@
 
 namespace
 {
+// Every app that belongs on the splash/about grid, in display order --
+// everything getSuiteLogoIds() knows about except the suite logo itself
+// (that one gets the special hero card via drawSuiteHero). Deriving this
+// from the same canonical list CreationSuiteLogos.cpp already maintains
+// means a newly added app (a new SuiteLogoId enum value) shows up here
+// automatically instead of needing its own hand-maintained duplicate list.
 std::vector<creation::ui::SuiteLogoId> getAppLogoIds()
 {
-    return {
-        creation::ui::SuiteLogoId::texture,
-        creation::ui::SuiteLogoId::modeler,
-        creation::ui::SuiteLogoId::station,
-        creation::ui::SuiteLogoId::engine,
-        creation::ui::SuiteLogoId::engineer,
-        creation::ui::SuiteLogoId::movie,
-        creation::ui::SuiteLogoId::live
-    };
+    std::vector<creation::ui::SuiteLogoId> ids;
+    for (auto logoId : creation::ui::getSuiteLogoIds())
+        if (logoId != creation::ui::SuiteLogoId::suite)
+            ids.push_back(logoId);
+    return ids;
 }
 
 juce::Image loadBannerFromRepository()
@@ -147,7 +149,7 @@ void drawCard(juce::Graphics& g,
 
     g.setColour(juce::Colour(0xfff4f7fb).withMultipliedAlpha(cardAlpha));
     g.setFont(juce::Font(13.0f).boldened());
-    g.drawText("CREATION",
+    g.drawText("DJEHUTI",
                textArea.removeFromTop(20.0f).toNearestInt(),
                juce::Justification::centredLeft,
                true);
@@ -157,7 +159,7 @@ void drawCard(juce::Graphics& g,
     g.setFont(juce::Font(22.0f).boldened());
 
     auto name = creation::ui::getSuiteLogoDisplayName(logoId);
-    auto shortName = name.fromFirstOccurrenceOf("Creation ", false, false).toUpperCase();
+    auto shortName = name.fromFirstOccurrenceOf("Djehuti ", false, false).toUpperCase();
     g.drawText(shortName,
                textArea.toNearestInt(),
                juce::Justification::centredLeft,
@@ -193,7 +195,7 @@ void drawSuiteHero(juce::Graphics& g,
 
     g.setColour(juce::Colours::white);
     g.setFont(juce::Font(17.0f).boldened());
-    g.drawText("CREATION",
+    g.drawText("DJEHUTI",
                content.removeFromTop(24.0f).toNearestInt(),
                juce::Justification::centred,
                true);

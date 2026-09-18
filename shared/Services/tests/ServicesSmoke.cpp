@@ -101,7 +101,7 @@ int main()
             loadedAi,
             creation::assets::SuiteAppDomain::live,
             liveRuntime,
-            "Creation Live");
+            "Djehuti Live");
         const auto resolvedLiveRuntime = creation::services::SuiteAiSettingsResolver::resolveRuntimeSettingsForApp(
             loadedAi, creation::assets::SuiteAppDomain::live);
         if (! resolvedLiveRuntime.isValid()
@@ -465,8 +465,9 @@ int main()
             if (projectId.isEmpty() || manifest.projectId != projectId)
                 fail("VfsProjectStore smoke: createProject returned a mismatched projectId.");
 
+            // Flat layout -- no app-domain subfolder (see
+            // docs/architecture/Suite-Shared-Project-Model.md).
             const auto expectedFolder = creation::suite::getProjectContainerDirectory(suiteSettings)
-                                            .getChildFile("Creation Station")
                                             .getChildFile(projectId);
             if (! expectedFolder.isDirectory())
                 fail("VfsProjectStore smoke: project folder does not exist at the configured VFS root: "
@@ -499,7 +500,7 @@ int main()
                 fail("VfsProjectStore smoke: readManifest did not reflect the written manifest.");
 
             juce::Array<creation::services::SuiteVfsServiceClient::ProjectSummary> projects;
-            if (! client.listProjects(creation::assets::SuiteAppDomain::station, projects))
+            if (! client.listProjects(projects))
                 fail("VfsProjectStore smoke: listProjects failed.");
             bool foundInListing = false;
             for (const auto& summary : projects)
@@ -541,7 +542,6 @@ int main()
             // of "Project Containers" (real projects, or other tests' data, may live alongside).
             expectedFolder.deleteRecursively();
             const auto clonedFolder = creation::suite::getProjectContainerDirectory(suiteSettings)
-                                          .getChildFile("Creation Station")
                                           .getChildFile(clonedProjectId);
             clonedFolder.deleteRecursively();
         }

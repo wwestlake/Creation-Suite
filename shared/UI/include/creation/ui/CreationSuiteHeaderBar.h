@@ -45,6 +45,7 @@ public:
     std::function<void()> onRewindToStart;
     std::function<void()> onFastForwardToEnd;
     std::function<void(bool)> onLoopChanged;
+    std::function<void(double)> onLoopDelayChanged;
     std::function<void(MetronomeMode)> onMetronomeModeChanged;
     std::function<void()> onSignInRequested;
     std::function<void()> onOpenProfilePageRequested;
@@ -74,6 +75,10 @@ public:
     void setTransportControlsVisible(bool shouldBeVisible);
     void setTransportButtonVisible(TransportButtonSlot slot, bool shouldBeVisible);
     void setTransportButtonEnabled(TransportButtonSlot slot, bool shouldBeEnabled);
+    // Audio applications may present Play/Pause as one changing button. A
+    // simulation editor benefits from distinct controls: Play starts or
+    // resumes, Pause freezes, and Stop discards the runtime state.
+    void setSeparatePauseButtonVisible(bool shouldBeVisible);
 
     void resized() override;
     void paint(juce::Graphics&) override;
@@ -102,6 +107,7 @@ public:
     juce::TextButton stopButton { "Stop" };
     juce::TextButton recordButton { "Record" };
     juce::ToggleButton loopButton { "Loop" };
+    juce::Slider loopDelaySlider;
     juce::ToggleButton clickButton { "Click" };
     juce::TextButton rewindButton { "Rew" };
     juce::TextButton fastForwardButton { "Fwd" };
@@ -139,6 +145,7 @@ private:
     MetronomeMode metronomeMode = MetronomeMode::off;
     bool metronomeAudible = false;
     bool transportControlsVisible = true;
+    bool separatePauseButtonVisible = false;
     TransportButtonConfig rewindButtonConfig;
     TransportButtonConfig fastForwardButtonConfig;
     TransportButtonConfig stopButtonConfig;

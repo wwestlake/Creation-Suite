@@ -56,6 +56,15 @@ protected:
     // shutdown() is sealed here and can't notify a subclass to null its copy.
     juce::DocumentWindow* getMainWindow() const noexcept { return mainWindow_.get(); }
 
+    // Updates the startup splash's status text and progress bar, forcing an
+    // immediate repaint so it's actually visible before a subclass's
+    // MainComponent constructor (running synchronously inside
+    // createMainWindow(), on the message thread, with no gap for a normal
+    // paint cycle) keeps going. A no-op once the splash has already closed --
+    // safe to call unconditionally from a StartupProgressCallback that
+    // outlives the splash's own lifetime.
+    void reportSplashProgress(const juce::String& statusText, float progress);
+
 private:
     void timerCallback() override; // closes the splash once the minimum-visible time is up
     void finishStartup();          // callAsync target: builds the main window, starts/skips the close timer

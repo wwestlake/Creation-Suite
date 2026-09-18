@@ -39,6 +39,15 @@ juce::String nextVersionToken(const juce::String& version, int fallbackRevision)
         return juce::String(parsed + 1);
     return juce::String(juce::jmax(1, fallbackRevision + 1));
 }
+
+juce::String versionedLogicalPath(const juce::String& logicalPath, const juce::String& version)
+{
+    const auto extension = juce::File(logicalPath).getFileExtension();
+    if (extension.isEmpty())
+        return logicalPath + "@" + version;
+
+    return logicalPath.dropLastCharacters(extension.length()) + "@" + version + extension;
+}
 }
 
 namespace creation::assets
@@ -71,6 +80,14 @@ bool ProjectAssetService::importFile(ProjectSession& session,
     descriptor.mediaType = options.mediaType;
     descriptor.sourceApp = options.sourceApp;
     descriptor.sourceTool = options.sourceTool;
+    descriptor.derivationKind = options.derivationKind;
+    descriptor.dependencies = options.dependencies;
+    descriptor.externalSourcePath = options.externalSourcePath.isNotEmpty()
+                                        ? options.externalSourcePath
+                                        : sourceFile.getFullPathName();
+    descriptor.importerId = options.importerId;
+    descriptor.importerVersion = options.importerVersion;
+    descriptor.importSettings = options.importSettings;
     descriptor.tags = options.tags;
     descriptor.originalAssetId = options.originalAssetId;
     descriptor.derivedFromVersionId = options.derivedFromVersionId;
@@ -125,6 +142,12 @@ bool ProjectAssetService::saveGeneratedAsset(ProjectSession& session,
     descriptor.mediaType = options.mediaType;
     descriptor.sourceApp = options.sourceApp;
     descriptor.sourceTool = options.sourceTool;
+    descriptor.derivationKind = options.derivationKind;
+    descriptor.dependencies = options.dependencies;
+    descriptor.externalSourcePath = options.externalSourcePath; // no source file for generated content -- empty unless the caller sets one explicitly.
+    descriptor.importerId = options.importerId;
+    descriptor.importerVersion = options.importerVersion;
+    descriptor.importSettings = options.importSettings;
     descriptor.tags = options.tags;
     descriptor.originalAssetId = options.originalAssetId;
     descriptor.derivedFromVersionId = options.derivedFromVersionId;
@@ -136,7 +159,7 @@ bool ProjectAssetService::saveGeneratedAsset(ProjectSession& session,
 
     if (! session.writeEntry(options.logicalPath, data, descriptor.modifiedAt, options.compressionLevel))
     {
-        errorMessage = "Could not write the generated asset into the project.";
+        errorMessage = "Could not write the " + toDisplayName(options.kind) + " asset into the project.";
         return false;
     }
 
@@ -156,12 +179,22 @@ bool ProjectAssetService::createNewVersion(ProjectSession& session,
     descriptor.version = nextVersionToken(existingAsset.version, existingAsset.revision);
     descriptor.versionId = existingAsset.id + "@" + descriptor.version;
     descriptor.displayName = overrides.displayName.isNotEmpty() ? overrides.displayName : existingAsset.displayName;
-    descriptor.logicalPath = overrides.logicalPath.isNotEmpty() ? overrides.logicalPath : existingAsset.logicalPath;
+    descriptor.logicalPath = overrides.logicalPath.isNotEmpty()
+                                 ? overrides.logicalPath
+                                 : versionedLogicalPath(existingAsset.logicalPath, descriptor.version);
     descriptor.category = overrides.category.isNotEmpty() ? overrides.category : existingAsset.category;
     descriptor.description = overrides.description.isNotEmpty() ? overrides.description : existingAsset.description;
     descriptor.mediaType = overrides.mediaType.isNotEmpty() ? overrides.mediaType : existingAsset.mediaType;
     descriptor.sourceApp = overrides.sourceApp.isNotEmpty() ? overrides.sourceApp : existingAsset.sourceApp;
     descriptor.sourceTool = overrides.sourceTool.isNotEmpty() ? overrides.sourceTool : existingAsset.sourceTool;
+    descriptor.derivationKind = existingAsset.derivationKind;
+    descriptor.dependencies = overrides.dependencies.isEmpty() ? existingAsset.dependencies : overrides.dependencies;
+    // Reimporting always updates the remembered source to whatever file was actually just
+    // read -- this is how a relocate (the file had moved) sticks for the next reimport.
+    descriptor.externalSourcePath = sourceFile.getFullPathName();
+    descriptor.importerId = overrides.importerId.isNotEmpty() ? overrides.importerId : existingAsset.importerId;
+    descriptor.importerVersion = overrides.importerVersion.isNotEmpty() ? overrides.importerVersion : existingAsset.importerVersion;
+    descriptor.importSettings = overrides.importSettings.isNotEmpty() ? overrides.importSettings : existingAsset.importSettings;
     descriptor.tags = overrides.tags.isEmpty() ? existingAsset.tags : overrides.tags;
     descriptor.kind = overrides.kind != AssetKind::unknown ? overrides.kind : existingAsset.kind;
     descriptor.originalAssetId = existingAsset.originalAssetId.isNotEmpty() ? existingAsset.originalAssetId : existingAsset.id;

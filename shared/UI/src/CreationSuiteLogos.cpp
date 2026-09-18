@@ -21,9 +21,9 @@ std::array<SuiteLogoId, 9> getSuiteLogoIds()
              SuiteLogoId::modeler,
              SuiteLogoId::station,
              SuiteLogoId::engine,
-             SuiteLogoId::engineer,
              SuiteLogoId::movie,
              SuiteLogoId::live,
+             SuiteLogoId::engineer,
              SuiteLogoId::remote };
 }
 
@@ -37,8 +37,6 @@ juce::Image getSuiteLogoImage(SuiteLogoId logoId)
             return loadLogo(BinaryData::creation_station_png, BinaryData::creation_station_pngSize);
         case SuiteLogoId::engine:
             return loadLogo(BinaryData::creation_engine_png, BinaryData::creation_engine_pngSize);
-        case SuiteLogoId::engineer:
-            return loadLogo(BinaryData::creation_engineer_png, BinaryData::creation_engineer_pngSize);
         case SuiteLogoId::movie:
             return loadLogo(BinaryData::creation_movie_png, BinaryData::creation_movie_pngSize);
         case SuiteLogoId::live:
@@ -47,10 +45,13 @@ juce::Image getSuiteLogoImage(SuiteLogoId logoId)
             return loadLogo(BinaryData::creation_texture_png, BinaryData::creation_texture_pngSize);
         case SuiteLogoId::modeler:
             return loadLogo(BinaryData::creation_modeler_png, BinaryData::creation_modeler_pngSize);
+        case SuiteLogoId::engineer:
         case SuiteLogoId::remote:
-            // No dedicated badge art yet -- reuses the generic suite mark as a
-            // placeholder, same as Modeler/Movie/Texture's still-pending icon
-            // refresh. Swap for real Creation Remote Receiver art when available.
+            // No dedicated artwork yet -- fall back to the generic suite
+            // mark until real icons are made. Swap these to their own
+            // loadLogo() calls once assets/djehuti_engineer.png and
+            // assets/djehuti_remote.png exist and are wired into
+            // CMakeLists.txt's juce_add_binary_data() call.
             return loadLogo(BinaryData::creation_suite_png, BinaryData::creation_suite_pngSize);
     }
 
@@ -61,18 +62,18 @@ juce::String getSuiteLogoDisplayName(SuiteLogoId logoId)
 {
     switch (logoId)
     {
-        case SuiteLogoId::suite: return "Creation Suite";
-        case SuiteLogoId::station: return "Creation Station";
-        case SuiteLogoId::engine: return "Creation Engine";
-        case SuiteLogoId::engineer: return "Creation Engineer";
-        case SuiteLogoId::movie: return "Creation Movie";
-        case SuiteLogoId::live: return "Creation Live";
-        case SuiteLogoId::texture: return "Creation Texture";
-        case SuiteLogoId::modeler: return "Creation Modeler";
-        case SuiteLogoId::remote: return "Creation Remote Receiver";
+        case SuiteLogoId::suite: return "Djehuti Suite";
+        case SuiteLogoId::station: return "Djehuti Station";
+        case SuiteLogoId::engine: return "Djehuti Engine";
+        case SuiteLogoId::movie: return "Djehuti Movie";
+        case SuiteLogoId::live: return "Djehuti Live";
+        case SuiteLogoId::texture: return "Djehuti Texture";
+        case SuiteLogoId::modeler: return "Djehuti Modeler";
+        case SuiteLogoId::engineer: return "Djehuti Engineer";
+        case SuiteLogoId::remote: return "Djehuti Remote";
     }
 
-    return "Creation Suite";
+    return "Djehuti Suite";
 }
 
 juce::Colour getSuiteLogoAccentColour(SuiteLogoId logoId)
@@ -82,12 +83,12 @@ juce::Colour getSuiteLogoAccentColour(SuiteLogoId logoId)
         case SuiteLogoId::suite: return juce::Colour(0xffffc96a);
         case SuiteLogoId::station: return juce::Colour(0xffd16dff);
         case SuiteLogoId::engine: return juce::Colour(0xffff6a55);
-        case SuiteLogoId::engineer: return juce::Colour(0xffff9b54);
         case SuiteLogoId::movie: return juce::Colour(0xff5f96ff);
         case SuiteLogoId::live: return juce::Colour(0xffd4ec59);
         case SuiteLogoId::texture: return juce::Colour(0xff68cfff);
         case SuiteLogoId::modeler: return juce::Colour(0xff4de0c7);
-        case SuiteLogoId::remote: return juce::Colour(0xff9aa5b1);
+        case SuiteLogoId::engineer: return juce::Colour(0xffffa64d);
+        case SuiteLogoId::remote: return juce::Colour(0xffff8fc7);
     }
 
     return juce::Colours::white;
