@@ -7,10 +7,16 @@ namespace ce {
 
 ShaderComposer::ShaderComposer(juce::File shaderRoot) : shaderRoot_(std::move(shaderRoot)) {}
 
+ShaderComposer::ShaderComposer(SourceProvider provider) : provider_(std::move(provider)) {}
+
 ShaderComposer::ShaderComposer(creation::assets::VirtualFileSystem& vfs, juce::String vfsRootPrefix)
     : vfs_(&vfs), vfsRootPrefix_(std::move(vfsRootPrefix)) {}
 
 bool ShaderComposer::ReadTextByRelativePath(const juce::String& relativePath, juce::String& outText) const {
+    if (provider_) {
+        return provider_(relativePath, outText);
+    }
+
     if (vfs_ != nullptr) {
         juce::MemoryBlock data;
         if (!vfs_->readFile(vfsRootPrefix_ + relativePath, data)) {
