@@ -68,6 +68,10 @@ public:
         juce::Image badgeImage;
     };
 
+    // How tall the header wants to be. Every app gives it this height, so the whole suite agrees. The controls keep
+    // their own size; the height is room between the title row and the transport row.
+    static constexpr int preferredHeight = 112;
+
     CreationSuiteHeaderBar();
     ~CreationSuiteHeaderBar() override;
 
