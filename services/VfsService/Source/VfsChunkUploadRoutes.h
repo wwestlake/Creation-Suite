@@ -44,6 +44,32 @@ inline void registerVfsChunkUploadRoutes(httplib::Server& http, VfsProjectStore&
         res.set_content(completed ? "{\"status\":\"complete\"}" : "{\"status\":\"ok\"}", "application/json");
     });
 
+    // GET /project/entry/range?projectId=&path=&offset=&length=  ->  that slice; X-Total-Size carries the whole size.
+    http.Get("/project/entry/range", [&store, &storeLock](const httplib::Request& req, httplib::Response& res)
+    {
+        if (! req.has_param("projectId") || ! req.has_param("path") || ! req.has_param("offset") || ! req.has_param("length"))
+        {
+            res.status = 400;
+            return;
+        }
+
+        juce::MemoryBlock data;
+        std::int64_t total = 0;
+        {
+            const juce::ScopedLock lock(storeLock);
+            if (! store.readEntryRange(juce::String(req.get_param_value("projectId")), juce::String(req.get_param_value("path")),
+                                       juce::String(req.get_param_value("offset")).getLargeIntValue(),
+                                       juce::String(req.get_param_value("length")).getLargeIntValue(), data, total))
+            {
+                res.status = 404;
+                return;
+            }
+        }
+
+        res.set_header("X-Total-Size", std::to_string(total));
+        res.set_content(static_cast<const char*>(data.getData()), data.getSize(), "application/octet-stream");
+    });
+
     http.Delete("/project/entry/chunk", [&store, &storeLock](const httplib::Request& req, httplib::Response& res)
     {
         if (! req.has_param("projectId") || ! req.has_param("path"))

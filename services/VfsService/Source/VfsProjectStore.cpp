@@ -416,6 +416,41 @@ bool VfsProjectStore::writeEntryChunk(const juce::String& projectId, const juce:
     return true;
 }
 
+bool VfsProjectStore::readEntryRange(const juce::String& projectId, const juce::String& logicalPath,
+                                     std::int64_t offset, std::int64_t length,
+                                     juce::MemoryBlock& outData, std::int64_t& outTotalSize) const
+{
+    outData.reset();
+    outTotalSize = 0;
+
+    juce::File folder;
+    if (! findProjectFolderById(projectId, folder))
+        return false;
+
+    const auto normalized = normalizeLogicalPath(logicalPath);
+    if (normalized.isEmpty())
+        return false;
+
+    const auto file = folder.getChildFile(normalized);
+    if (! file.existsAsFile())
+        return false;
+
+    outTotalSize = file.getSize();
+    if (offset < 0 || offset > outTotalSize || length < 0)
+        return false;
+
+    const auto count = juce::jmin(length, outTotalSize - offset);
+    if (count == 0)
+        return true;
+
+    juce::FileInputStream in(file);
+    if (in.failedToOpen() || ! in.setPosition(offset))
+        return false;
+
+    outData.setSize((size_t) count);
+    return in.read(outData.getData(), (int) count) == (int) count;
+}
+
 bool VfsProjectStore::discardEntryUpload(const juce::String& projectId, const juce::String& logicalPath)
 {
     juce::File folder;

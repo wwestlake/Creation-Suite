@@ -93,6 +93,26 @@ int main()
     check(stored.getSize() == size && stored.hasIdenticalContentTo(source), "stored bytes match the source");
     check(! projectFolder.getChildFile("Assets/big.bin.upload-part").exists(), "no part file left behind");
 
+    // Download the 150 MB entry back in pieces.
+    {
+        const auto back = root.getChildFile("download/big-back.bin");
+        int downloadCalls = 0;
+        const auto okDown = client.readProjectEntryToFile(projectId, "Assets/big.bin", back, [&](double) { ++downloadCalls; return true; });
+        check(okDown, "150 MB download succeeds");
+        if (! okDown)
+            std::printf("   reason: %s\n", client.getLastReadError().toRawUTF8());
+        check(okDown && back.getSize() == size && back.hasIdenticalContentTo(source), "downloaded bytes match the source");
+        check(downloadCalls >= 9, "download reports progress per piece");
+
+        const auto missing = client.readProjectEntryToFile(projectId, "Assets/nope.bin", root.getChildFile("download/nope.bin"));
+        check(! missing && ! root.getChildFile("download/nope.bin").exists(), "missing entry fails and leaves no file");
+
+        int cancelDown = 0;
+        const auto cancelledDown = client.readProjectEntryToFile(projectId, "Assets/big.bin", root.getChildFile("download/cancel.bin"),
+                                                                 [&](double) { return ++cancelDown < 2; });
+        check(! cancelledDown && ! root.getChildFile("download/cancel.bin").exists(), "cancelled download leaves no file");
+    }
+
     // Cancel part way: the existing entry must survive, and no part file may remain.
     int cancelCalls = 0;
     const auto cancelled = client.writeProjectEntryFromFile(projectId, "Assets/big.bin", source,

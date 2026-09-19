@@ -419,6 +419,100 @@ constexpr juce::int64 kChunkBytes = 16 * 1024 * 1024;
 constexpr juce::int64 kSingleRequestLimit = 24 * 1024 * 1024;
 }
 
+bool SuiteVfsServiceClient::readProjectEntryToFile(const juce::String& projectId, const juce::String& logicalPath,
+                                                   const juce::File& destination, const ProgressFn& progress) const
+{
+    lastReadError_ = {};
+
+    if (httpPort_ <= 0)
+    {
+        lastReadError_ = "the project service is not running";
+        return false;
+    }
+
+    if (! destination.getParentDirectory().createDirectory())
+    {
+        lastReadError_ = "the destination folder could not be created";
+        return false;
+    }
+
+    destination.deleteFile();
+    auto out = std::make_unique<juce::FileOutputStream>(destination);
+    if (out->failedToOpen())
+    {
+        lastReadError_ = "the destination file could not be opened for writing";
+        return false;
+    }
+
+    juce::int64 offset = 0;
+    juce::int64 total = -1;
+
+    do
+    {
+        bool got = false;
+        int statusCode = 0;
+        for (int attempt = 0; attempt < 3 && ! got; ++attempt)
+        {
+            juce::StringPairArray headers;
+            statusCode = 0;
+            auto url = baseUrl("/project/entry/range")
+                           .withParameter("projectId", projectId)
+                           .withParameter("path", logicalPath)
+                           .withParameter("offset", juce::String(offset))
+                           .withParameter("length", juce::String(kChunkBytes));
+
+            auto stream = url.createInputStream(juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                                                    .withConnectionTimeoutMs(120000)
+                                                    .withResponseHeaders(&headers)
+                                                    .withStatusCode(&statusCode));
+            if (stream == nullptr)
+                continue;
+
+            if (statusCode != 200)
+                break;
+
+            juce::MemoryBlock piece;
+            stream->readIntoMemoryBlock(piece);
+            total = headers.getValue("X-Total-Size", "-1").getLargeIntValue();
+            if (total < 0)
+                break;
+
+            if (piece.getSize() > 0 && ! out->write(piece.getData(), piece.getSize()))
+            {
+                lastReadError_ = "the destination file could not be written (disk full?)";
+                out.reset();
+                destination.deleteFile();
+                return false;
+            }
+            offset += (juce::int64) piece.getSize();
+            got = true;
+            if (piece.getSize() == 0)
+                total = offset; // nothing more to read
+        }
+
+        if (! got)
+        {
+            lastReadError_ = statusCode == 404
+                               ? "the project service could not find that file, or is out of date and cannot send large files - restart Djehuti Station and its project service"
+                               : "the project service stopped answering during the download";
+            out.reset();
+            destination.deleteFile();
+            return false;
+        }
+
+        if (progress && ! progress(total > 0 ? (double) offset / (double) total : 1.0))
+        {
+            lastReadError_ = "cancelled";
+            out.reset();
+            destination.deleteFile();
+            return false;
+        }
+    } while (offset < total);
+
+    out->flush();
+    return true;
+}
+
 bool SuiteVfsServiceClient::writeProjectEntryFromFile(const juce::String& projectId, const juce::String& logicalPath,
                                                       const juce::File& sourceFile, const ProgressFn& progress) const
 {

@@ -63,6 +63,11 @@ public:
     using ProgressFn = std::function<bool(double fraction)>;
     bool writeProjectEntryFromFile(const juce::String& projectId, const juce::String& logicalPath,
                                    const juce::File& sourceFile, const ProgressFn& progress = {}) const;
+    // Streams an entry down into a file in pieces; the same progress/cancel contract as the upload.
+    // Falls back to nothing: if the service predates ranged reads this fails (see getLastReadError()).
+    bool readProjectEntryToFile(const juce::String& projectId, const juce::String& logicalPath,
+                                const juce::File& destination, const ProgressFn& progress = {}) const;
+    juce::String getLastReadError() const { return lastReadError_; }
     // True when the last write failed because `progress` returned false.
     bool lastWriteWasCancelled() const { return lastWriteCancelled_; }
     // For tests that run their own stand-in service.
@@ -81,5 +86,6 @@ private:
     int httpPort_ = 0;
     mutable juce::String lastWriteError_;
     mutable bool lastWriteCancelled_ = false;
+    mutable juce::String lastReadError_;
 };
 }
