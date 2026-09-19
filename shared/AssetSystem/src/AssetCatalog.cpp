@@ -146,6 +146,14 @@ juce::var toVar(const AssetDescriptor& descriptor)
         tags.add(tag);
     object->setProperty("tags", tags);
 
+    if (descriptor.details.size() > 0)
+    {
+        auto* details = new juce::DynamicObject();
+        for (const auto& key : descriptor.details.getAllKeys())
+            details->setProperty(juce::Identifier(key), descriptor.details[key]);
+        object->setProperty("details", juce::var(details));
+    }
+
     return juce::var(object);
 }
 
@@ -194,6 +202,11 @@ bool fromVar(const juce::var& value, AssetDescriptor& outDescriptor)
     outDescriptor.createdAt = juce::Time(static_cast<int64_t>(object->getProperty("createdAtMs")));
     outDescriptor.modifiedAt = juce::Time(static_cast<int64_t>(object->getProperty("modifiedAtMs")));
     outDescriptor.tags = readStringArrayProperty(*object, "tags");
+
+    outDescriptor.details.clear();
+    if (const auto* details = object->getProperty("details").getDynamicObject())
+        for (const auto& property : details->getProperties())
+            outDescriptor.details.set(property.name.toString(), property.value.toString());
     return true;
 }
 
