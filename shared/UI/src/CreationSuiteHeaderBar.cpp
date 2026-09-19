@@ -192,6 +192,88 @@ private:
     }
 };
 
+void drawHeaderIcon(juce::Graphics& g, juce::Rectangle<float> area, HeaderIconButton::Icon icon)
+{
+    const auto size = juce::jmin(area.getWidth(), area.getHeight());
+    const auto centre = area.getCentre();
+    const auto box = juce::Rectangle<float>(size, size).withCentre(centre).reduced(size * 0.1f);
+    const auto stroke = juce::jmax(1.5f, size * 0.09f);
+
+    switch (icon)
+    {
+        case HeaderIconButton::Icon::project: // a folder
+        {
+            juce::Path folder;
+            const auto x = box.getX(), y = box.getY() + box.getHeight() * 0.18f, w = box.getWidth(), h = box.getHeight() * 0.68f;
+            folder.startNewSubPath(x, y + h * 0.18f);
+            folder.lineTo(x, y + h);
+            folder.lineTo(x + w, y + h);
+            folder.lineTo(x + w, y + h * 0.18f);
+            folder.lineTo(x + w * 0.45f, y + h * 0.18f);
+            folder.lineTo(x + w * 0.35f, y - h * 0.08f);
+            folder.lineTo(x + w * 0.05f, y - h * 0.08f);
+            folder.closeSubPath();
+            g.strokePath(folder, juce::PathStrokeType(stroke, juce::PathStrokeType::curved));
+            break;
+        }
+        case HeaderIconButton::Icon::audio: // a speaker with a wave
+        {
+            juce::Path speaker;
+            const auto x = box.getX(), cy = box.getCentreY(), w = box.getWidth(), h = box.getHeight();
+            speaker.addRectangle(x, cy - h * 0.14f, w * 0.22f, h * 0.28f);
+            speaker.startNewSubPath(x + w * 0.22f, cy - h * 0.14f);
+            speaker.lineTo(x + w * 0.52f, cy - h * 0.36f);
+            speaker.lineTo(x + w * 0.52f, cy + h * 0.36f);
+            speaker.lineTo(x + w * 0.22f, cy + h * 0.14f);
+            speaker.closeSubPath();
+            g.fillPath(speaker);
+            juce::Path wave;
+            wave.addCentredArc(x + w * 0.52f, cy, w * 0.26f, h * 0.26f, 0.0f, juce::MathConstants<float>::pi * 0.15f, juce::MathConstants<float>::pi * 0.85f, true);
+            g.strokePath(wave, juce::PathStrokeType(stroke));
+            break;
+        }
+        case HeaderIconButton::Icon::assets: // a grid of tiles
+        {
+            const auto cell = box.getWidth() * 0.42f;
+            for (int row = 0; row < 2; ++row)
+                for (int col = 0; col < 2; ++col)
+                    g.fillRoundedRectangle(box.getX() + col * (box.getWidth() - cell), box.getY() + row * (box.getHeight() - cell), cell, cell, 2.0f);
+            break;
+        }
+        case HeaderIconButton::Icon::pods: // a hexagon (a pod)
+        {
+            juce::Path hex;
+            for (int i = 0; i < 6; ++i)
+            {
+                const auto angle = juce::MathConstants<float>::pi / 3.0f * (float) i - juce::MathConstants<float>::halfPi;
+                const auto pt = juce::Point<float>(centre.x + std::cos(angle) * box.getWidth() * 0.5f, centre.y + std::sin(angle) * box.getHeight() * 0.5f);
+                if (i == 0) hex.startNewSubPath(pt); else hex.lineTo(pt);
+            }
+            hex.closeSubPath();
+            g.strokePath(hex, juce::PathStrokeType(stroke, juce::PathStrokeType::curved));
+            g.fillEllipse(juce::Rectangle<float>(box.getWidth() * 0.22f, box.getWidth() * 0.22f).withCentre(centre));
+            break;
+        }
+        case HeaderIconButton::Icon::tour: // a flag on a pole
+        {
+            const auto poleX = box.getX() + box.getWidth() * 0.22f;
+            g.drawLine(poleX, box.getY(), poleX, box.getBottom(), stroke);
+            juce::Path flag;
+            flag.addTriangle(poleX, box.getY(), poleX, box.getY() + box.getHeight() * 0.55f, box.getRight(), box.getY() + box.getHeight() * 0.27f);
+            g.fillPath(flag);
+            break;
+        }
+        case HeaderIconButton::Icon::about: // a question mark
+        {
+            g.setFont(juce::Font(juce::FontOptions(size * 1.05f, juce::Font::bold)));
+            g.drawText("?", area.toNearestInt(), juce::Justification::centred, false);
+            break;
+        }
+        case HeaderIconButton::Icon::none:
+            break;
+    }
+}
+
 TransportButtonLookAndFeel& getTransportButtonLookAndFeel()
 {
     static TransportButtonLookAndFeel lookAndFeel;
@@ -215,6 +297,8 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
 
     projectButton.setButtonText("Project: Untitled");
     projectButton.setTooltip("Open the project menu");
+    projectButton.setIcon(HeaderIconButton::Icon::project);
+    projectButton.setFullLabel("Project: Untitled");
     addAndMakeVisible(projectButton);
 
     playButton.setLookAndFeel(&getTransportButtonLookAndFeel());
@@ -353,14 +437,20 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
 
     audioButton.onClick = [this, callback] { callback(onAudioRequested); };
     audioButton.setTooltip("Open audio settings");
+    audioButton.setIcon(HeaderIconButton::Icon::audio);
+    audioButton.setFullLabel(audioButton.getButtonText());
     addAndMakeVisible(audioButton);
 
     assetsButton.onClick = [this, callback] { callback(onAssetManagerRequested); };
     assetsButton.setTooltip("Open the Suite Asset Manager");
+    assetsButton.setIcon(HeaderIconButton::Icon::assets);
+    assetsButton.setFullLabel(assetsButton.getButtonText());
     addAndMakeVisible(assetsButton);
 
     podsButton.onClick = [this, callback] { callback(onPodsRequested); };
     podsButton.setTooltip("Browse Frate Pods");
+    podsButton.setIcon(HeaderIconButton::Icon::pods);
+    podsButton.setFullLabel(podsButton.getButtonText());
     addAndMakeVisible(podsButton);
 
     suiteButton.onClick = [this, callback] { callback(onSuiteRequested); };
@@ -377,10 +467,14 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
             app->showAboutBox();
     };
     aboutButton.setTooltip("About this application");
+    aboutButton.setIcon(HeaderIconButton::Icon::about);
+    aboutButton.setFullLabel("About");
     addAndMakeVisible(aboutButton);
 
     tourButton.onClick = [this, callback] { callback(onTourRequested); };
     tourButton.setTooltip("Open guidance");
+    tourButton.setIcon(HeaderIconButton::Icon::tour);
+    tourButton.setFullLabel(tourButton.getButtonText());
     addAndMakeVisible(tourButton);
 
     profileNameLabel.setJustificationType(juce::Justification::centredLeft);
@@ -477,6 +571,7 @@ void CreationSuiteHeaderBar::setProjectLabel(const juce::String& label)
 {
     projectText = label;
     projectButton.setButtonText(label);
+    projectButton.setFullLabel(label);
 }
 
 juce::Rectangle<int> CreationSuiteHeaderBar::getProjectButtonScreenBounds() const
@@ -741,73 +836,120 @@ void CreationSuiteHeaderBar::resized()
 {
     auto area = getLocalBounds().reduced(18, 10);
     area.removeFromLeft(82);
-    auto profileArea = area.removeFromRight(268);
+    // The account chip is the first thing to give up room in a narrow window (it keeps its avatar).
+    const int profileWidth = area.getWidth() >= 1000 ? 268 : 64;
+    auto profileArea = area.removeFromRight(profileWidth);
 
     auto topRow = area.removeFromTop(30);
     auto bottomRow = area;
 
-    titleLabel.setBounds(topRow.removeFromLeft(290));
-    topRow.removeFromLeft(10);
-    logoRailBounds = topRow.removeFromLeft(248);
-
-    auto utilityRow = topRow;
-    auto placeUtilityGap = [&utilityRow](int amount)
-    {
-        if (utilityRow.getWidth() > 0)
-            utilityRow.removeFromLeft(juce::jmin(amount, utilityRow.getWidth()));
-    };
-
-    constexpr int suiteButtonWidth = 44;
-    constexpr int audioButtonWidth = 72;
-    constexpr int assetsButtonWidth = 72;
-    constexpr int podsButtonWidth = 64;
-    constexpr int tourButtonWidth = 68;
-    constexpr int aboutButtonWidth = 32;
+    // Nothing here ever disappears. When space runs short the controls change shape instead: first the
+    // decorative logo rail goes, then the words on the buttons become icons (their names move to a hover tip),
+    // and only then do the icons themselves get narrower.
     constexpr int utilityGap = 6;
     constexpr int projectGap = 10;
+    constexpr int iconWidth = 34;
     constexpr int minimumProjectWidth = 140;
     constexpr int preferredProjectWidth = 190;
+    constexpr int fullOthersWidth = 44 + 72 + 72 + 64 + 68 + 32; // suite, audio, assets, pods, tour, about
+    constexpr int titleMinimum = 170;
+    constexpr int titleFull = 290;
+    constexpr int railFull = 248;
+    constexpr int sectionGap = 10;
 
-    const int reservedUtilityWidth = suiteButtonWidth
-                                     + audioButtonWidth
-                                     + assetsButtonWidth
-                                     + podsButtonWidth
-                                     + tourButtonWidth
-                                     + aboutButtonWidth
-                                     + (utilityGap * 5)
-                                     + projectGap;
-    const int availableProjectWidth = utilityRow.getWidth() - reservedUtilityWidth;
-    const int projectWidth = availableProjectWidth >= minimumProjectWidth
-                                 ? juce::jmin(preferredProjectWidth, availableProjectWidth)
-                                 : 0;
+    const int fullNeed = minimumProjectWidth + projectGap + fullOthersWidth + 5 * utilityGap;
+    const int mixedNeed = minimumProjectWidth + projectGap + 6 * iconWidth + 5 * utilityGap;
+    const int iconNeed = iconWidth + projectGap + 6 * iconWidth + 5 * utilityGap;
 
-    if (projectWidth > 0)
+    const int available = topRow.getWidth();
+    bool projectCompact = false;
+    bool othersCompact = false;
+    int need = fullNeed;
+    if (available < titleMinimum + sectionGap + fullNeed)
     {
-        projectButton.setVisible(true);
-        projectButton.setBounds(utilityRow.removeFromLeft(projectWidth));
-        placeUtilityGap(projectGap);
+        othersCompact = true;
+        need = mixedNeed;
     }
+    if (available < titleMinimum + sectionGap + mixedNeed)
+    {
+        projectCompact = true;
+        need = iconNeed;
+    }
+
+    int buttonWidth = iconWidth;
+    if (available < titleMinimum + sectionGap + iconNeed)
+    {
+        buttonWidth = juce::jmax(24, (available - 100 - projectGap - 5 * utilityGap) / 7);
+        need = 7 * buttonWidth + projectGap + 5 * utilityGap;
+    }
+
+    const int spare = juce::jmax(0, available - need - sectionGap); // for the title and the decorative rail
+    const int titleWidth = juce::jlimit(60, titleFull, spare);
+    const int railWidth = spare - titleWidth >= 100 ? juce::jmin(railFull, spare - titleWidth) : 0;
+
+    titleLabel.setBounds(topRow.removeFromLeft(titleWidth));
+    topRow.removeFromLeft(sectionGap);
+    logoRailBounds = railWidth > 0 ? topRow.removeFromLeft(railWidth) : juce::Rectangle<int>();
+
+    auto utilityRow = topRow;
+    const bool compactOthers = othersCompact || projectCompact;
+    const int projectWidth = projectCompact ? buttonWidth
+                                            : juce::jlimit(minimumProjectWidth, preferredProjectWidth,
+                                                           minimumProjectWidth + juce::jmax(0, spare - titleFull - railFull));
+
+    auto place = [&utilityRow](juce::Component& button, int width, int gapAfter)
+    {
+        button.setVisible(true);
+        button.setBounds(utilityRow.removeFromLeft(juce::jmin(width, utilityRow.getWidth())));
+        if (utilityRow.getWidth() > 0)
+            utilityRow.removeFromLeft(juce::jmin(gapAfter, utilityRow.getWidth()));
+    };
+
+    projectButton.setCompact(projectCompact);
+    audioButton.setCompact(compactOthers);
+    assetsButton.setCompact(compactOthers);
+    podsButton.setCompact(compactOthers);
+    tourButton.setCompact(compactOthers);
+    aboutButton.setCompact(compactOthers);
+
+    place(projectButton, projectWidth, projectGap);
+    place(suiteButton, compactOthers ? buttonWidth : 44, utilityGap);
+    place(audioButton, compactOthers ? buttonWidth : 72, utilityGap);
+    place(assetsButton, compactOthers ? buttonWidth : 72, utilityGap);
+    place(podsButton, compactOthers ? buttonWidth : 64, utilityGap);
+    place(tourButton, compactOthers ? buttonWidth : 68, utilityGap);
+    place(aboutButton, compactOthers ? buttonWidth : 32, 0);
+
+    // The status label is hidden by apps that route messages elsewhere; it must not keep reserving room then.
+    if (statusLabel.isVisible())
+        statusLabel.setBounds(bottomRow.removeFromRight(220));
     else
-    {
-        projectButton.setBounds({});
-        projectButton.setVisible(false);
-    }
-
-    suiteButton.setBounds(utilityRow.removeFromLeft(juce::jmin(suiteButtonWidth, utilityRow.getWidth())));
-    placeUtilityGap(utilityGap);
-    audioButton.setBounds(utilityRow.removeFromLeft(juce::jmin(audioButtonWidth, utilityRow.getWidth())));
-    placeUtilityGap(utilityGap);
-    assetsButton.setBounds(utilityRow.removeFromLeft(juce::jmin(assetsButtonWidth, utilityRow.getWidth())));
-    placeUtilityGap(utilityGap);
-    podsButton.setBounds(utilityRow.removeFromLeft(juce::jmin(podsButtonWidth, utilityRow.getWidth())));
-    placeUtilityGap(utilityGap);
-    tourButton.setBounds(utilityRow.removeFromLeft(juce::jmin(tourButtonWidth, utilityRow.getWidth())));
-    placeUtilityGap(utilityGap);
-    aboutButton.setBounds(utilityRow.removeFromLeft(juce::jmin(aboutButtonWidth, utilityRow.getWidth())));
-
-    auto statusArea = bottomRow.removeFromRight(220);
-    statusLabel.setBounds(statusArea);
+        statusLabel.setBounds({});
     auto transportRow = transportControlsVisible ? bottomRow : juce::Rectangle<int>();
+
+    // The transport buttons scale down together when the row is short (they are icons, so they stay readable)
+    // rather than the last ones being pushed off the end. Play must never be lost.
+    const bool playShown = transportControlsVisible && playPauseButtonConfig.visible && (separatePauseButtonVisible || ! playbackIsPlaying);
+    int widthSum = 0;
+    int gapSum = 0;
+    const auto count = [&](bool shown, int width) { if (shown) { widthSum += width; gapSum += 7; } };
+    count(transportControlsVisible && rewindButtonConfig.visible, 62);
+    count(transportControlsVisible && fastForwardButtonConfig.visible, 62);
+    count(transportControlsVisible && stopButtonConfig.visible, 66);
+    count(playShown, 82);
+    count(separatePauseButtonVisible && transportControlsVisible && playPauseButtonConfig.visible, 82);
+    count(transportControlsVisible && loopButtonConfig.visible, 64);
+    if (transportControlsVisible && loopButtonConfig.visible)
+    {
+        widthSum += 75;
+        gapSum += 12;
+    }
+    count(transportControlsVisible && clickButtonConfig.visible, 64);
+    count(transportControlsVisible && recordButtonConfig.visible, 82);
+    const double transportScale = widthSum > 0 && transportRow.getWidth() - gapSum < widthSum
+                                      ? juce::jmax(0.0, (double) (transportRow.getWidth() - gapSum) / (double) widthSum)
+                                      : 1.0;
+    const auto scaled = [transportScale](int width) { return juce::jmax(34, (int) std::floor((double) width * transportScale)); };
 
     auto placeTransportButton = [&transportRow](juce::Button& button, int width, bool isVisible)
     {
@@ -823,33 +965,33 @@ void CreationSuiteHeaderBar::resized()
         button.setVisible(true);
     };
 
-    placeTransportButton(rewindButton, 62, transportControlsVisible && rewindButtonConfig.visible);
-    placeTransportButton(fastForwardButton, 62, transportControlsVisible && fastForwardButtonConfig.visible);
-    placeTransportButton(stopButton, 66, transportControlsVisible && stopButtonConfig.visible);
-    placeTransportButton(playButton, 82, transportControlsVisible && playPauseButtonConfig.visible
+    placeTransportButton(rewindButton, scaled(62), transportControlsVisible && rewindButtonConfig.visible);
+    placeTransportButton(fastForwardButton, scaled(62), transportControlsVisible && fastForwardButtonConfig.visible);
+    placeTransportButton(stopButton, scaled(66), transportControlsVisible && stopButtonConfig.visible);
+    placeTransportButton(playButton, scaled(82), transportControlsVisible && playPauseButtonConfig.visible
                                            && (separatePauseButtonVisible || !playbackIsPlaying));
     if (separatePauseButtonVisible)
     {
-        placeTransportButton(pauseButton, 82, transportControlsVisible && playPauseButtonConfig.visible);
+        placeTransportButton(pauseButton, scaled(82), transportControlsVisible && playPauseButtonConfig.visible);
     }
     else
     {
         pauseButton.setBounds((transportControlsVisible && playPauseButtonConfig.visible) ? playButton.getBounds() : juce::Rectangle<int>());
         pauseButton.setVisible(transportControlsVisible && playPauseButtonConfig.visible && playbackIsPlaying);
     }
-    placeTransportButton(loopButton, 64, transportControlsVisible && loopButtonConfig.visible);
+    placeTransportButton(loopButton, scaled(64), transportControlsVisible && loopButtonConfig.visible);
     if (transportControlsVisible && loopButtonConfig.visible)
     {
         transportRow.removeFromLeft(4);
-        loopDelaySlider.setBounds(transportRow.removeFromLeft(75).reduced(0, 3));
+        loopDelaySlider.setBounds(transportRow.removeFromLeft(juce::jmax(40, (int) std::floor(75.0 * transportScale))).reduced(0, 3));
         transportRow.removeFromLeft(8);
     }
     else
     {
         loopDelaySlider.setBounds({});
     }
-    placeTransportButton(clickButton, 64, transportControlsVisible && clickButtonConfig.visible);
-    placeTransportButton(recordButton, 82, transportControlsVisible && recordButtonConfig.visible);
+    placeTransportButton(clickButton, scaled(64), transportControlsVisible && clickButtonConfig.visible);
+    placeTransportButton(recordButton, scaled(82), transportControlsVisible && recordButtonConfig.visible);
 
     auto combineBounds = [](juce::Rectangle<int> left, juce::Rectangle<int> right, bool useRight)
     {
@@ -876,8 +1018,8 @@ void CreationSuiteHeaderBar::resized()
     profileDetailLabel.setBounds(profileTextArea.removeFromTop(18));
     profileChipBounds = profileArea;
     signInButton.setVisible(! profileVisible);
-    profileNameLabel.setVisible(profileVisible);
-    profileDetailLabel.setVisible(profileVisible);
+    profileNameLabel.setVisible(profileVisible && profileWidth > 100);
+    profileDetailLabel.setVisible(profileVisible && profileWidth > 100);
 }
 
 juce::String CreationSuiteHeaderBar::makeInitials(const juce::String& displayName, const juce::String& detailText)
@@ -964,4 +1106,19 @@ void CreationSuiteHeaderBar::refreshTransportButtonPresentation()
     recordButton.setToggleState(playbackIsRecording, juce::dontSendNotification);
 
     repaint();
+}
+
+void HeaderIconButton::paintButton(juce::Graphics& g, bool isMouseOver, bool isButtonDown)
+{
+    if (! compact || icon == Icon::none)
+    {
+        juce::TextButton::paintButton(g, isMouseOver, isButtonDown);
+        return;
+    }
+
+    getLookAndFeel().drawButtonBackground(g, *this, findColour(getToggleState() ? buttonOnColourId : buttonColourId),
+                                          isMouseOver, isButtonDown);
+
+    g.setColour(findColour(getToggleState() ? textColourOnId : textColourOffId).withMultipliedAlpha(isEnabled() ? 1.0f : 0.5f));
+    drawHeaderIcon(g, getLocalBounds().toFloat().reduced(7.0f, 6.0f), icon);
 }
