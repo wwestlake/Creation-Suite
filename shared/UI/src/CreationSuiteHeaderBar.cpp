@@ -840,7 +840,8 @@ void CreationSuiteHeaderBar::resized()
     const int profileWidth = area.getWidth() >= 1000 ? 268 : 64;
     auto profileArea = area.removeFromRight(profileWidth);
 
-    auto topRow = area.removeFromTop(30);
+    // The title row grows with a taller header (a 92 px header keeps its old 30 px row).
+    auto topRow = area.removeFromTop(juce::jlimit(30, 38, getHeight() / 3));
     auto bottomRow = area;
 
     // Nothing here ever disappears. When space runs short the controls change shape instead: first the
