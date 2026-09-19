@@ -47,6 +47,12 @@ struct TimelineClip
     double sourceDurationSeconds = 0.0;
     int sourceNumChannels = 0;
     bool recording = false;
+    // Clips that share a non-empty linkGroupId move, trim, split, duplicate and delete together (a video and
+    // its sound, Premiere-style). Empty = not linked.
+    juce::String linkGroupId;
+    // A video clip whose sound has been split onto its own audio clip: the picture no longer plays its own
+    // sound, or it would be heard twice.
+    bool soundDetached = false;
     std::vector<float> peaks;
     std::vector<float> rightPeaks;
     std::vector<MidiNoteEvent> midiNotes;
