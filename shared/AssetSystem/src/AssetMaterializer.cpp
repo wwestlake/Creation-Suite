@@ -21,7 +21,8 @@ bool AssetMaterializer::materializeEntry(const creation::suite::SuiteSettings& s
                                          const juce::String& logicalPath,
                                          MaterializationAccess access,
                                          MaterializedAssetLease& outLease,
-                                         juce::String& errorMessage)
+                                         juce::String& errorMessage,
+                                         const std::function<bool(double)>& progress)
 {
     const auto normalized = normalizeLogicalPath(logicalPath);
 
@@ -56,8 +57,15 @@ bool AssetMaterializer::materializeEntry(const creation::suite::SuiteSettings& s
 
     // Streamed to disk in pieces, so a big entry (a video) is neither held in memory whole nor cut off by a
     // single request's timeout.
-    if (! client.readProjectEntryToFile(projectId, normalized, materializedFile))
+    if (! client.readProjectEntryToFile(projectId, normalized, materializedFile, progress))
     {
+        if (client.getLastReadError() == "cancelled")
+        {
+            errorMessage = "Cancelled.";
+            leaseRoot.deleteRecursively();
+            return false;
+        }
+
         errorMessage = "Could not read the entry from the suite VFS service"
                      + (client.getLastReadError().isNotEmpty() ? ": " + client.getLastReadError() + "." : juce::String("."));
         leaseRoot.deleteRecursively();

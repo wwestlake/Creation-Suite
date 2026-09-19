@@ -137,6 +137,11 @@ struct AssetDescriptor
     juce::String importSettings;
     juce::String version { "1" };
     juce::StringArray tags;
+    // What the asset actually is, read from the file when it is imported (or later, for older assets): e.g.
+    // durationSeconds, width, height, frameRate, hasAudio, channels, sampleRate, variables, and thumbnail (the
+    // logical path of a small preview picture kept in the project). Lets the UI say what an item is instead of
+    // showing only its file name. Empty for an asset whose details have not been read yet.
+    juce::StringPairArray details;
     int64_t fileSizeBytes = 0;
     int revision = 0;
     juce::Time createdAt;

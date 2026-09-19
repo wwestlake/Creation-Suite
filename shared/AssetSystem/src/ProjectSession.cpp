@@ -256,7 +256,8 @@ bool ProjectSession::materializeEntry(const creation::suite::SuiteSettings& sett
                                       const juce::String& logicalPath,
                                       MaterializationAccess access,
                                       MaterializedAssetLease& outLease,
-                                      juce::String& errorMessage) const
+                                      juce::String& errorMessage,
+                                      const std::function<bool(double)>& progress) const
 {
     if (! isValid())
     {
@@ -269,7 +270,8 @@ bool ProjectSession::materializeEntry(const creation::suite::SuiteSettings& sett
                                                logicalPath,
                                                access,
                                                outLease,
-                                               errorMessage);
+                                               errorMessage,
+                                               progress);
 }
 
 bool ProjectSession::reconcileMaterializedEntry(const creation::suite::SuiteSettings& settings,

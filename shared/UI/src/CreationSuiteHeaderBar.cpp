@@ -478,7 +478,7 @@ CreationSuiteHeaderBar::CreationSuiteHeaderBar()
     addAndMakeVisible(tourButton);
 
     profileNameLabel.setJustificationType(juce::Justification::centredLeft);
-    profileNameLabel.setFont(juce::Font(17.0f).boldened());
+    profileNameLabel.setFont(juce::Font(14.0f).boldened());
     profileNameLabel.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(profileNameLabel);
 
@@ -771,18 +771,18 @@ void CreationSuiteHeaderBar::paint(juce::Graphics& g)
     {
         auto chip = profileChipBounds.toFloat();
         g.setColour(juce::Colour(0xff151b23));
-        g.fillRoundedRectangle(chip, 16.0f);
+        g.fillRoundedRectangle(chip, 15.0f);
         g.setColour(juce::Colour(0xff2c394c));
-        g.drawRoundedRectangle(chip, 16.0f, 1.0f);
+        g.drawRoundedRectangle(chip, 15.0f, 1.0f);
 
-        auto avatar = chip.removeFromLeft(44).reduced(4);
+        auto avatar = chip.removeFromLeft(chip.getHeight()).reduced(3);
         g.setColour(juce::Colour(0xff223041));
         g.fillEllipse(avatar);
         g.setColour(juce::Colour(0xff8ea0b7));
-        g.setFont(juce::Font(15.0f).boldened());
+        g.setFont(juce::Font(12.0f).boldened());
         g.drawText(profileInitials, avatar.toNearestInt(), juce::Justification::centred, false);
 
-        auto badgeArea = chip.removeFromRight(38).withSizeKeepingCentre(28.0f, 28.0f);
+        auto badgeArea = chip.removeFromRight(30).withSizeKeepingCentre(22.0f, 22.0f);
         if (profileBadgeImage.isValid())
             g.drawImageWithin(profileBadgeImage, static_cast<int>(badgeArea.getX()), static_cast<int>(badgeArea.getY()),
                               static_cast<int>(badgeArea.getWidth()), static_cast<int>(badgeArea.getHeight()),
@@ -836,12 +836,20 @@ void CreationSuiteHeaderBar::resized()
 {
     auto area = getLocalBounds().reduced(18, 10);
     area.removeFromLeft(82);
-    // The account chip is the first thing to give up room in a narrow window (it keeps its avatar).
-    const int profileWidth = area.getWidth() >= 1000 ? 268 : 64;
-    auto profileArea = area.removeFromRight(profileWidth);
 
     auto topRow = area.removeFromTop(30);
-    auto bottomRow = area;
+
+    // The account chip sits at the end of the top row (it used to run down the whole right side). It is the first
+    // thing to give up room in a narrow window and then keeps just its avatar.
+    const int profileWidth = topRow.getWidth() >= 900 ? 190 : 44;
+    auto profileArea = topRow.removeFromRight(profileWidth);
+    topRow.removeFromRight(12);
+
+    // Height is room, not size: the transport buttons stay the size they always were and the extra is the gap between
+    // the two rows, so the transport group's frame does not ride up over the title row.
+    if (area.getHeight() > 60)
+        area.removeFromTop(12);
+    auto bottomRow = area.withSizeKeepingCentre(area.getWidth(), juce::jmin(area.getHeight(), 42));
 
     // Nothing here ever disappears. When space runs short the controls change shape instead: first the
     // decorative logo rail goes, then the words on the buttons become icons (their names move to a hover tip),
@@ -1010,16 +1018,16 @@ void CreationSuiteHeaderBar::resized()
     transportControlBounds = combineBounds(transportControlBounds, clickButton.getBounds(), transportControlsVisible && clickButtonConfig.visible);
     transportControlBounds = combineBounds(transportControlBounds, recordButton.getBounds(), transportControlsVisible && recordButtonConfig.visible);
 
-    auto profileContent = profileArea.reduced(12, 6);
-    signInButton.setBounds(profileContent);
+    signInButton.setBounds(profileArea);
 
-    auto profileTextArea = profileContent.withTrimmedLeft(48).withTrimmedRight(42);
-    profileNameLabel.setBounds(profileTextArea.removeFromTop(24));
-    profileDetailLabel.setBounds(profileTextArea.removeFromTop(18));
+    // One line: the name. The account's email is the hover text.
+    profileNameLabel.setBounds(profileArea.withTrimmedLeft(36).withTrimmedRight(30));
+    profileDetailLabel.setBounds({});
+    profileNameLabel.setTooltip(profileDetailLabel.getText());
     profileChipBounds = profileArea;
     signInButton.setVisible(! profileVisible);
     profileNameLabel.setVisible(profileVisible && profileWidth > 100);
-    profileDetailLabel.setVisible(profileVisible && profileWidth > 100);
+    profileDetailLabel.setVisible(false);
 }
 
 juce::String CreationSuiteHeaderBar::makeInitials(const juce::String& displayName, const juce::String& detailText)

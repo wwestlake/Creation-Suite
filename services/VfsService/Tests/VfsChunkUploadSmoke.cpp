@@ -5,6 +5,7 @@
 #include "../Source/VfsProjectStore.h"
 #include "../Source/VfsChunkUploadRoutes.h"
 
+#include <creation/assets/ProjectManifest.h>
 #include <creation/services/SuiteVfsServiceClient.h>
 
 #include <atomic>
@@ -38,6 +39,30 @@ int main()
     {
         std::printf("could not create project: %s\n", err.toRawUTF8());
         return 2;
+    }
+
+    // Asset details (length, size of picture, thumbnail path...) survive a manifest save and load.
+    {
+        creation::assets::ProjectManifest m;
+        creation::assets::AssetDescriptor asset;
+        asset.id = "asset:x";
+        asset.displayName = "clip";
+        asset.kind = creation::assets::AssetKind::video;
+        asset.details.set("durationSeconds", "160.300");
+        asset.details.set("width", "1920");
+        asset.details.set("thumbnail", "Assets/Thumbnails/asset_x.jpg");
+        m.assetCatalog.assets.add(asset);
+
+        creation::assets::ProjectManifest back;
+        juce::String parseError;
+        const auto parsed = creation::assets::deserializeManifest(creation::assets::serializeManifest(m), back, parseError);
+        check(parsed && back.assetCatalog.assets.size() == 1, "manifest with asset details reloads");
+        if (parsed && back.assetCatalog.assets.size() == 1)
+        {
+            const auto& d = back.assetCatalog.assets.getReference(0).details;
+            check(d["durationSeconds"] == "160.300" && d["width"] == "1920" && d["thumbnail"] == "Assets/Thumbnails/asset_x.jpg",
+                  "asset details come back exactly as saved");
+        }
     }
 
     juce::CriticalSection lock;
