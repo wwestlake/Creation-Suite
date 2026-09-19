@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
+#include <functional>
 
 #include "creation/assets/AssetCatalog.h"
 #include "creation/assets/AssetMaterializer.h"
@@ -70,7 +71,11 @@ public:
     bool writeEntryFromFile(const juce::String& logicalPath,
                             const juce::File& sourceFile,
                             juce::String& errorMessage,
-                            int compressionLevel = 9);
+                            int compressionLevel = 9,
+                            // Called with the fraction uploaded (0..1); return false to cancel. Runs on the calling thread.
+                            const std::function<bool(double)>& progress = {});
+    // True when the last writeEntryFromFile() stopped because `progress` asked it to.
+    bool lastWriteWasCancelled() const { return lastWriteCancelled; }
     bool removeEntry(const juce::String& logicalPath);
 
     void upsertAssetDescriptor(const AssetDescriptor& descriptor);
@@ -92,6 +97,7 @@ public:
 
 private:
     juce::String lastWriteError;
+    bool lastWriteCancelled = false;
     juce::String projectId;
     ProjectManifest manifest;
 };

@@ -333,6 +333,103 @@ bool VfsProjectStore::writeEntry(const juce::String& projectId, const juce::Stri
     return writeEntryToFolder(folder, logicalPath, data, errorMessage);
 }
 
+bool VfsProjectStore::writeEntryChunk(const juce::String& projectId, const juce::String& logicalPath,
+                                      std::int64_t offset, std::int64_t totalSize,
+                                      const void* chunk, size_t chunkSize,
+                                      bool& outCompleted, juce::String& errorMessage)
+{
+    outCompleted = false;
+
+    juce::File folder;
+    if (! findProjectFolderById(projectId, folder))
+    {
+        errorMessage = "No project with that id was found.";
+        return false;
+    }
+
+    const auto normalized = normalizeLogicalPath(logicalPath);
+    if (normalized.isEmpty() || normalized == ProjectContainerPaths::manifestPath)
+    {
+        errorMessage = "Refusing to write to that logical path.";
+        return false;
+    }
+
+    if (offset < 0 || totalSize < 0 || offset + (std::int64_t) chunkSize > totalSize)
+    {
+        errorMessage = "The upload piece does not fit inside the stated total size.";
+        return false;
+    }
+
+    const auto file = folder.getChildFile(normalized);
+    const auto part = file.getSiblingFile(file.getFileName() + ".upload-part");
+
+    if (offset == 0)
+    {
+        if (! file.getParentDirectory().createDirectory())
+        {
+            errorMessage = "Could not create the entry's parent directory.";
+            return false;
+        }
+        part.deleteFile();
+    }
+    else if (! part.existsAsFile() || part.getSize() != offset)
+    {
+        errorMessage = "The upload piece is out of order (the service has " + juce::String(part.existsAsFile() ? part.getSize() : 0)
+                     + " bytes, the piece starts at " + juce::String(offset) + ").";
+        return false;
+    }
+
+    {
+        juce::FileOutputStream out(part);
+        if (out.failedToOpen())
+        {
+            errorMessage = "Could not open the upload's temporary file.";
+            return false;
+        }
+
+        out.setPosition(offset);
+        if (chunkSize > 0 && ! out.write(chunk, chunkSize))
+        {
+            errorMessage = "Could not write the upload piece (disk full?).";
+            return false;
+        }
+        out.flush();
+    }
+
+    if (offset + (std::int64_t) chunkSize == totalSize)
+    {
+        if (part.getSize() != totalSize)
+        {
+            errorMessage = "The finished upload is not the size that was announced.";
+            return false;
+        }
+
+        file.deleteFile();
+        if (! part.moveFileTo(file))
+        {
+            errorMessage = "Could not move the finished upload into place.";
+            return false;
+        }
+        outCompleted = true;
+    }
+
+    return true;
+}
+
+bool VfsProjectStore::discardEntryUpload(const juce::String& projectId, const juce::String& logicalPath)
+{
+    juce::File folder;
+    if (! findProjectFolderById(projectId, folder))
+        return false;
+
+    const auto normalized = normalizeLogicalPath(logicalPath);
+    if (normalized.isEmpty())
+        return false;
+
+    const auto file = folder.getChildFile(normalized);
+    return file.getSiblingFile(file.getFileName() + ".upload-part").deleteFile();
+}
+
 bool VfsProjectStore::removeEntry(const juce::String& projectId, const juce::String& logicalPath)
 {
     juce::File folder;

@@ -411,9 +411,133 @@ bool SuiteVfsServiceClient::readProjectEntry(const juce::String& projectId, cons
     return true;
 }
 
+namespace
+{
+constexpr juce::int64 kChunkBytes = 16 * 1024 * 1024;
+// Anything bigger than this goes up in pieces; the service refuses a single request over 100 MB, and a
+// piece is also what lets a big upload report progress and be cancelled.
+constexpr juce::int64 kSingleRequestLimit = 24 * 1024 * 1024;
+}
+
+bool SuiteVfsServiceClient::writeProjectEntryFromFile(const juce::String& projectId, const juce::String& logicalPath,
+                                                      const juce::File& sourceFile, const ProgressFn& progress) const
+{
+    lastWriteError_ = {};
+    lastWriteCancelled_ = false;
+
+    if (httpPort_ <= 0)
+    {
+        lastWriteError_ = "the project service is not running";
+        return false;
+    }
+
+    juce::FileInputStream input(sourceFile);
+    if (input.failedToOpen())
+    {
+        lastWriteError_ = "the file could not be opened for reading";
+        return false;
+    }
+
+    const auto total = input.getTotalLength();
+    juce::MemoryBlock piece;
+    juce::int64 offset = 0;
+
+    const auto discardPartial = [&]
+    {
+        auto url = baseUrl("/project/entry/chunk").withParameter("projectId", projectId).withParameter("path", logicalPath);
+        int status = 0;
+        auto stream = url.createInputStream(juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                                                .withHttpRequestCmd("DELETE")
+                                                .withConnectionTimeoutMs(5000)
+                                                .withStatusCode(&status));
+        juce::ignoreUnused(stream);
+    };
+
+    do
+    {
+        const auto thisPiece = juce::jmin(kChunkBytes, total - offset);
+        piece.setSize((size_t) thisPiece);
+        if (thisPiece > 0 && input.read(piece.getData(), (int) thisPiece) != (int) thisPiece)
+        {
+            lastWriteError_ = "the file could not be read (it may have been moved or changed)";
+            discardPartial();
+            return false;
+        }
+
+        bool sent = false;
+        int statusCode = 0;
+        juce::String reply;
+        for (int attempt = 0; attempt < 3 && ! sent; ++attempt)
+        {
+            auto url = baseUrl("/project/entry/chunk")
+                           .withParameter("projectId", projectId)
+                           .withParameter("path", logicalPath)
+                           .withParameter("offset", juce::String(offset))
+                           .withParameter("total", juce::String(total))
+                           .withPOSTData(piece);
+
+            statusCode = 0;
+            auto stream = url.createInputStream(
+                juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                    .withHttpRequestCmd("PUT")
+                    .withConnectionTimeoutMs(120000)
+                    .withExtraHeaders("Content-Type: application/octet-stream\r\n")
+                    .withStatusCode(&statusCode));
+
+            if (stream == nullptr)
+                continue; // the connection dropped; the same piece is safe to send again
+
+            reply = stream->readEntireStreamAsString().substring(0, 160).trim();
+            if (statusCode == 200)
+                sent = true;
+            else
+                break; // a definite answer (out of order, disk full, ...) will not improve by retrying
+        }
+
+        if (! sent)
+        {
+            if (statusCode == 404)
+                lastWriteError_ = "the project service is out of date and cannot take large files - close Djehuti Station and its project service, then start it again";
+            else if (statusCode == 0)
+                lastWriteError_ = "the project service stopped answering during the upload";
+            else
+                lastWriteError_ = "the project service refused the upload (HTTP " + juce::String(statusCode)
+                                + (reply.isNotEmpty() ? ": " + reply : juce::String()) + ")";
+            discardPartial();
+            return false;
+        }
+
+        offset += thisPiece;
+
+        if (progress && ! progress(total > 0 ? (double) offset / (double) total : 1.0))
+        {
+            lastWriteCancelled_ = true;
+            lastWriteError_ = "cancelled";
+            if (offset < total)
+                discardPartial();
+            return false;
+        }
+    } while (offset < total);
+
+    return true;
+}
+
 bool SuiteVfsServiceClient::writeProjectEntry(const juce::String& projectId, const juce::String& logicalPath, const juce::MemoryBlock& data) const
 {
     lastWriteError_ = {};
+    lastWriteCancelled_ = false;
+
+    if ((juce::int64) data.getSize() > kSingleRequestLimit && httpPort_ > 0)
+    {
+        // Too big for one request: spool it to a temporary file and stream it up in pieces.
+        juce::TemporaryFile temp;
+        if (! temp.getFile().replaceWithData(data.getData(), data.getSize()))
+        {
+            lastWriteError_ = "a temporary copy of the data could not be written";
+            return false;
+        }
+        return writeProjectEntryFromFile(projectId, logicalPath, temp.getFile());
+    }
 
     if (httpPort_ <= 0)
     {

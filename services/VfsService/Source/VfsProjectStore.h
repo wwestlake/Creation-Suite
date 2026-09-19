@@ -76,6 +76,16 @@ public:
     bool writeEntry(const juce::String& projectId, const juce::String& logicalPath,
                     const juce::MemoryBlock& data, juce::String& errorMessage);
     bool removeEntry(const juce::String& projectId, const juce::String& logicalPath);
+
+    // Big entries (a video) arrive in pieces so no single request has to carry the whole file. Pieces are
+    // appended, in order, to "<entry>.upload-part"; the last one (offset + size == totalSize) moves the part
+    // file over the real entry, so a half-finished upload never replaces or corrupts the existing entry.
+    // A piece whose offset is not exactly the part file's current size is refused.
+    bool writeEntryChunk(const juce::String& projectId, const juce::String& logicalPath,
+                         std::int64_t offset, std::int64_t totalSize,
+                         const void* chunk, size_t chunkSize,
+                         bool& outCompleted, juce::String& errorMessage);
+    bool discardEntryUpload(const juce::String& projectId, const juce::String& logicalPath);
     juce::StringArray listEntryPaths(const juce::String& projectId) const;
 
     // Suite-root-scoped equivalents (no projectId -- always the one suite folder).

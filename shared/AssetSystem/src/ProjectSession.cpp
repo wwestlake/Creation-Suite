@@ -162,27 +162,47 @@ bool ProjectSession::writeEntry(const juce::String& logicalPath,
 bool ProjectSession::writeEntryFromFile(const juce::String& logicalPath,
                                         const juce::File& sourceFile,
                                         juce::String& errorMessage,
-                                        int compressionLevel)
+                                        int compressionLevel,
+                                        const std::function<bool(double)>& progress)
 {
+    juce::ignoreUnused(compressionLevel);
+    lastWriteError = {};
+    lastWriteCancelled = false;
+
     if (! sourceFile.existsAsFile())
     {
         errorMessage = "The source file for the project entry does not exist.";
         return false;
     }
 
-    juce::MemoryBlock data;
-    if (! sourceFile.loadFileAsData(data))
+    const auto normalized = normalizeLogicalPath(logicalPath);
+    if (normalized.isEmpty() || normalized == ProjectContainerPaths::manifestPath)
     {
-        errorMessage = "Could not load the source file into memory for upload.";
+        lastWriteError = "that path is not allowed in a project";
+        errorMessage = "Could not write the entry into the project: " + lastWriteError + ".";
         return false;
     }
 
-    if (! writeEntry(logicalPath, data, sourceFile.getLastModificationTime(), compressionLevel))
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
     {
-        errorMessage = "Could not write the entry into the project.";
+        lastWriteError = "the project service could not be reached";
+        errorMessage = "Could not write the entry into the project: " + lastWriteError + ".";
         return false;
     }
 
+    // Streamed in pieces straight from the file: nothing here holds the whole file in memory.
+    if (! client.writeProjectEntryFromFile(projectId, normalized, sourceFile, progress))
+    {
+        lastWriteCancelled = client.lastWriteWasCancelled();
+        lastWriteError = client.getLastWriteError();
+        errorMessage = lastWriteCancelled ? juce::String("Cancelled.")
+                                          : "Could not write the entry into the project: " + lastWriteError + ".";
+        return false;
+    }
+
+    manifest.modifiedAt = juce::Time::getCurrentTime();
+    ++manifest.revision;
     return true;
 }
 

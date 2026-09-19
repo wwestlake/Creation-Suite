@@ -73,6 +73,20 @@ target_link_libraries(CreationSuiteVfsService PRIVATE
     juce::juce_recommended_warning_flags
 )
 
+# Headless check of chunked uploads (real HTTP server around the service's store and routes).
+juce_add_console_app(VfsChunkUploadSmoke PRODUCT_NAME "VfsChunkUploadSmoke")
+juce_generate_juce_header(VfsChunkUploadSmoke)
+target_sources(VfsChunkUploadSmoke PRIVATE Tests/VfsChunkUploadSmoke.cpp Source/VfsProjectStore.cpp)
+target_compile_definitions(VfsChunkUploadSmoke PRIVATE
+    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_INCLUDE_ZLIB_CODE=0
+    JUCE_APPLICATION_NAME_STRING="VfsChunkUploadSmoke" JUCE_APPLICATION_VERSION_STRING="0.0.1")
+if(MSVC)
+    target_compile_options(VfsChunkUploadSmoke PRIVATE /MP1 /FS)
+endif()
+target_link_libraries(VfsChunkUploadSmoke PRIVATE
+    creation_suite_asset_system creation_suite_services httplib::httplib ZLIB::ZLIB
+    juce::juce_core juce::juce_events juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+
 creation_suite_get_shared_bin_dir(CREATION_VFS_SHARED_BIN_DIR)
 
 # Was hardcoded to "codex-<config>-bin" regardless of which agent built it --
