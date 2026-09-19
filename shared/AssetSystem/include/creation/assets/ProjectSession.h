@@ -85,7 +85,8 @@ public:
                           const juce::String& logicalPath,
                           MaterializationAccess access,
                           MaterializedAssetLease& outLease,
-                          juce::String& errorMessage) const;
+                          juce::String& errorMessage,
+                          const std::function<bool(double)>& progress = {}) const;
     bool reconcileMaterializedEntry(const creation::suite::SuiteSettings& settings,
                                     MaterializedAssetLease& lease,
                                     juce::String& errorMessage,

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 
 #include <juce_core/juce_core.h>
 
@@ -42,7 +43,9 @@ public:
                                  const juce::String& logicalPath,
                                  MaterializationAccess access,
                                  MaterializedAssetLease& outLease,
-                                 juce::String& errorMessage);
+                                 juce::String& errorMessage,
+                                 // Fraction copied (0..1) after each piece; return false to cancel (the copy is removed).
+                                 const std::function<bool(double)>& progress = {});
 
     static bool hasLocalChanges(const MaterializedAssetLease& lease);
 
