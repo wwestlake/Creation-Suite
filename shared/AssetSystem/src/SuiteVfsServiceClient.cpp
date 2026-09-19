@@ -490,6 +490,26 @@ bool SuiteVfsServiceClient::readProjectEntryToFile(const juce::String& projectId
                 total = offset; // nothing more to read
         }
 
+        // A service that predates ranged reads answers 404 to the range request: fall back to the plain read it does have.
+        if (! got && statusCode == 404 && offset == 0)
+        {
+            juce::MemoryBlock whole;
+            if (readProjectEntry(projectId, logicalPath, whole))
+            {
+                if (whole.getSize() > 0 && ! out->write(whole.getData(), whole.getSize()))
+                {
+                    lastReadError_ = "the destination file could not be written (disk full?)";
+                    out.reset();
+                    destination.deleteFile();
+                    return false;
+                }
+                out->flush();
+                if (progress)
+                    progress(1.0);
+                return true;
+            }
+        }
+
         if (! got)
         {
             lastReadError_ = statusCode == 404
@@ -533,6 +553,26 @@ bool SuiteVfsServiceClient::writeProjectEntryFromFile(const juce::String& projec
     }
 
     const auto total = input.getTotalLength();
+
+    // Small files go up as one plain request - the same call an older project service already understands, so a
+    // newer app keeps working against a service that predates chunked uploads.
+    if (total > 0 && total <= kSingleRequestLimit)
+    {
+        juce::MemoryBlock whole;
+        if (input.readIntoMemoryBlock(whole) != total)
+        {
+            lastWriteError_ = "the file could not be read (it may have been moved or changed)";
+            return false;
+        }
+
+        if (! writeProjectEntry(projectId, logicalPath, whole))
+            return false;
+
+        if (progress)
+            progress(1.0);
+        return true;
+    }
+
     juce::MemoryBlock piece;
     juce::int64 offset = 0;
 

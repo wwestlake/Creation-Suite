@@ -146,6 +146,56 @@ int main()
     check(client.writeProjectEntryFromFile(projectId, "Assets/empty.bin", empty), "empty file uploads");
     check(projectFolder.getChildFile("Assets/empty.bin").existsAsFile(), "empty entry exists");
 
+    // An older project service (only the plain single-request routes): small files must still work, and a file too
+    // big for one request must fail with words, not silently.
+    {
+        httplib::Server oldHttp;
+        oldHttp.Put("/project/entry", [&](const httplib::Request& req, httplib::Response& res)
+        {
+            juce::String e;
+            const juce::MemoryBlock data(req.body.data(), req.body.size());
+            const juce::ScopedLock l(lock);
+            if (! store.writeEntry(juce::String(req.get_param_value("projectId")), juce::String(req.get_param_value("path")), data, e))
+                res.status = 500;
+        });
+        oldHttp.Get("/project/entry", [&](const httplib::Request& req, httplib::Response& res)
+        {
+            juce::MemoryBlock data;
+            const juce::ScopedLock l(lock);
+            if (! store.readEntry(juce::String(req.get_param_value("projectId")), juce::String(req.get_param_value("path")), data))
+            {
+                res.status = 404;
+                return;
+            }
+            res.set_content(static_cast<const char*>(data.getData()), data.getSize(), "application/octet-stream");
+        });
+        const int oldPort = oldHttp.bind_to_any_port("127.0.0.1");
+        std::thread oldServer([&] { oldHttp.listen_after_bind(); });
+
+        creation::services::SuiteVfsServiceClient oldClient;
+        oldClient.setHttpPortForTesting(oldPort);
+
+        const auto midFile = root.getChildFile("mid.bin");
+        {
+            juce::MemoryBlock mid((size_t) (5 * 1024 * 1024));
+            for (size_t i = 0; i < mid.getSize(); ++i)
+                ((unsigned char*) mid.getData())[i] = (unsigned char) (i * 7);
+            midFile.replaceWithData(mid.getData(), mid.getSize());
+        }
+        check(oldClient.writeProjectEntryFromFile(projectId, "Assets/mid.bin", midFile), "older service: a 5 MB file still uploads");
+        const auto midBack = root.getChildFile("download/mid-back.bin");
+        check(oldClient.readProjectEntryToFile(projectId, "Assets/mid.bin", midBack) && midBack.hasIdenticalContentTo(midFile),
+              "older service: a 5 MB file still downloads (plain read fallback)");
+        check(! oldClient.readProjectEntryToFile(projectId, "Assets/absent.bin", root.getChildFile("download/absent.bin")),
+              "older service: a missing entry still fails");
+
+        check(! oldClient.writeProjectEntryFromFile(projectId, "Assets/toobig.bin", source), "older service: a 150 MB file is refused");
+        check(oldClient.getLastWriteError().containsIgnoreCase("out of date"), "older service: the refusal says the service is out of date");
+
+        oldHttp.stop();
+        oldServer.join();
+    }
+
     http.stop();
     server.join();
     root.deleteRecursively();
