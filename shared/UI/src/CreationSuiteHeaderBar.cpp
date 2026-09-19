@@ -484,8 +484,34 @@ juce::Rectangle<int> CreationSuiteHeaderBar::getProjectButtonScreenBounds() cons
     return localAreaToGlobal(projectButton.getBounds());
 }
 
+bool CreationSuiteHeaderBar::statusTextIsError(const juce::String& text)
+{
+    const auto lower = text.trim().toLowerCase();
+    if (lower.isEmpty())
+        return false;
+
+    for (const char* opening : { "could not", "couldn't", "cannot", "can't", "unable to", "failed", "error" })
+        if (lower.startsWith(opening))
+            return true;
+
+    return lower.contains("failed") || (lower.contains("error") && ! lower.contains("no error"));
+}
+
 void CreationSuiteHeaderBar::setStatusText(const juce::String& text)
 {
+    const auto isError = statusTextIsError(text);
+    if (isError && onErrorStatus)
+    {
+        onErrorStatus(text);
+        return;
+    }
+
+    if (! isError && onInfoStatus)
+    {
+        onInfoStatus(text);
+        return;
+    }
+
     statusLabel.setText(text, juce::dontSendNotification);
 }
 

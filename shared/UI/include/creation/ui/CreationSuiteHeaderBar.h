@@ -67,6 +67,16 @@ public:
     void setProjectLabel(const juce::String& label);
     juce::Rectangle<int> getProjectButtonScreenBounds() const;
     void setStatusText(const juce::String& text);
+    // The status label is small and a message in it is cut off and soon replaced, which is no way to show an
+    // error. When this is set, a status message that reads as an error is handed to it instead of the label,
+    // so the app can show it somewhere with room to read (a dialog).
+    std::function<void(const juce::String& message)> onErrorStatus;
+    static bool statusTextIsError(const juce::String& text);
+    // Where non-error status messages go when the app supplies a better place than the label (a toast).
+    std::function<void(const juce::String& message)> onInfoStatus;
+    // The small status label can be taken off the screen entirely; messages then reach the app only through
+    // onErrorStatus / onInfoStatus.
+    void setStatusLabelVisible(bool shouldBeVisible) { statusLabel.setVisible(shouldBeVisible); }
     void setMidiStatusText(const juce::String& text);
     void setPlaybackVisualState(bool playing, bool recording);
     void setMetronomeMode(MetronomeMode mode);

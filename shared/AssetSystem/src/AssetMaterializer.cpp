@@ -32,13 +32,6 @@ bool AssetMaterializer::materializeEntry(const creation::suite::SuiteSettings& s
         return false;
     }
 
-    juce::MemoryBlock data;
-    if (! client.readProjectEntry(projectId, normalized, data))
-    {
-        errorMessage = "Could not read the entry from the suite VFS service.";
-        return false;
-    }
-
     const auto materializedRoot = creation::suite::getMaterializedFilesDirectory(settings, projectId);
     if (! materializedRoot.exists() && ! materializedRoot.createDirectory())
     {
@@ -61,9 +54,13 @@ bool AssetMaterializer::materializeEntry(const creation::suite::SuiteSettings& s
         return false;
     }
 
-    if (! materializedFile.replaceWithData(data.getData(), data.getSize()))
+    // Streamed to disk in pieces, so a big entry (a video) is neither held in memory whole nor cut off by a
+    // single request's timeout.
+    if (! client.readProjectEntryToFile(projectId, normalized, materializedFile))
     {
-        errorMessage = "Could not write the materialized asset file.";
+        errorMessage = "Could not read the entry from the suite VFS service"
+                     + (client.getLastReadError().isNotEmpty() ? ": " + client.getLastReadError() + "." : juce::String("."));
+        leaseRoot.deleteRecursively();
         return false;
     }
 

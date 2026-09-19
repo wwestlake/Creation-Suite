@@ -1,6 +1,7 @@
 #include <JuceHeader.h>
 
 #include "VfsProjectStore.h"
+#include "VfsChunkUploadRoutes.h"
 
 #include <creation/assets/ProjectManifest.h>
 #include <creation/services/SuiteProcessRegistry.h>
@@ -414,6 +415,11 @@ int main(int, char*[])
             }
         }
         res.set_content(static_cast<const char*>(data.getData()), data.getSize(), "application/octet-stream");
+    });
+
+    registerVfsChunkUploadRoutes(http, store, storeLock, [&](const juce::String& projectAndPath)
+    {
+        broadcastEntryChanged(wsClients, wsClientsLock, projectAndPath);
     });
 
     http.Put("/project/entry", [&](const httplib::Request& req, httplib::Response& res)

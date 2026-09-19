@@ -3,6 +3,7 @@
 #include <creation/assets/ProjectManifest.h>
 
 #include <juce_core/juce_core.h>
+#include <functional>
 
 namespace creation::services
 {
@@ -56,6 +57,23 @@ public:
 
     bool readProjectEntry(const juce::String& projectId, const juce::String& logicalPath, juce::MemoryBlock& outData) const;
     bool writeProjectEntry(const juce::String& projectId, const juce::String& logicalPath, const juce::MemoryBlock& data) const;
+    // Streams a file up in pieces (16 MB each), so the size is limited by disk, not by one request. `progress`
+    // is called after each piece with the fraction done (0..1); returning false cancels the upload and the
+    // half-written copy is discarded. Runs on the calling thread - call it from a worker for big files.
+    using ProgressFn = std::function<bool(double fraction)>;
+    bool writeProjectEntryFromFile(const juce::String& projectId, const juce::String& logicalPath,
+                                   const juce::File& sourceFile, const ProgressFn& progress = {}) const;
+    // Streams an entry down into a file in pieces; the same progress/cancel contract as the upload.
+    // Falls back to nothing: if the service predates ranged reads this fails (see getLastReadError()).
+    bool readProjectEntryToFile(const juce::String& projectId, const juce::String& logicalPath,
+                                const juce::File& destination, const ProgressFn& progress = {}) const;
+    juce::String getLastReadError() const { return lastReadError_; }
+    // True when the last write failed because `progress` returned false.
+    bool lastWriteWasCancelled() const { return lastWriteCancelled_; }
+    // For tests that run their own stand-in service.
+    void setHttpPortForTesting(int port) { httpPort_ = port; }
+    // Why the last writeProjectEntry() failed, in words a user can act on ("" after a success).
+    juce::String getLastWriteError() const { return lastWriteError_; }
     bool removeProjectEntry(const juce::String& projectId, const juce::String& logicalPath) const;
     bool listProjectEntries(const juce::String& projectId, juce::StringArray& outPaths) const;
 
@@ -66,5 +84,8 @@ private:
     juce::URL baseUrl(const juce::String& path) const;
 
     int httpPort_ = 0;
+    mutable juce::String lastWriteError_;
+    mutable bool lastWriteCancelled_ = false;
+    mutable juce::String lastReadError_;
 };
 }

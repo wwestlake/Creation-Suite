@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
+#include <functional>
 
 #include "creation/assets/AssetCatalog.h"
 #include "creation/assets/AssetMaterializer.h"
@@ -60,6 +61,9 @@ public:
 
     bool containsEntry(const juce::String& logicalPath) const;
     bool readEntry(const juce::String& logicalPath, juce::MemoryBlock& outData) const;
+    // Why the last writeEntry() failed, in words a user can act on ("" after a success).
+    juce::String getLastWriteError() const { return lastWriteError; }
+
     bool writeEntry(const juce::String& logicalPath,
                     const juce::MemoryBlock& data,
                     juce::Time modifiedAt = juce::Time::getCurrentTime(),
@@ -67,7 +71,11 @@ public:
     bool writeEntryFromFile(const juce::String& logicalPath,
                             const juce::File& sourceFile,
                             juce::String& errorMessage,
-                            int compressionLevel = 9);
+                            int compressionLevel = 9,
+                            // Called with the fraction uploaded (0..1); return false to cancel. Runs on the calling thread.
+                            const std::function<bool(double)>& progress = {});
+    // True when the last writeEntryFromFile() stopped because `progress` asked it to.
+    bool lastWriteWasCancelled() const { return lastWriteCancelled; }
     bool removeEntry(const juce::String& logicalPath);
 
     void upsertAssetDescriptor(const AssetDescriptor& descriptor);
@@ -88,6 +96,8 @@ public:
     bool commit(juce::String& errorMessage);
 
 private:
+    juce::String lastWriteError;
+    bool lastWriteCancelled = false;
     juce::String projectId;
     ProjectManifest manifest;
 };
