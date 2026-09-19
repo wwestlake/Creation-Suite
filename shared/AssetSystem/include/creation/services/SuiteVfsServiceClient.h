@@ -56,6 +56,8 @@ public:
 
     bool readProjectEntry(const juce::String& projectId, const juce::String& logicalPath, juce::MemoryBlock& outData) const;
     bool writeProjectEntry(const juce::String& projectId, const juce::String& logicalPath, const juce::MemoryBlock& data) const;
+    // Why the last writeProjectEntry() failed, in words a user can act on ("" after a success).
+    juce::String getLastWriteError() const { return lastWriteError_; }
     bool removeProjectEntry(const juce::String& projectId, const juce::String& logicalPath) const;
     bool listProjectEntries(const juce::String& projectId, juce::StringArray& outPaths) const;
 
@@ -66,5 +68,6 @@ private:
     juce::URL baseUrl(const juce::String& path) const;
 
     int httpPort_ = 0;
+    mutable juce::String lastWriteError_;
 };
 }

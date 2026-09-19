@@ -132,17 +132,27 @@ bool ProjectSession::writeEntry(const juce::String& logicalPath,
                                 int compressionLevel)
 {
     juce::ignoreUnused(modifiedAt, compressionLevel);
+    lastWriteError = {};
 
     const auto normalized = normalizeLogicalPath(logicalPath);
     if (normalized.isEmpty() || normalized == ProjectContainerPaths::manifestPath)
+    {
+        lastWriteError = "that path is not allowed in a project";
         return false;
+    }
 
     creation::services::SuiteVfsServiceClient client;
     if (! client.discover())
+    {
+        lastWriteError = "the project service could not be reached";
         return false;
+    }
 
     if (! client.writeProjectEntry(projectId, normalized, data))
+    {
+        lastWriteError = client.getLastWriteError();
         return false;
+    }
 
     manifest.modifiedAt = juce::Time::getCurrentTime();
     ++manifest.revision;

@@ -413,20 +413,45 @@ bool SuiteVfsServiceClient::readProjectEntry(const juce::String& projectId, cons
 
 bool SuiteVfsServiceClient::writeProjectEntry(const juce::String& projectId, const juce::String& logicalPath, const juce::MemoryBlock& data) const
 {
+    lastWriteError_ = {};
+
     if (httpPort_ <= 0)
+    {
+        lastWriteError_ = "the project service is not running";
         return false;
+    }
 
     auto url = projectEntryUrl(projectId, logicalPath).withPOSTData(data);
+
+    // The whole entry goes up in one request, so a big file (a video) needs far longer than the usual 5 s:
+    // allow about a second per 10 MB on top of the base, capped at ten minutes.
+    const auto timeoutMs = 5000 + (int) juce::jmin<juce::int64>(600000, (juce::int64) (data.getSize() / 10000));
 
     int statusCode = 0;
     auto stream = url.createInputStream(
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withHttpRequestCmd("PUT")
-            .withConnectionTimeoutMs(5000)
+            .withConnectionTimeoutMs(timeoutMs)
             .withExtraHeaders("Content-Type: application/octet-stream\r\n")
             .withStatusCode(&statusCode));
 
-    return stream != nullptr && statusCode == 200;
+    if (stream == nullptr)
+    {
+        lastWriteError_ = "the project service did not answer the upload of "
+                        + juce::File::descriptionOfSizeInBytes((juce::int64) data.getSize())
+                        + " (the file may be too large, or the service stopped)";
+        return false;
+    }
+
+    if (statusCode != 200)
+    {
+        const auto reply = stream->readEntireStreamAsString().substring(0, 160).trim();
+        lastWriteError_ = "the project service answered HTTP " + juce::String(statusCode)
+                        + (reply.isNotEmpty() ? " (" + reply + ")" : juce::String());
+        return false;
+    }
+
+    return true;
 }
 
 bool SuiteVfsServiceClient::removeProjectEntry(const juce::String& projectId, const juce::String& logicalPath) const

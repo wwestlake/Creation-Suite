@@ -60,6 +60,9 @@ public:
 
     bool containsEntry(const juce::String& logicalPath) const;
     bool readEntry(const juce::String& logicalPath, juce::MemoryBlock& outData) const;
+    // Why the last writeEntry() failed, in words a user can act on ("" after a success).
+    juce::String getLastWriteError() const { return lastWriteError; }
+
     bool writeEntry(const juce::String& logicalPath,
                     const juce::MemoryBlock& data,
                     juce::Time modifiedAt = juce::Time::getCurrentTime(),
@@ -88,6 +91,7 @@ public:
     bool commit(juce::String& errorMessage);
 
 private:
+    juce::String lastWriteError;
     juce::String projectId;
     ProjectManifest manifest;
 };
