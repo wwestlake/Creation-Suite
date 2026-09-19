@@ -3,6 +3,43 @@
 #include <creation/ui/CreationSuiteLogos.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 
+// A text button that folds down to a drawn icon when the header runs out of room (never disappearing), with
+// its full name (and, for the project button, the current project) shown as a hover tooltip.
+class HeaderIconButton final : public juce::TextButton
+{
+public:
+    enum class Icon { none, project, audio, assets, pods, tour, about };
+
+    explicit HeaderIconButton(const juce::String& label) : juce::TextButton(label) {}
+
+    void setIcon(Icon newIcon) { icon = newIcon; }
+    void setCompact(bool shouldBeCompact)
+    {
+        if (compact == shouldBeCompact)
+            return;
+        compact = shouldBeCompact;
+        repaint();
+    }
+    bool isCompact() const noexcept { return compact; }
+    // What the button says when there is room for words; used as the hover text once it is an icon.
+    void setFullLabel(const juce::String& text) { fullLabel = text; }
+
+    juce::String getTooltip() override
+    {
+        const auto hint = juce::TextButton::getTooltip();
+        if (! compact || fullLabel.isEmpty())
+            return hint;
+        return hint.isEmpty() ? fullLabel : fullLabel + " - " + hint;
+    }
+
+    void paintButton(juce::Graphics& g, bool isMouseOver, bool isButtonDown) override;
+
+private:
+    Icon icon = Icon::none;
+    bool compact = false;
+    juce::String fullLabel;
+};
+
 class CreationSuiteHeaderBar final : public juce::Component
 {
 public:
@@ -76,7 +113,7 @@ public:
     std::function<void(const juce::String& message)> onInfoStatus;
     // The small status label can be taken off the screen entirely; messages then reach the app only through
     // onErrorStatus / onInfoStatus.
-    void setStatusLabelVisible(bool shouldBeVisible) { statusLabel.setVisible(shouldBeVisible); }
+    void setStatusLabelVisible(bool shouldBeVisible) { statusLabel.setVisible(shouldBeVisible); resized(); }
     void setMidiStatusText(const juce::String& text);
     void setPlaybackVisualState(bool playing, bool recording);
     void setMetronomeMode(MetronomeMode mode);
@@ -122,19 +159,19 @@ public:
     juce::TextButton rewindButton { "Rew" };
     juce::TextButton fastForwardButton { "Fwd" };
     juce::TextButton signInButton { "Sign In" };
-    juce::TextButton projectButton { "Project" };
-    juce::TextButton audioButton { "Audio" };
-    juce::TextButton assetsButton { "Assets" };
-    juce::TextButton podsButton { "Pods" };
+    HeaderIconButton projectButton { "Project" };
+    HeaderIconButton audioButton { "Audio" };
+    HeaderIconButton assetsButton { "Assets" };
+    HeaderIconButton podsButton { "Pods" };
     juce::TextButton suiteButton { juce::String(juce::CharPointer_UTF8("\xe2\x9a\x99")) };
-    juce::TextButton tourButton { "Tour" };
+    HeaderIconButton tourButton { "Tour" };
     // Opens the shared Help/About box (creation::ui::SuiteJUCEApplication::
     // showAboutBox) -- wired entirely inside CreationSuiteHeaderBar.cpp via
     // juce::JUCEApplication::getInstance(), never via an app-supplied
     // callback, so any app that already constructs this header bar and
     // derives its JUCEApplication subclass from SuiteJUCEApplication gets a
     // working About entry with zero additional wiring.
-    juce::TextButton aboutButton { "?" };
+    HeaderIconButton aboutButton { "?" };
     juce::Label profileNameLabel;
     juce::Label profileDetailLabel;
     juce::Image profileBadgeImage;
