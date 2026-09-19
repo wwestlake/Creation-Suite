@@ -61,7 +61,9 @@ enum class AutomationTargetKind
     trackVolume,
     trackPan,
     pluginParameter,
-    pluginBypass
+    pluginBypass,
+    // A Public variable of one Signal clip instance (AutomationTarget::targetClipId + parameterId).
+    signalClipInput
 };
 
 enum class AutomationValueMode
@@ -85,6 +87,9 @@ struct AutomationTarget
     juce::String displayName;
     AutomationValueMode valueMode = AutomationValueMode::continuous;
     int stepCount = 0; // 0/1 = not stepped, 2 = on/off, N = N discrete choices
+    // signalClipInput only: the timeline clip instance whose Public variable this lane drives (the
+    // variable's id is parameterId), so two clips of the same patch are automated independently.
+    juce::String targetClipId;
 };
 
 // How arming an automation track for recording behaves once you manually move its target's
@@ -303,6 +308,7 @@ inline juce::String toStorageToken(AutomationTargetKind kind)
         case AutomationTargetKind::trackPan: return "trackPan";
         case AutomationTargetKind::pluginParameter: return "pluginParameter";
         case AutomationTargetKind::pluginBypass: return "pluginBypass";
+        case AutomationTargetKind::signalClipInput: return "signalClipInput";
     }
 
     return "none";
@@ -315,6 +321,7 @@ inline AutomationTargetKind automationTargetKindFromStorageToken(const juce::Str
     if (normalized.equalsIgnoreCase("trackPan")) return AutomationTargetKind::trackPan;
     if (normalized.equalsIgnoreCase("pluginParameter")) return AutomationTargetKind::pluginParameter;
     if (normalized.equalsIgnoreCase("pluginBypass")) return AutomationTargetKind::pluginBypass;
+    if (normalized.equalsIgnoreCase("signalClipInput")) return AutomationTargetKind::signalClipInput;
     return AutomationTargetKind::none;
 }
 
