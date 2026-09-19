@@ -58,6 +58,11 @@ public:
                                            const juce::String& fragmentEntry,
                                            const std::vector<juce::String>& defines = {});
 
+    // Drops every compiled program. A compiled program belongs to the OpenGL context that made it, so this must be
+    // called (with that context still current) when the context is closing; the next GetProgram() compiles afresh
+    // in whichever context is current then.
+    void ClearCache() { cache_.clear(); }
+
 private:
     bool ReadTextByRelativePath(const juce::String& relativePath, juce::String& outText) const;
     juce::String ComposeSource(const juce::String& entryRelativePath, const std::vector<juce::String>& defines);
