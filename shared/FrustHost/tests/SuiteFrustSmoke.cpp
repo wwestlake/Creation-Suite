@@ -26,6 +26,13 @@ std::set<std::string> watched(const juce::File& dir) {
     return names;
 }
 
+std::set<std::string> everythingIn(const juce::File& dir) {
+    std::set<std::string> names;
+    for (const auto& f : dir.findChildFiles(juce::File::findFilesAndDirectories, true))
+        names.insert(f.getRelativePathFrom(dir).toStdString());
+    return names;
+}
+
 } // namespace
 
 int main() {
@@ -56,6 +63,10 @@ int main() {
         std::cerr << "FAILED: could not discover the Suite VFS service\n";
         return 1;
     }
+
+    // Taken once the VFS service is up: the service's own start-up files are not the compiler's.
+    const juce::File storageRoot(settings.suiteVfsRoot);
+    const auto storageBefore = everythingIn(storageRoot);
 
     frate::FrateRegistryClient registry;
     creation::frust::SuiteFrust frust(session, vfs, registry);
@@ -138,6 +149,15 @@ int main() {
     frust.flushLog();
     check(watched(cwd) == cwdBefore, "nothing was left in the working directory");
     check(watched(tmp) == tmpBefore, "nothing was left in the temp directory");
+
+    // The compiler and Frate keep everything inside the VFS container: no new file appears in the
+    // storage root beside it.
+    {
+        const auto storageAfter = everythingIn(storageRoot);
+        for (const auto& name : storageAfter)
+            if (storageBefore.count(name) == 0) std::cout << "  new in storage root: " << name << std::endl;
+        check(storageAfter == storageBefore, "no file appeared in the VFS storage root");
+    }
 
     cleanup();
     std::cout << (failures == 0 ? "ALL PASSED" : "FAILURES: " + juce::String(failures)) << std::endl;
