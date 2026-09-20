@@ -69,6 +69,8 @@ private:
     void timerCallback() override; // closes the splash once the minimum-visible time is up
     void finishStartup();          // callAsync target: builds the main window, starts/skips the close timer
     void closeSplash();
+    void beginStartup();               // shows the splash and schedules the main window
+    void requireStorageRoot();         // asks for the VFS root; quits if none is chosen
 
     class SplashWindow;
     class AboutWindow;
@@ -79,5 +81,6 @@ private:
     std::unique_ptr<SplashWindow> splashWindow_;
     std::unique_ptr<juce::DocumentWindow> mainWindow_;
     std::unique_ptr<AboutWindow> aboutWindow_;
+    std::unique_ptr<juce::FileChooser> rootChooser_;
 };
 }

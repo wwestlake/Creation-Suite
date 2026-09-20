@@ -8,17 +8,6 @@
 
 namespace
 {
-juce::File getDefaultSuiteStorageBrowseRoot()
-{
-    auto roamingAppData = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
-    auto appDataRoot = roamingAppData.getParentDirectory();
-    auto localAppData = appDataRoot.getChildFile("Local");
-    if (localAppData.isDirectory())
-        return localAppData.getChildFile("Djehuti Suite").getChildFile("Data");
-
-    return roamingAppData.getChildFile("Djehuti Suite").getChildFile("Data");
-}
-
 juce::String suiteAuthAppSlug(creation::assets::SuiteAppDomain domain)
 {
     switch (domain)
@@ -1122,9 +1111,7 @@ void SuiteShellController::chooseSuiteDirectory(const juce::String& fieldId)
     juce::String currentPath = suiteSettings.suiteVfsRoot;
 
     suiteDirectoryChooser = std::make_unique<juce::FileChooser>("Choose a folder for the Djehuti Suite",
-                                                                currentPath.isNotEmpty()
-                                                                    ? juce::File(currentPath)
-                                                                    : getDefaultSuiteStorageBrowseRoot(),
+                                                                currentPath.isNotEmpty() ? juce::File(currentPath) : juce::File(),
                                                                 "*",
                                                                 true);
     auto chooser = suiteDirectoryChooser.get();
