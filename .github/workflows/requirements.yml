@@ -1,0 +1,23 @@
+name: Requirements
+
+# Fails a pull request that breaks one of the suite's standing requirements for FRust and packaging
+# (see scripts/check-requirements.py): no external tools, no file/console/process access in the FRust
+# libraries, no build-machine paths, no shipped libraries.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  requirements:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check the requirements
+        run: python scripts/check-requirements.py

@@ -17,17 +17,6 @@ void PluginRuntime::registerHostFunction(const char* name, void* function)
     frust_plugin_register_host_function(name, function);
 }
 
-bool PluginRuntime::load(const std::string& pluginPath, std::string& error)
-{
-    unload(defaultPluginKey);
-    return load(defaultPluginKey, pluginPath, error);
-}
-
-bool PluginRuntime::reload(std::string& error)
-{
-    return reload(defaultPluginKey, error);
-}
-
 void PluginRuntime::unload()
 {
     unload(defaultPluginKey);
@@ -46,58 +35,6 @@ std::int64_t PluginRuntime::callEvent(std::int64_t id, std::int64_t argument) co
 bool PluginRuntime::isLoaded() const noexcept
 {
     return isLoaded(defaultPluginKey);
-}
-
-bool PluginRuntime::load(const std::string& key, const std::string& pluginPath, std::string& error)
-{
-    if (key.empty())
-    {
-        error = "A FRust plugin needs a non-empty runtime key.";
-        return false;
-    }
-    if (plugins.contains(key))
-    {
-        error = "FRust plugin '" + key + "' is already loaded. Reload or unload it explicitly.";
-        errors[key] = error;
-        return false;
-    }
-
-    const auto plugin = frust_plugin_load(pluginPath.c_str());
-    if (plugin == nullptr)
-    {
-        error = frust_plugin_last_error();
-        errors[key] = error;
-        return false;
-    }
-
-    frust_plugin_call_on_init(plugin);
-    plugins.emplace(key, plugin);
-    errors.erase(key);
-    return true;
-}
-
-bool PluginRuntime::reload(const std::string& key, std::string& error)
-{
-    const auto found = plugins.find(key);
-    if (found == plugins.end())
-    {
-        error = "Cannot reload FRust plugin '" + key + "' because it is not loaded.";
-        errors[key] = error;
-        return false;
-    }
-
-    const auto reloadedPlugin = frust_plugin_reload(found->second);
-    if (reloadedPlugin == nullptr)
-    {
-        error = frust_plugin_last_error();
-        errors[key] = error;
-        plugins.erase(found);
-        return false;
-    }
-
-    found->second = reloadedPlugin;
-    errors.erase(key);
-    return true;
 }
 
 bool PluginRuntime::loadSource(const std::string& key, const ::frust::CompileRequest& request, std::string& error)

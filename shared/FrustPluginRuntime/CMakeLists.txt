@@ -37,6 +37,7 @@ endif()
 add_library(creation_suite_frust_plugin_runtime STATIC
     include/creation/frust/PluginRuntime.h
     src/PluginRuntime.cpp
+    src/PluginRuntimeFiles.cpp
 )
 
 target_include_directories(creation_suite_frust_plugin_runtime PUBLIC include)
