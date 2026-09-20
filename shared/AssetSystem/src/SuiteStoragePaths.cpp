@@ -59,6 +59,11 @@ juce::File getSuiteRootDirectory(const SuiteSettings& settings)
     return root.isNotEmpty() ? juce::File(root) : juce::File();
 }
 
+juce::File getVfsContainerFile(const SuiteSettings& settings)
+{
+    return insideRoot(settings, "vfs.bin");
+}
+
 juce::File getSharedResourcesDirectory(const SuiteSettings& settings)
 {
     return insideRoot(settings, "Shared");

@@ -26,6 +26,8 @@ public:
     // Re-measures/repaints the tab strip (e.g. after a panel's title changed).
     void unregisterPanel(const juce::String& id);
     bool isRegistered(const juce::String& id) const { return findPanelById(id) != nullptr; }
+    // Changes the text on a panel's tab (no-op if the id is not registered).
+    void setPanelTitle(const juce::String& id, const juce::String& title) { if (auto* panel = findPanelById(id)) panel->setTitle(title); }
 
     std::function<void(const juce::String&)> onPanelActivated;
 

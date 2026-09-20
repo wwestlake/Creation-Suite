@@ -12,15 +12,17 @@
 #include <ixwebsocket/IXNetSystem.h>
 #include <ixwebsocket/IXWebSocketServer.h>
 
+#include <atomic>
+#include <deque>
 #include <fstream>
 #include <iostream>
 #include <thread>
 #include <vector>
 
-// The suite-owned VFS service (docs/architecture/Suite-Shared-Project-Model.md,
-// "Mechanism chosen"): the only process that ever touches VFS files directly --
-// real folders on disk, under the configured VFS root, via VfsProjectStore (plain
-// juce::File I/O, no packed containers, no FatFs). Every app is an HTTP/WebSocket
+// The suite-owned VFS service (docs/architecture/Suite-VFS-Single-Container-Plan.md):
+// the only process that ever opens the VFS. The whole VFS is ONE container file,
+// vfs.bin, in the configured VFS root (an exFAT volume, see shared/VFS), reached
+// through VfsProjectStore; nothing else is stored on the OS disk. Every app is an HTTP/WebSocket
 // client of this process instead, for both suite-level entries and per-app project
 // storage alike -- there is no separate "per-app containers are still opened
 // directly by their owning app" carve-out anymore.
@@ -28,44 +30,48 @@
 namespace
 {
 constexpr const char* kServiceAppId = "CreationSuiteVfsService";
-constexpr double kIdleShutdownGraceSeconds = 20.0;
+// The service closes itself after an hour with no requests and no connected app. An app that finds it gone starts it
+// again (SuiteVfsServiceClient::discover).
+constexpr double kIdleShutdownSeconds = 60.0 * 60.0;
 constexpr int kLivenessCheckIntervalMs = 5000;
 
-// Logs live inside the VFS root (Logs/), never in the OS user-data folder: the only thing the suite keeps outside the
-// VFS is the root pointer. Until the root is known nothing is logged.
-juce::File serviceLogsDirectory;
-
-void appendBootLog(const std::string& message)
-{
-    if (serviceLogsDirectory == juce::File())
-        return;
-
-    serviceLogsDirectory.createDirectory();
-    std::ofstream out(serviceLogsDirectory.getChildFile("CreationSuiteVfsService-boot.log").getFullPathName().toStdString(), std::ios::app);
-    if (! out.is_open())
-        return;
-
-    out << message << std::endl;
-}
+// The service's log is kept in memory (the last few hundred lines) and saved as an entry inside the container
+// ("suite/logs/vfs-service.log"). It never becomes a file or folder on the OS disk.
+juce::CriticalSection logLock;
+std::deque<juce::String> logLines;
+bool logChangedSinceFlush = false;
+constexpr size_t kMaxLogLines = 500;
 
 void appendServiceLog(const juce::String& message)
 {
-    if (serviceLogsDirectory == juce::File())
-        return;
+    const juce::ScopedLock lock(logLock);
+    logLines.push_back("[" + juce::Time::getCurrentTime().toString(true, true, true, true) + "] " + message);
+    while (logLines.size() > kMaxLogLines)
+        logLines.pop_front();
+    logChangedSinceFlush = true;
+}
 
-    auto logFile = serviceLogsDirectory.getChildFile("CreationSuiteVfsService.log");
-    serviceLogsDirectory.createDirectory();
+void appendBootLog(const std::string& message)
+{
+    appendServiceLog(juce::String(message));
+}
 
-    juce::FileOutputStream stream(logFile);
-    if (! stream.openedOk())
-        return;
+void flushLogToStore(VfsProjectStore& store, juce::CriticalSection& storeLock)
+{
+    juce::String text;
+    {
+        const juce::ScopedLock lock(logLock);
+        if (! logChangedSinceFlush)
+            return;
 
-    stream.setPosition(logFile.existsAsFile() ? logFile.getSize() : 0);
-    stream.writeText("[" + juce::Time::getCurrentTime().toString(true, true, true, true) + "] " + message + "\n",
-                     false,
-                     false,
-                     "\n");
-    stream.flush();
+        for (const auto& line : logLines)
+            text << line << "\n";
+        logChangedSinceFlush = false;
+    }
+
+    const juce::MemoryBlock data(text.toRawUTF8(), text.getNumBytesAsUTF8());
+    const juce::ScopedLock lock(storeLock);
+    store.writeSuiteEntry("suite/logs/vfs-service.log", data);
 }
 
 // Every entry this service manages lives under "suite/" inside the root
@@ -105,13 +111,6 @@ void broadcastEntryChanged(std::vector<std::weak_ptr<ix::WebSocket>>& clients,
     }
 }
 
-bool suiteHasAnyOtherLiveApp()
-{
-    for (const auto& record : creation::services::SuiteProcessRegistry::EnumerateLiveProcesses())
-        if (record.appId != kServiceAppId)
-            return true;
-    return false;
-}
 }
 
 int main(int, char*[])
@@ -135,16 +134,20 @@ int main(int, char*[])
     if (! creation::suite::hasStorageRoot(settings))
         return 3; // no VFS root chosen: the service has nowhere to keep anything and must not invent one
 
-    serviceLogsDirectory = creation::suite::getLogsDirectory(settings);
     appendBootLog("main: settings loaded");
     appendServiceLog("startup; suiteVfsRoot=" + settings.suiteVfsRoot
                      + (settingsError.isNotEmpty() ? " settingsError=" + settingsError : ""));
 
     juce::CriticalSection storeLock;
     VfsProjectStore store(settings);
-    store.migrateLegacyDomainNestedProjects();
+    if (! store.isReady())
+    {
+        appendServiceLog("cannot start: " + store.startupError());
+        return 4;
+    }
     appendBootLog("main: project store ready");
-    appendServiceLog("project store ready; suite root folder=" + store.suiteRootFolder().getFullPathName());
+    appendServiceLog("project store ready; container=" + creation::suite::getVfsContainerFile(settings).getFullPathName());
+    flushLogToStore(store, storeLock);
 
     ix::initNetSystem();
     appendBootLog("main: net init complete");
@@ -240,7 +243,7 @@ int main(int, char*[])
         res.set_content(juce::JSON::toString(juce::var(array), false).toStdString(), "application/json");
     });
 
-    // --- Project storage: real folders under the VFS root, keyed by projectId, never a real
+    // --- Project storage: folders inside the container, keyed by projectId, never a real
     // path handed back to a caller (see docs/architecture/Suite-Shared-Project-Model.md).
 
     http.Post("/project/create", [&](const httplib::Request& req, httplib::Response& res)
@@ -500,6 +503,14 @@ int main(int, char*[])
         res.set_content(juce::JSON::toString(juce::var(array), false).toStdString(), "application/json");
     });
 
+    // Any request counts as activity.
+    std::atomic<juce::int64> lastActivityMs { (juce::int64) juce::Time::getMillisecondCounter() };
+    http.set_pre_routing_handler([&lastActivityMs](const httplib::Request&, httplib::Response&)
+    {
+        lastActivityMs.store((juce::int64) juce::Time::getMillisecondCounter());
+        return httplib::Server::HandlerResponse::Unhandled;
+    });
+
     const int httpPort = http.bind_to_any_port("127.0.0.1");
     appendBootLog("main: http bound");
     std::thread httpThread([&http] { http.listen_after_bind(); });
@@ -531,26 +542,32 @@ int main(int, char*[])
     appendServiceLog("listening; http=" + juce::String(httpPort) + " ws=" + juce::String(wsPort));
     std::cout << "[vfs-service] listening: http=" << httpPort << " ws=" << wsPort << std::endl;
 
-    // Lifecycle: no app launched this process to own its lifetime the way
-    // an app owns its own window -- it exits itself once no other suite
-    // app is left running, after a grace period so quick app-switches
-    // don't thrash a restart.
-    double secondsSinceLastSeenAnotherApp = 0.0;
+    // Lifecycle: nothing launched this process to own its lifetime, so it closes itself after an hour of inactivity
+    // (no requests, and no app connected over the WebSocket).
     for (;;)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(kLivenessCheckIntervalMs));
+        flushLogToStore(store, storeLock);
 
-        if (suiteHasAnyOtherLiveApp())
+        bool anyAppConnected = false;
         {
-            secondsSinceLastSeenAnotherApp = 0.0;
+            const juce::ScopedLock lock(wsClientsLock);
+            for (const auto& client : wsClients)
+                if (client.lock() != nullptr)
+                    anyAppConnected = true;
+        }
+
+        if (anyAppConnected)
+        {
+            lastActivityMs.store((juce::int64) juce::Time::getMillisecondCounter());
             continue;
         }
 
-        secondsSinceLastSeenAnotherApp += kLivenessCheckIntervalMs / 1000.0;
-        if (secondsSinceLastSeenAnotherApp >= kIdleShutdownGraceSeconds)
+        const auto idleSeconds = (double) ((juce::int64) juce::Time::getMillisecondCounter() - lastActivityMs.load()) / 1000.0;
+        if (idleSeconds >= kIdleShutdownSeconds)
         {
-            appendServiceLog("idle shutdown");
-            std::cout << "[vfs-service] no other suite app running; shutting down." << std::endl;
+            appendServiceLog("idle shutdown after an hour without requests");
+            std::cout << "[vfs-service] idle for an hour; shutting down." << std::endl;
             break;
         }
     }
@@ -564,5 +581,6 @@ int main(int, char*[])
     ix::uninitNetSystem();
 
     appendServiceLog("shutdown complete");
+    flushLogToStore(store, storeLock);
     return 0;
 }

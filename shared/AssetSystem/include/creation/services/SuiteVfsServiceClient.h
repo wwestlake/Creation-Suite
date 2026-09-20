@@ -68,6 +68,11 @@ public:
     bool readProjectEntryToFile(const juce::String& projectId, const juce::String& logicalPath,
                                 const juce::File& destination, const ProgressFn& progress = {}) const;
     juce::String getLastReadError() const { return lastReadError_; }
+    // One piece of an entry, read into memory (offset/length in bytes; fewer bytes come back at the end of the entry).
+    // outTotalSize is the whole entry's size. This is how a big asset is read without ever copying it out to a file.
+    bool readProjectEntryRange(const juce::String& projectId, const juce::String& logicalPath,
+                               juce::int64 offset, juce::int64 length,
+                               juce::MemoryBlock& outData, juce::int64& outTotalSize) const;
     // True when the last write failed because `progress` returned false.
     bool lastWriteWasCancelled() const { return lastWriteCancelled_; }
     // For tests that run their own stand-in service.

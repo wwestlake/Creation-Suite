@@ -60,6 +60,9 @@ public:
     juce::StringArray listEntryPaths() const;
 
     bool containsEntry(const juce::String& logicalPath) const;
+    // Opens an entry as a stream that reads it in pieces from the VFS service, without copying it out to a file. Null
+    // if the entry does not exist or the service cannot be reached. Use this for anything big (video).
+    std::unique_ptr<juce::InputStream> openEntryStream(const juce::String& logicalPath) const;
     bool readEntry(const juce::String& logicalPath, juce::MemoryBlock& outData) const;
     // Why the last writeEntry() failed, in words a user can act on ("" after a success).
     juce::String getLastWriteError() const { return lastWriteError; }

@@ -7,25 +7,35 @@ using namespace creation::suite;
 
 namespace
 {
-// Projects are folders named by their id (a UUID), not their (possibly colliding, renameable)
-// display name -- this makes find-by-id an O(1) path join instead of a scan, and sidesteps name
-// collisions entirely. listProjects still enumerates + reads each manifest for display purposes.
-// Flat, one level under the container root -- projects are not owned by, or nested under, any
-// app domain. See docs/architecture/Suite-Shared-Project-Model.md.
-juce::File projectFolder(const SuiteSettings& settings, const juce::String& projectId)
-{
-    return getProjectContainerDirectory(settings).getChildFile(projectId);
-}
+constexpr const char* kProjectsFolder = "Project Containers";
+constexpr const char* kSuiteFolder = "suite";
+constexpr const char* kPartialSuffix = ".upload-part";
 }
 
-VfsProjectStore::VfsProjectStore(const SuiteSettings& settings) : settings_(settings) {}
-
-juce::File VfsProjectStore::suiteRootFolder() const
+VfsProjectStore::VfsProjectStore(const SuiteSettings& settings)
 {
-    // Callers (Main.cpp) already prefix logical paths with "suite/" (normalizeEntryPath), so
-    // this is the VFS root itself, not a "suite" subfolder -- the prefix in the path is what
-    // creates the "suite/" subdirectory on disk, matching the layout the old container used.
-    return getSuiteRootDirectory(settings_);
+    const auto containerFile = getVfsContainerFile(settings);
+    if (containerFile == juce::File())
+    {
+        startupError_ = "No VFS root is chosen, so there is nowhere to keep the container.";
+        return;
+    }
+
+    if (! containerFile.getParentDirectory().exists() && ! containerFile.getParentDirectory().createDirectory())
+    {
+        startupError_ = "Could not create the VFS root folder.";
+        return;
+    }
+
+    if (containerFile.existsAsFile())
+    {
+        if (! volume.open(containerFile, startupError_))
+            startupError_ = "Could not open the VFS container: " + startupError_;
+        return;
+    }
+
+    if (! volume.createAndFormat(containerFile, kContainerSizeBytes, startupError_))
+        startupError_ = "Could not create the VFS container: " + startupError_;
 }
 
 juce::String VfsProjectStore::normalizeLogicalPath(const juce::String& logicalPath)
@@ -36,101 +46,37 @@ juce::String VfsProjectStore::normalizeLogicalPath(const juce::String& logicalPa
     return normalized;
 }
 
-bool VfsProjectStore::readManifestFromFolder(const juce::File& projectFolder_, ProjectManifest& outManifest,
-                                             juce::String& errorMessage)
+bool VfsProjectStore::isSafePath(const juce::String& normalizedPath)
 {
-    const auto manifestFile = projectFolder_.getChildFile(ProjectContainerPaths::manifestPath);
-    if (! manifestFile.existsAsFile())
-    {
-        errorMessage = "The project folder does not contain a project manifest.";
+    if (normalizedPath.isEmpty())
         return false;
-    }
 
-    return deserializeManifest(manifestFile.loadFileAsString(), outManifest, errorMessage);
-}
-
-bool VfsProjectStore::writeManifestToFolder(const juce::File& projectFolder_, const ProjectManifest& manifest,
-                                            juce::String& errorMessage)
-{
-    const auto manifestFile = projectFolder_.getChildFile(ProjectContainerPaths::manifestPath);
-    if (! manifestFile.getParentDirectory().createDirectory())
-    {
-        errorMessage = "Could not create the project manifest directory.";
-        return false;
-    }
-
-    const auto text = serializeManifest(manifest, true);
-    if (! manifestFile.replaceWithText(text))
-    {
-        errorMessage = "Could not write the project manifest.";
-        return false;
-    }
+    juce::StringArray segments;
+    segments.addTokens(normalizedPath, "/", "");
+    for (const auto& segment : segments)
+        if (segment == ".." || segment == ".")
+            return false;
 
     return true;
 }
 
-bool VfsProjectStore::readEntryFromFolder(const juce::File& rootFolder, const juce::String& logicalPath,
-                                          juce::MemoryBlock& outData)
+juce::String VfsProjectStore::projectFolderPath(const juce::String& projectId)
 {
-    const auto file = rootFolder.getChildFile(normalizeLogicalPath(logicalPath));
-    if (! file.existsAsFile())
-        return false;
-
-    outData.reset();
-    return file.loadFileAsData(outData);
+    return juce::String(kProjectsFolder) + "/" + projectId;
 }
 
-bool VfsProjectStore::writeEntryToFolder(const juce::File& rootFolder, const juce::String& logicalPath,
-                                         const juce::MemoryBlock& data, juce::String& errorMessage)
+bool VfsProjectStore::projectExists(const juce::String& projectId) const
 {
-    const auto normalized = normalizeLogicalPath(logicalPath);
-    if (normalized.isEmpty() || normalized == ProjectContainerPaths::manifestPath)
-    {
-        errorMessage = "Refusing to write to that logical path.";
+    // A project id is a folder name inside the volume: it must be one plain name, nothing that could reach elsewhere.
+    if (projectId.isEmpty() || projectId.containsAnyOf("/\\:") || projectId == ".." || projectId == ".")
         return false;
-    }
 
-    const auto file = rootFolder.getChildFile(normalized);
-    if (! file.getParentDirectory().createDirectory())
-    {
-        errorMessage = "Could not create the entry's parent directory.";
-        return false;
-    }
-
-    if (! file.replaceWithData(data.getData(), data.getSize()))
-    {
-        errorMessage = "Could not write the entry.";
-        return false;
-    }
-
-    return true;
+    return volume.directoryExists(projectFolderPath(projectId));
 }
 
-bool VfsProjectStore::removeEntryFromFolder(const juce::File& rootFolder, const juce::String& logicalPath)
+juce::String VfsProjectStore::partialUploadPath(const juce::String& entryPath)
 {
-    const auto file = rootFolder.getChildFile(normalizeLogicalPath(logicalPath));
-    if (! file.existsAsFile())
-        return false;
-
-    return file.deleteFile();
-}
-
-juce::StringArray VfsProjectStore::listEntryPathsInFolder(const juce::File& rootFolder, const juce::String& excludePath)
-{
-    juce::StringArray paths;
-    if (! rootFolder.isDirectory())
-        return paths;
-
-    juce::Array<juce::File> files;
-    rootFolder.findChildFiles(files, juce::File::findFiles, true, "*");
-    for (const auto& file : files)
-    {
-        auto relative = file.getRelativePathFrom(rootFolder).replaceCharacter('\\', '/');
-        if (relative != excludePath)
-            paths.add(relative);
-    }
-
-    return paths;
+    return entryPath + kPartialSuffix;
 }
 
 bool VfsProjectStore::createProject(SuiteAppDomain appDomain, const juce::String& projectName,
@@ -141,65 +87,62 @@ bool VfsProjectStore::createProject(SuiteAppDomain appDomain, const juce::String
     outManifest = createDefaultManifest(projectName, appDomain, suiteVersion, appVersion);
     outProjectId = outManifest.projectId;
 
-    const auto folder = projectFolder(settings_, outProjectId);
-    if (! folder.createDirectory())
-    {
-        errorMessage = "Could not create the project directory.";
+    if (! volume.createDirectory(projectFolderPath(outProjectId), errorMessage))
         return false;
-    }
 
-    return writeManifestToFolder(folder, outManifest, errorMessage);
+    return writeManifest(outProjectId, outManifest, errorMessage);
 }
 
 bool VfsProjectStore::readManifest(const juce::String& projectId, ProjectManifest& outManifest,
                                    juce::String& errorMessage) const
 {
-    juce::File folder;
-    if (! findProjectFolderById(projectId, folder))
+    if (! projectExists(projectId))
     {
         errorMessage = "No project with that id was found.";
         return false;
     }
 
-    return readManifestFromFolder(folder, outManifest, errorMessage);
+    juce::MemoryBlock data;
+    juce::String readError;
+    if (! volume.readFile(projectFolderPath(projectId) + "/" + ProjectContainerPaths::manifestPath, data, readError))
+    {
+        errorMessage = "The project does not contain a project manifest.";
+        return false;
+    }
+
+    return deserializeManifest(juce::String::fromUTF8(static_cast<const char*>(data.getData()), (int) data.getSize()),
+                               outManifest, errorMessage);
 }
 
 bool VfsProjectStore::writeManifest(const juce::String& projectId, const ProjectManifest& manifest,
                                     juce::String& errorMessage)
 {
-    juce::File folder;
-    if (! findProjectFolderById(projectId, folder))
+    if (! projectExists(projectId))
     {
         errorMessage = "No project with that id was found.";
         return false;
     }
 
-    return writeManifestToFolder(folder, manifest, errorMessage);
+    const auto text = serializeManifest(manifest, true);
+    const juce::MemoryBlock data(text.toRawUTF8(), text.getNumBytesAsUTF8());
+    return volume.writeFile(projectFolderPath(projectId) + "/" + ProjectContainerPaths::manifestPath, data, errorMessage);
 }
 
 bool VfsProjectStore::listProjects(juce::Array<ProjectSummary>& outProjects) const
 {
     outProjects.clear();
-    const auto containerDir = getProjectContainerDirectory(settings_);
-    if (! containerDir.isDirectory())
-        return true;
 
-    juce::Array<juce::File> subdirectories;
-    containerDir.findChildFiles(subdirectories, juce::File::findDirectories, false);
-
-    for (const auto& folder : subdirectories)
+    for (const auto& projectId : volume.listDirectories(kProjectsFolder))
     {
         ProjectSummary summary;
         juce::String errorMessage;
-        if (! readManifestFromFolder(folder, summary.manifest, errorMessage))
-            continue; // not a real project folder (or a corrupt one) -- skip it, don't fail the whole listing.
+        if (! readManifest(projectId, summary.manifest, errorMessage))
+            continue; // not a real project (or a corrupt one): skip it, don't fail the whole listing
 
-        summary.projectId = folder.getFileName();
+        summary.projectId = projectId;
 
-        juce::Array<juce::File> allFiles;
-        folder.findChildFiles(allFiles, juce::File::findFiles, true, "*");
-        for (const auto& file : allFiles)
-            summary.totalSizeBytes += file.getSize();
+        for (const auto& relative : volume.listFilesUnder(projectFolderPath(projectId)))
+            summary.totalSizeBytes += juce::jmax<juce::int64>(0, volume.fileSize(projectFolderPath(projectId) + "/" + relative));
 
         outProjects.add(summary);
     }
@@ -207,61 +150,11 @@ bool VfsProjectStore::listProjects(juce::Array<ProjectSummary>& outProjects) con
     return true;
 }
 
-bool VfsProjectStore::findProjectFolderById(const juce::String& projectId, juce::File& outFolder) const
-{
-    if (projectId.isEmpty())
-        return false;
-
-    auto folder = projectFolder(settings_, projectId);
-    if (! folder.isDirectory())
-        return false;
-
-    outFolder = folder;
-    return true;
-}
-
-void VfsProjectStore::migrateLegacyDomainNestedProjects()
-{
-    const auto containerDir = getProjectContainerDirectory(settings_);
-    if (! containerDir.isDirectory())
-        return;
-
-    for (auto domain : { SuiteAppDomain::station, SuiteAppDomain::engine, SuiteAppDomain::movie,
-                        SuiteAppDomain::live, SuiteAppDomain::texture, SuiteAppDomain::modeler,
-                        SuiteAppDomain::developer, SuiteAppDomain::unknown })
-    {
-        const auto legacyDomainDir = containerDir.getChildFile(appDomainFolderName(domain));
-        if (! legacyDomainDir.isDirectory())
-            continue;
-
-        juce::Array<juce::File> legacyProjectFolders;
-        legacyDomainDir.findChildFiles(legacyProjectFolders, juce::File::findDirectories, false);
-
-        for (const auto& legacyFolder : legacyProjectFolders)
-        {
-            const auto newFolder = containerDir.getChildFile(legacyFolder.getFileName());
-            if (newFolder.exists())
-                continue; // already migrated (or a genuine id collision) -- leave it alone, don't clobber.
-
-            legacyFolder.moveFileTo(newFolder);
-        }
-
-        legacyDomainDir.deleteRecursively(); // only removes what moveFileTo left behind (empty on success).
-    }
-}
-
 bool VfsProjectStore::cloneProject(const juce::String& sourceProjectId, const juce::String& newProjectName,
                                    juce::String& outNewProjectId, juce::String& errorMessage)
 {
-    juce::File sourceFolder;
-    if (! findProjectFolderById(sourceProjectId, sourceFolder))
-    {
-        errorMessage = "No project with that id was found.";
-        return false;
-    }
-
     ProjectManifest sourceManifest;
-    if (! readManifestFromFolder(sourceFolder, sourceManifest, errorMessage))
+    if (! readManifest(sourceProjectId, sourceManifest, errorMessage))
         return false;
 
     ProjectManifest newManifest = sourceManifest;
@@ -271,41 +164,38 @@ bool VfsProjectStore::cloneProject(const juce::String& sourceProjectId, const ju
     newManifest.modifiedAt = newManifest.createdAt;
     outNewProjectId = newManifest.projectId;
 
-    const auto destinationFolder = projectFolder(settings_, outNewProjectId);
-    if (! destinationFolder.createDirectory())
-    {
-        errorMessage = "Could not create the cloned project directory.";
+    const auto sourceFolder = projectFolderPath(sourceProjectId);
+    const auto destinationFolder = projectFolderPath(outNewProjectId);
+    if (! volume.createDirectory(destinationFolder, errorMessage))
         return false;
-    }
 
-    juce::Array<juce::File> sourceFiles;
-    sourceFolder.findChildFiles(sourceFiles, juce::File::findFiles, true, "*");
-    for (const auto& sourceFile : sourceFiles)
+    for (const auto& relative : volume.listFilesUnder(sourceFolder))
     {
-        const auto relative = sourceFile.getRelativePathFrom(sourceFolder);
-        const auto destinationFile = destinationFolder.getChildFile(relative);
-        if (! destinationFile.getParentDirectory().createDirectory() || ! sourceFile.copyFileTo(destinationFile))
+        if (relative.endsWith(kPartialSuffix))
+            continue; // an upload that never finished is not part of the project
+
+        juce::String copyError;
+        if (! volume.copyFile(sourceFolder + "/" + relative, destinationFolder + "/" + relative, copyError))
         {
             errorMessage = "Could not copy \"" + relative + "\" into the cloned project.";
             return false;
         }
     }
 
-    return writeManifestToFolder(destinationFolder, newManifest, errorMessage);
+    return writeManifest(outNewProjectId, newManifest, errorMessage);
 }
 
 bool VfsProjectStore::deleteProject(const juce::String& projectId, juce::String& errorMessage)
 {
-    juce::File folder;
-    if (! findProjectFolderById(projectId, folder))
+    if (! projectExists(projectId))
     {
         errorMessage = "No project with that id was found.";
         return false;
     }
 
-    if (! folder.deleteRecursively())
+    if (! volume.deleteTree(projectFolderPath(projectId), errorMessage))
     {
-        errorMessage = "Could not delete the project folder.";
+        errorMessage = "Could not delete the project.";
         return false;
     }
 
@@ -315,22 +205,46 @@ bool VfsProjectStore::deleteProject(const juce::String& projectId, juce::String&
 bool VfsProjectStore::readEntry(const juce::String& projectId, const juce::String& logicalPath,
                                 juce::MemoryBlock& outData) const
 {
-    juce::File folder;
-    if (! findProjectFolderById(projectId, folder))
+    const auto normalized = normalizeLogicalPath(logicalPath);
+    if (! projectExists(projectId) || ! isSafePath(normalized))
         return false;
-    return readEntryFromFolder(folder, logicalPath, outData);
+
+    juce::String errorMessage;
+    outData.reset();
+    return volume.readFile(projectFolderPath(projectId) + "/" + normalized, outData, errorMessage);
 }
 
 bool VfsProjectStore::writeEntry(const juce::String& projectId, const juce::String& logicalPath,
                                  const juce::MemoryBlock& data, juce::String& errorMessage)
 {
-    juce::File folder;
-    if (! findProjectFolderById(projectId, folder))
+    if (! projectExists(projectId))
     {
         errorMessage = "No project with that id was found.";
         return false;
     }
-    return writeEntryToFolder(folder, logicalPath, data, errorMessage);
+
+    const auto normalized = normalizeLogicalPath(logicalPath);
+    if (! isSafePath(normalized) || normalized == ProjectContainerPaths::manifestPath)
+    {
+        errorMessage = "Refusing to write to that logical path.";
+        return false;
+    }
+
+    return volume.writeFile(projectFolderPath(projectId) + "/" + normalized, data, errorMessage);
+}
+
+bool VfsProjectStore::removeEntry(const juce::String& projectId, const juce::String& logicalPath)
+{
+    const auto normalized = normalizeLogicalPath(logicalPath);
+    if (! projectExists(projectId) || ! isSafePath(normalized))
+        return false;
+
+    const auto path = projectFolderPath(projectId) + "/" + normalized;
+    if (volume.fileSize(path) < 0)
+        return false;
+
+    juce::String errorMessage;
+    return volume.deleteFile(path, errorMessage);
 }
 
 bool VfsProjectStore::writeEntryChunk(const juce::String& projectId, const juce::String& logicalPath,
@@ -340,15 +254,14 @@ bool VfsProjectStore::writeEntryChunk(const juce::String& projectId, const juce:
 {
     outCompleted = false;
 
-    juce::File folder;
-    if (! findProjectFolderById(projectId, folder))
+    if (! projectExists(projectId))
     {
         errorMessage = "No project with that id was found.";
         return false;
     }
 
     const auto normalized = normalizeLogicalPath(logicalPath);
-    if (normalized.isEmpty() || normalized == ProjectContainerPaths::manifestPath)
+    if (! isSafePath(normalized) || normalized == ProjectContainerPaths::manifestPath)
     {
         errorMessage = "Refusing to write to that logical path.";
         return false;
@@ -360,56 +273,31 @@ bool VfsProjectStore::writeEntryChunk(const juce::String& projectId, const juce:
         return false;
     }
 
-    const auto file = folder.getChildFile(normalized);
-    const auto part = file.getSiblingFile(file.getFileName() + ".upload-part");
+    const auto entryPath = projectFolderPath(projectId) + "/" + normalized;
+    const auto part = partialUploadPath(entryPath);
+    const auto partSize = volume.fileSize(part);
 
-    if (offset == 0)
+    if (offset != 0 && partSize != offset)
     {
-        if (! file.getParentDirectory().createDirectory())
-        {
-            errorMessage = "Could not create the entry's parent directory.";
-            return false;
-        }
-        part.deleteFile();
-    }
-    else if (! part.existsAsFile() || part.getSize() != offset)
-    {
-        errorMessage = "The upload piece is out of order (the service has " + juce::String(part.existsAsFile() ? part.getSize() : 0)
+        errorMessage = "The upload piece is out of order (the service has " + juce::String(juce::jmax<juce::int64>(0, partSize))
                      + " bytes, the piece starts at " + juce::String(offset) + ").";
         return false;
     }
 
-    {
-        juce::FileOutputStream out(part);
-        if (out.failedToOpen())
-        {
-            errorMessage = "Could not open the upload's temporary file.";
-            return false;
-        }
-
-        out.setPosition(offset);
-        if (chunkSize > 0 && ! out.write(chunk, chunkSize))
-        {
-            errorMessage = "Could not write the upload piece (disk full?).";
-            return false;
-        }
-        out.flush();
-    }
+    if (! volume.writeAt(part, offset, chunk, chunkSize, offset == 0, errorMessage))
+        return false;
 
     if (offset + (std::int64_t) chunkSize == totalSize)
     {
-        if (part.getSize() != totalSize)
+        if (volume.fileSize(part) != totalSize)
         {
             errorMessage = "The finished upload is not the size that was announced.";
             return false;
         }
 
-        file.deleteFile();
-        if (! part.moveFileTo(file))
-        {
-            errorMessage = "Could not move the finished upload into place.";
+        if (! volume.renameFile(part, entryPath, errorMessage))
             return false;
-        }
+
         outCompleted = true;
     }
 
@@ -423,81 +311,76 @@ bool VfsProjectStore::readEntryRange(const juce::String& projectId, const juce::
     outData.reset();
     outTotalSize = 0;
 
-    juce::File folder;
-    if (! findProjectFolderById(projectId, folder))
-        return false;
-
     const auto normalized = normalizeLogicalPath(logicalPath);
-    if (normalized.isEmpty())
+    if (! projectExists(projectId) || ! isSafePath(normalized))
         return false;
 
-    const auto file = folder.getChildFile(normalized);
-    if (! file.existsAsFile())
-        return false;
-
-    outTotalSize = file.getSize();
-    if (offset < 0 || offset > outTotalSize || length < 0)
-        return false;
-
-    const auto count = juce::jmin(length, outTotalSize - offset);
-    if (count == 0)
-        return true;
-
-    juce::FileInputStream in(file);
-    if (in.failedToOpen() || ! in.setPosition(offset))
-        return false;
-
-    outData.setSize((size_t) count);
-    return in.read(outData.getData(), (int) count) == (int) count;
+    juce::String errorMessage;
+    return volume.readRange(projectFolderPath(projectId) + "/" + normalized, offset, length, outData, outTotalSize, errorMessage);
 }
 
 bool VfsProjectStore::discardEntryUpload(const juce::String& projectId, const juce::String& logicalPath)
 {
-    juce::File folder;
-    if (! findProjectFolderById(projectId, folder))
-        return false;
-
     const auto normalized = normalizeLogicalPath(logicalPath);
-    if (normalized.isEmpty())
+    if (! projectExists(projectId) || ! isSafePath(normalized))
         return false;
 
-    const auto file = folder.getChildFile(normalized);
-    return file.getSiblingFile(file.getFileName() + ".upload-part").deleteFile();
-}
-
-bool VfsProjectStore::removeEntry(const juce::String& projectId, const juce::String& logicalPath)
-{
-    juce::File folder;
-    if (! findProjectFolderById(projectId, folder))
+    const auto part = partialUploadPath(projectFolderPath(projectId) + "/" + normalized);
+    if (volume.fileSize(part) < 0)
         return false;
-    return removeEntryFromFolder(folder, logicalPath);
+
+    juce::String errorMessage;
+    return volume.deleteFile(part, errorMessage);
 }
 
 juce::StringArray VfsProjectStore::listEntryPaths(const juce::String& projectId) const
 {
-    juce::File folder;
-    if (! findProjectFolderById(projectId, folder))
-        return {};
-    return listEntryPathsInFolder(folder, ProjectContainerPaths::manifestPath);
+    juce::StringArray paths;
+    if (! projectExists(projectId))
+        return paths;
+
+    for (const auto& relative : volume.listFilesUnder(projectFolderPath(projectId)))
+        if (relative != ProjectContainerPaths::manifestPath && ! relative.endsWith(kPartialSuffix))
+            paths.add(relative);
+
+    return paths;
 }
 
 bool VfsProjectStore::readSuiteEntry(const juce::String& logicalPath, juce::MemoryBlock& outData) const
 {
-    return readEntryFromFolder(suiteRootFolder(), logicalPath, outData);
+    const auto normalized = normalizeLogicalPath(logicalPath);
+    if (! isSafePath(normalized) || ! normalized.startsWith(juce::String(kSuiteFolder) + "/"))
+        return false;
+
+    juce::String errorMessage;
+    outData.reset();
+    return volume.readFile(normalized, outData, errorMessage);
 }
 
 bool VfsProjectStore::writeSuiteEntry(const juce::String& logicalPath, const juce::MemoryBlock& data)
 {
+    const auto normalized = normalizeLogicalPath(logicalPath);
+    if (! isSafePath(normalized) || ! normalized.startsWith(juce::String(kSuiteFolder) + "/"))
+        return false;
+
     juce::String errorMessage;
-    return writeEntryToFolder(suiteRootFolder(), logicalPath, data, errorMessage);
+    return volume.writeFile(normalized, data, errorMessage);
 }
 
 bool VfsProjectStore::removeSuiteEntry(const juce::String& logicalPath)
 {
-    return removeEntryFromFolder(suiteRootFolder(), logicalPath);
+    const auto normalized = normalizeLogicalPath(logicalPath);
+    if (! isSafePath(normalized) || ! normalized.startsWith(juce::String(kSuiteFolder) + "/") || volume.fileSize(normalized) < 0)
+        return false;
+
+    juce::String errorMessage;
+    return volume.deleteFile(normalized, errorMessage);
 }
 
 juce::StringArray VfsProjectStore::listSuiteEntryPaths() const
 {
-    return listEntryPathsInFolder(suiteRootFolder(), juce::String());
+    juce::StringArray paths;
+    for (const auto& relative : volume.listFilesUnder(kSuiteFolder))
+        paths.add(juce::String(kSuiteFolder) + "/" + relative);
+    return paths;
 }

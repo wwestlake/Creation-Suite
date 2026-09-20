@@ -1,6 +1,7 @@
 // Headless check of chunked entry upload: the service's own store and routes behind a real HTTP server,
 // driven by the real client. Uploads a file larger than the service's old 100 MB single-request limit.
 #include <JuceHeader.h>
+#include <creation/assets/VfsEntryInputStream.h>
 
 #include "../Source/VfsProjectStore.h"
 #include "../Source/VfsChunkUploadRoutes.h"
@@ -111,12 +112,44 @@ int main()
     check(calls >= 9 && lastFraction > 0.999, "progress reported per piece, ending at 100%");
     check(changed == 1, "change broadcast fires once, on completion");
 
-    juce::File projectFolder;
-    store.findProjectFolderById(projectId, projectFolder);
-    const auto stored = projectFolder.getChildFile("Assets/big.bin");
-    check(stored.getSize() == size, "stored size matches");
-    check(stored.getSize() == size && stored.hasIdenticalContentTo(source), "stored bytes match the source");
-    check(! projectFolder.getChildFile("Assets/big.bin.upload-part").exists(), "no part file left behind");
+    // Everything is inside the container now, so the stored entry is checked through the store, not on the disk.
+    const auto storedSize = [&]
+    {
+        juce::MemoryBlock none;
+        std::int64_t total = -1;
+        store.readEntryRange(projectId, "Assets/big.bin", 0, 0, none, total);
+        return total;
+    };
+    const auto storedMatchesSource = [&]
+    {
+        juce::FileInputStream in(source);
+        if (in.failedToOpen())
+            return false;
+
+        constexpr std::int64_t piece = 8 * 1024 * 1024;
+        for (std::int64_t offset = 0; offset < size; offset += piece)
+        {
+            juce::MemoryBlock stored, expected;
+            std::int64_t total = 0;
+            if (! store.readEntryRange(projectId, "Assets/big.bin", offset, piece, stored, total))
+                return false;
+
+            expected.setSize(stored.getSize());
+            if (in.read(expected.getData(), (int) expected.getSize()) != (int) expected.getSize() || stored != expected)
+                return false;
+        }
+        return true;
+    };
+    const auto partExists = [&]
+    {
+        juce::MemoryBlock none;
+        std::int64_t total = 0;
+        return store.readEntryRange(projectId, "Assets/big.bin.upload-part", 0, 0, none, total);
+    };
+
+    check(storedSize() == size, "stored size matches");
+    check(storedSize() == size && storedMatchesSource(), "stored bytes match the source");
+    check(! partExists(), "no part file left behind");
 
     // Download the 150 MB entry back in pieces.
     {
@@ -143,8 +176,8 @@ int main()
     const auto cancelled = client.writeProjectEntryFromFile(projectId, "Assets/big.bin", source,
                                                             [&](double) { return ++cancelCalls < 3; });
     check(! cancelled && client.lastWriteWasCancelled(), "cancel is reported as a cancel");
-    check(stored.getSize() == size && stored.hasIdenticalContentTo(source), "cancel leaves the earlier entry untouched");
-    check(! projectFolder.getChildFile("Assets/big.bin.upload-part").exists(), "cancel removes the part file");
+    check(storedSize() == size && storedMatchesSource(), "cancel leaves the earlier entry untouched");
+    check(! partExists(), "cancel removes the part file");
 
     // Out of order piece is refused.
     {
@@ -165,11 +198,42 @@ int main()
     check(client.writeProjectEntry(projectId, "Assets/large.bin", large), "30 MB in-memory entry goes up in pieces");
     check(store.readEntry(projectId, "Assets/large.bin", read) && read == large, "30 MB entry stored intact");
 
+    // Read the same entry as a stream (how playback and the video decoder read the VFS): pieces are fetched on demand,
+    // and jumping around - including across a piece boundary - gives exactly the stored bytes.
+    {
+        creation::assets::VfsEntryInputStream stream(client, projectId, "Assets/large.bin");
+        check(stream.isValid() && stream.getTotalLength() == (juce::int64) large.getSize(), "a stream over an entry knows its size");
+
+        bool allMatch = true;
+        const juce::int64 positions[] = { 0, 4 * 1024 * 1024 - 5, 20 * 1024 * 1024 + 7, 4 * 1024 * 1024 + 100, (juce::int64) large.getSize() - 3, 12345 };
+        for (const auto position : positions)
+        {
+            char buffer[64];
+            if (! stream.setPosition(position))
+                allMatch = false;
+            const auto got = stream.read(buffer, (int) sizeof(buffer));
+            const auto expectedCount = (int) juce::jmin<juce::int64>((juce::int64) sizeof(buffer), (juce::int64) large.getSize() - position);
+            if (got != expectedCount || std::memcmp(buffer, static_cast<const char*>(large.getData()) + position, (size_t) got) != 0)
+                allMatch = false;
+        }
+        check(allMatch, "jumping around inside a stream (across piece boundaries) returns exactly the stored bytes");
+
+        stream.setPosition((juce::int64) large.getSize());
+        check(stream.isExhausted(), "a stream at the end is exhausted");
+
+        creation::assets::VfsEntryInputStream missing(client, projectId, "Assets/nope.bin");
+        check(! missing.isValid(), "a stream over a missing entry is not valid");
+    }
+
     // Empty file.
     const auto empty = root.getChildFile("empty.bin");
     empty.replaceWithText("");
     check(client.writeProjectEntryFromFile(projectId, "Assets/empty.bin", empty), "empty file uploads");
-    check(projectFolder.getChildFile("Assets/empty.bin").existsAsFile(), "empty entry exists");
+    {
+        juce::MemoryBlock none;
+        std::int64_t total = -1;
+        check(store.readEntryRange(projectId, "Assets/empty.bin", 0, 0, none, total) && total == 0, "empty entry exists");
+    }
 
     // An older project service (only the plain single-request routes): small files must still work, and a file too
     // big for one request must fail with words, not silently.

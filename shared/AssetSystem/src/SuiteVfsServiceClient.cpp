@@ -419,6 +419,43 @@ constexpr juce::int64 kChunkBytes = 16 * 1024 * 1024;
 constexpr juce::int64 kSingleRequestLimit = 24 * 1024 * 1024;
 }
 
+bool SuiteVfsServiceClient::readProjectEntryRange(const juce::String& projectId, const juce::String& logicalPath,
+                                                  juce::int64 offset, juce::int64 length,
+                                                  juce::MemoryBlock& outData, juce::int64& outTotalSize) const
+{
+    outData.reset();
+    outTotalSize = -1;
+    if (httpPort_ <= 0 || offset < 0 || length < 0)
+        return false;
+
+    for (int attempt = 0; attempt < 3; ++attempt)
+    {
+        juce::StringPairArray headers;
+        int statusCode = 0;
+        auto url = baseUrl("/project/entry/range")
+                       .withParameter("projectId", projectId)
+                       .withParameter("path", logicalPath)
+                       .withParameter("offset", juce::String(offset))
+                       .withParameter("length", juce::String(length));
+
+        auto stream = url.createInputStream(juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                                                .withConnectionTimeoutMs(120000)
+                                                .withResponseHeaders(&headers)
+                                                .withStatusCode(&statusCode));
+        if (stream == nullptr)
+            continue; // the connection dropped: the same piece is safe to ask for again
+
+        if (statusCode != 200)
+            return false; // a definite answer (not found, out of range) will not improve by retrying
+
+        stream->readIntoMemoryBlock(outData);
+        outTotalSize = headers.getValue("X-Total-Size", "-1").getLargeIntValue();
+        return outTotalSize >= 0;
+    }
+
+    return false;
+}
+
 bool SuiteVfsServiceClient::readProjectEntryToFile(const juce::String& projectId, const juce::String& logicalPath,
                                                    const juce::File& destination, const ProgressFn& progress) const
 {

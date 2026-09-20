@@ -16,6 +16,10 @@ juce::String appDomainFolderName(creation::assets::SuiteAppDomain domain);
 bool hasStorageRoot(const SuiteSettings& settings);
 
 juce::File getSuiteRootDirectory(const SuiteSettings& settings);
+
+// The one container file that holds the whole VFS (vfs.bin), directly inside the VFS root. Empty File when no root is
+// chosen. Only the VFS service opens it.
+juce::File getVfsContainerFile(const SuiteSettings& settings);
 juce::File getSharedResourcesDirectory(const SuiteSettings& settings);
 juce::File getContentDirectory(const SuiteSettings& settings);
 juce::File getTutorialsDirectory(const SuiteSettings& settings);

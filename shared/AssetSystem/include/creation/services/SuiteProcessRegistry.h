@@ -4,6 +4,12 @@
 
 namespace creation::services
 {
+// The one file the VFS service writes so apps can find it: VfsHeartbeat.json, directly in the VFS root next to vfs.bin.
+// It holds the service's process id, the random port it chose at start-up, and a timestamp it refreshes. Apps read it;
+// they write nothing.
+inline constexpr const char* kVfsServiceAppId = "CreationSuiteVfsService";
+inline constexpr const char* kVfsHeartbeatFileName = "VfsHeartbeat.json";
+
 // One running suite app's discovery record -- what another process
 // needs to find and reach it. oscPort == 0 / pipeName empty means "not
 // offering that endpoint" (a process can register purely to be

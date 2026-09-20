@@ -89,6 +89,11 @@ SuiteProcessRegistration::~SuiteProcessRegistration()
 
 void SuiteProcessRegistration::RegisterSelf(const juce::String& appId, int oscPort, const juce::String& pipeName, int httpPort)
 {
+    // Only the VFS service keeps a heartbeat file (VfsHeartbeat.json, next to vfs.bin): it is the one thing apps need to
+    // find. Every other program writes nothing to the disk, so registering as an app is deliberately a no-op.
+    if (appId != kVfsServiceAppId)
+        return;
+
     appId_ = appId;
     oscPort_ = oscPort;
     httpPort_ = httpPort;
@@ -149,7 +154,17 @@ void SuiteProcessRegistration::WriteHeartbeatFile()
         directory.createDirectory();
 
     if (const auto file = RegistrationFile(); file != juce::File())
-        file.replaceWithText(juce::JSON::toString(toVar(record), true));
+    {
+        // Overwritten in place (not the write-a-temp-file-then-swap way): no second file ever appears in the VFS root.
+        // A reader that catches it half-written just fails to parse it and tries again a moment later.
+        juce::FileOutputStream out(file);
+        if (out.openedOk())
+        {
+            out.setPosition(0);
+            out.truncate();
+            out.writeText(juce::JSON::toString(toVar(record), true), false, false, nullptr);
+        }
+    }
 }
 
 juce::File SuiteProcessRegistration::RegistrationFile() const
@@ -158,47 +173,41 @@ juce::File SuiteProcessRegistration::RegistrationFile() const
     if (directory == juce::File())
         return {};
 
-    return directory.getChildFile(appId_ + "-" + juce::String(static_cast<int>(processId_)) + ".json");
+    return directory.getChildFile(kVfsHeartbeatFileName);
 }
 
+// The heartbeat file sits directly in the VFS root, next to vfs.bin - no folder of its own.
 juce::File SuiteProcessRegistry::RegistryDirectory()
 {
-    const auto root = getRegistryRootDirectory();
-    return root == juce::File() ? juce::File() : root.getChildFile("processes");
+    return getRegistryRootDirectory();
 }
 
 juce::Array<SuiteProcessRecord> SuiteProcessRegistry::EnumerateLiveProcesses(double staleSeconds)
 {
     juce::Array<SuiteProcessRecord> live;
-    auto directory = RegistryDirectory();
-    if (! directory.exists())
+    const auto directory = RegistryDirectory();
+    if (directory == juce::File())
         return live;
 
-    juce::Array<juce::File> files;
-    directory.findChildFiles(files, juce::File::findFiles, false, "*.json");
+    const auto file = directory.getChildFile(kVfsHeartbeatFileName);
+    if (! file.existsAsFile())
+        return live;
 
-    const auto now = juce::Time::getCurrentTime();
-    for (const auto& file : files)
+    const auto parsed = juce::JSON::parse(file);
+    if (parsed.isVoid())
+        return live;
+
+    auto record = fromVar(parsed);
+    const double ageSeconds = (juce::Time::getCurrentTime() - record.lastHeartbeat).inSeconds();
+    if (ageSeconds > staleSeconds)
     {
-        const auto parsed = juce::JSON::parse(file);
-        if (parsed.isVoid())
-            continue;
-
-        auto record = fromVar(parsed);
-        const double ageSeconds = (now - record.lastHeartbeat).inSeconds();
-        if (ageSeconds > staleSeconds)
-        {
-            // Stale -- almost certainly a crashed/killed process that
-            // never got to run its own destructor's cleanup. Delete
-            // opportunistically so the registry directory doesn't
-            // accumulate dead entries forever.
-            file.deleteFile();
-            continue;
-        }
-
-        live.add(record);
+        // Stale: almost certainly a service that died without running its own clean-up. Remove it so the next start
+        // begins clean.
+        file.deleteFile();
+        return live;
     }
 
+    live.add(record);
     return live;
 }
 }
