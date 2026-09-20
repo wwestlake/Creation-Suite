@@ -36,7 +36,9 @@ endif()
 
 add_library(creation_suite_frust_plugin_runtime STATIC
     include/creation/frust/PluginRuntime.h
+    include/creation/frust/ScriptRunner.h
     src/PluginRuntime.cpp
+    src/ScriptRunner.cpp
     src/PluginRuntimeFiles.cpp
 )
 
@@ -45,3 +47,7 @@ target_link_libraries(creation_suite_frust_plugin_runtime PUBLIC frust_plugin_ho
 
 # Auto-generated output name overrides
 set_target_properties(creation_suite_frust_plugin_runtime PROPERTIES OUTPUT_NAME "djehuti_suite_frust_plugin_runtime")
+
+add_executable(creation_suite_frust_script_runner_smoke tests/ScriptRunnerSmoke.cpp)
+target_link_libraries(creation_suite_frust_script_runner_smoke PRIVATE creation_suite_frust_plugin_runtime frust_lang)
+set_target_properties(creation_suite_frust_script_runner_smoke PROPERTIES OUTPUT_NAME "DjehutiSuiteFrustScriptRunnerSmoke")
