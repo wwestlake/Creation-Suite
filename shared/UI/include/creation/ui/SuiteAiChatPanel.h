@@ -2,6 +2,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <creation/services/SuiteContextEngine.h>
+#include <creation/ui/PromptInputParts.h>
 
 namespace creation::ui
 {
@@ -84,6 +85,17 @@ public:
     juce::String getPromptText() const;
     juce::String buildSubmissionPrompt() const;
     void setCollapsed(bool shouldCollapse);
+
+    // Whether Enter sends the message (Shift+Enter is then a new line). Off by default: Enter is a new
+    // line and Ctrl+Enter sends. The toggle sits under the message box; an app that remembers settings
+    // reads and restores it through these.
+    void setEnterSendsMessage(bool shouldSend);
+    bool getEnterSendsMessage() const noexcept { return promptEditor.enterSends; }
+    std::function<void(bool enterSends)> onEnterSendsChanged;
+
+    // What the round button at the right of the message box shows, and its tooltip. The host changes it as
+    // the assistant's state changes (send while idle, stop while a request runs).
+    void setSendButtonIcon(SendArrowButton::Icon icon, const juce::String& tooltip);
     bool isCollapsed() const noexcept { return collapsed; }
 
     std::function<void(GuidanceMode mode)> onModeChanged;
@@ -129,8 +141,9 @@ private:
     juce::Label promptLabel;
     juce::Viewport transcriptViewport;
     std::unique_ptr<ChatTranscriptComponent> transcriptContent;
-    juce::TextEditor promptEditor;
-    juce::TextButton sendButton { "Send" };
+    PromptEditor promptEditor;
+    SendArrowButton sendButton;
+    juce::ToggleButton enterSendsToggle { "Enter sends" };
     juce::TextButton collapseButton { "Hide" };
     juce::Label footerHintLabel;
     GuidanceMode guidanceMode = GuidanceMode::normal;
