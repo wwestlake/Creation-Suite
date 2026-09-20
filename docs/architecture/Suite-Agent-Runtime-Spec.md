@@ -21,7 +21,7 @@ It is a shared component. Station is its first host. Any tool can be snapped in 
 
 - A chat feature with a few special commands. The loop is general; commands are tools.
 - Anything specific to one model or provider.
-- Anything that writes to the OS disk. All agent state lives in the VFS container (see `Suite-VFS-Single-Container-Plan.md`).
+- Anything that writes to the OS disk. All agent state lives in the VFS container (see `Suite-VFS-Single-Container-Plan.md`). This includes code the agent writes (section 6A).
 - The agent editing its own rules, policies or the help. Those change only by reviewed edits to source.
 
 ## 2. Principles
@@ -251,6 +251,101 @@ The example "add an automation track for volume on track 4" is `station.automati
 
 **Open code finding (must be resolved in phase 3).** Track name, kind and automation lanes live in `TimelineModel`, but per-track pan, mute and solo live in `WorkstationAudioEngine` (`setTrackPan`, `setTrackMuted`, `setTrackSoloed`), not in the timeline state that undo snapshots today (`SuiteUndoService` stores `TimelineModel::createState()`). For one-step undo of an agent run, the transaction must cover every state domain a tool can change. Either the mixer state moves into the snapshotted state, or the transaction captures the engine's mixer state alongside the timeline snapshot. This spec requires the latter as the minimum (section 8) and prefers the former.
 
+## 6A. Coding and node authoring (FRust)
+
+Requirement (user, 2026-09-20): the agent must be able to **write FRust and make things with it**, and to do the same in the **node system**. It has to be a coder, in the way Claude Code or Codex is a coder: read the code, write and change it, compile it, read the errors, fix them, test it, and put the result to use. This is part of the runtime from the start, not an add-on.
+
+It builds on `D:\000 Tech Research\projects\frust-ide-agent\FRUST_IDE_AGENT_SPEC.md` (the Frust IDE agent design: tool surface, work loop, permission modes, knowledge corpus). That design assumes an IDE with a folder on disk. The suite has no folder on disk, so the differences are called out below. The runtime, tool registry, transactions and policies are the same ones as everywhere else in this document; "coder" is a set of tool providers plus knowledge plus one authored process.
+
+### 6A.1 Where the code lives
+
+- Source files, pod manifests (`frate.json`), node definitions and build outputs live in a **code space inside the project's VFS container**, next to arrangements and assets. They are never written to a real folder.
+- The agent works on them through the same file tools a user's editor uses; the editor shows the result live.
+- Every edit is part of the run's transaction (section 8), so "undo this request" also removes the code it wrote. A code space is a state domain with its own capture and restore.
+- Export to a real folder happens only when the user chooses Export.
+
+**Open constraint (must be resolved in Phase 3b).** The FRust compiler and Frate are programs that take file paths, and Station's Script panel Compile button already writes two temporary files (still open from the storage work). A coder that compiles must not write to the OS disk. Options: give the compiler a source-in-memory entry point (source text and a virtual file provider in, diagnostics and object code out), or run it against files served from the VFS service by a virtual file layer. The first is preferred and is a change in the FrustLang repository, so it needs its own plan. Until it exists, the compile tools run only where the current temporary-file behavior is accepted, and that exception is recorded rather than hidden.
+
+### 6A.2 Tools (a `station.code` provider, and the same shape in other apps)
+
+Modelled on the IDE agent tool surface, with effect classes from section 5:
+
+| Tool | Effect | What it does |
+|---|---|---|
+| `code.files.list`, `code.file.read` (with line range), `code.search` | read | Look around the code space. |
+| `code.file.create`, `code.patch.apply`, `code.file.move`, `code.file.format` | write | Change code. `patch.apply` takes a unified diff and returns which hunks applied, so a failed patch is an error the agent can read. |
+| `code.file.delete` | destructive | Remove a file. |
+| `frust.compile` | write (produces build output) | Compile the given sources. Returns **structured diagnostics** (file, line, column, message, code, related notes), not raw text, plus success or failure. |
+| `frust.check` | read | Parse and type-check only. |
+| `frust.run_tests`, `frust.run` | write / external as declared | Run smoke tests or an entry function in the sandbox and return exit code, output and time. A run that could touch the machine beyond the project is `external`. |
+| `frate.pod.info`, `frate.deps.list`, `frate.build` | read / write | Pod manifest and dependency work. |
+| `frate.publish.prepare` | write; `frate.publish.execute` | external, always ask | Publishing is always confirmed immediately before the call (IDE agent spec rule). |
+| `frust.knowledge.lookup` | read | Query the FRust knowledge cards (language, standard pods, diagnostics repairs, verified examples). |
+
+The compile and run tools return diagnostics as data precisely so the loop in section 4 (act, verify, correct) is the classic **write, compile, read errors, fix** cycle with no special casing.
+
+### 6A.3 The coding loop is an authored process
+
+"Implement X in FRust" is a reviewed process (in the sense of the context-system design), not something the model improvises each time:
+
+1. Understand the request and read the relevant existing code and pods.
+2. Retrieve the knowledge cards that apply (syntax, the pods involved, the known language gaps).
+3. Write or patch the code.
+4. `frust.check`, then `frust.compile`. If it fails, read the structured diagnostics, consult the repair-pattern cards, patch, and repeat. A retry limit and the loop-detection rule apply; a repeated identical failure forces a different approach or a question to the user.
+5. Write or run a test that shows it works, and run it. **A task is not complete until it compiles and its check passes**, and the report says exactly what was run and what it showed.
+6. Put the result to use (below) and verify that.
+7. Report: files changed (as a diff), what was verified, what was not.
+
+Policies that apply to every coding run (mandatory, injected): treat the known language gaps as constraints; prefer passing smoke tests to aspirational docs; never claim it compiles without having compiled it; never publish without confirmation; do not treat generated output as source.
+
+### 6A.4 Making things: nodes and plug-ins
+
+Nodes are a **reflection of real FRust code** (see `third_party/FrustLang/projects/10_node_compiler/NODE_LANGUAGE_DESIGN.md`): a function or struct declared `node pure`, `node callable` or `node loop` is what the graph tool reads its pins from, and compiling a graph generates calls into that compiled code, never a graph interpreter. That gives the agent two related ways to make things, both through tools:
+
+- **Make a new node or component by writing FRust.** The agent writes the `node ...` or `component ...` declaration and its body, compiles it, and the new node appears in the palette (Signal Lab, Foley, later Movie and others). The compiler's reflection output is the source of truth for the node's shape.
+- **Wire nodes into a graph.** Provider `station.signal` (and equivalents) with tools: `signal.graph.get`, `signal.node.add`, `signal.node.set_params`, `signal.wire.connect`, `signal.wire.remove`, `signal.node.remove` (destructive if it discards wiring), `signal.graph.compile`, `signal.graph.play_check` (renders a short piece and returns measured facts: peak, RMS, length, silence detection, so "does it make sound" is verified from data), `signal.graph.save`, `signal.graph.render_to_project`. Reading a graph returns nodes, ports and wires with stable IDs.
+- **Build a pod** and add its nodes: write the pod, `frate.build`, install locally into the project's code space, and confirm the nodes are discoverable.
+
+Verification for made things is concrete: it compiles, its nodes are reflected with the expected pins, a test passes, and for audio the measured render matches what the request said (for example "a saw at 220 Hz" has a peak near 220 Hz). The agent reports the measurements.
+
+### 6A.5 Knowledge the coder needs
+
+The coder is only as good as what it can retrieve. Its knowledge is the FRust corpus from the IDE agent spec plus the node language, built as semantic cards in the same LiteSemRAG index as help:
+
+- **The language itself**, generated from `frust.y` and `frust.l` in the FrustLang repository so it cannot drift: every keyword, token, operator with its precedence, and every declaration and expression form, each with the grammar rule it comes from. A change to either grammar file changes the source signature and makes the derived cards and the authored language help stale until reviewed (the same behavior-signature mechanism the help system uses for application features).
+- **Authored language help** (reference, how-to, explanation, troubleshooting topics) written against that grammar, for people and for the agent.
+- **The standard pods and libraries** (`frust_dsp`, `frust_collections`, `frust_osc`, ...): module and function-family cards with signatures, taken from source and backed by their smoke tests.
+- **Node language** cards (`node pure/callable/loop`, ports, reflection) and Signal Lab node references.
+- **Compiler diagnostics** with known repair patterns, and **verified examples** (programs that compile and pass, linked to the cards they prove).
+- **Known language gaps**, as constraints.
+
+Exact tokens (keywords, function names, error codes) must beat semantic similarity in retrieval, exactly as for help.
+
+### 6A.5a Permission profile for coding
+
+The IDE agent's permission modes carry over as the panel's coding scope:
+
+| Mode | Meaning |
+|---|---|
+| Explain | Read the code space and answer. No edits. |
+| Assist | Propose patches and show the diff; the user applies. |
+| Coder | Edit the code space, compile, run tests, and use the results, within the project. |
+| Publisher | Additionally prepare pods for publication; the final publish always asks. |
+
+Editing is scoped to the project's code space; running code is a separate toggle; network read and network write are separate; publishing is always confirmed. These sit on top of the effect-class gating in section 10, and the stricter of the two applies.
+
+### 6A.6 Testing the coder
+
+Additional scenarios for section 14, run with the scripted model against a real compiler:
+
+- Write a small function; it fails to compile; the scripted model reads the diagnostic and patches; the run ends compiled and tested.
+- A patch that does not apply returns a readable error and the agent recovers.
+- The agent is asked for a node; the node compiles and is reflected with the correct pins; a graph using it renders audio whose measured properties match the request.
+- A test that fails is reported as failing, not glossed over.
+- A repeated identical compile error ends the step and forces a different approach.
+- Publishing without confirmation is blocked by the host.
+- Code that contains injected instructions in comments or strings changes nothing.
+
 ## 7. Planning and plan state
 
 ### 7.1 A plan is a process instance
@@ -409,6 +504,10 @@ Each phase ends with its tests passing and something the user can try.
 
 **Phase 5: Breadth in Station.** Clips (place, move, trim, split), assets and import, markers and loops, mixer and inserts, Signal Lab (graph edits, render), help lookup as a tool, Foley and score as they stabilize. Each area is a provider snapped in with contract tests; no runtime change.
 
+**Phase 5b: Coder.** The `code` provider (code space in the VFS, read, patch, search, delete), FRust compile and check tools returning structured diagnostics, run and test tools in a sandbox, the coding process and policies, the FRust knowledge cards and language help, and the compile-without-touching-the-disk solution from section 6A.1. Acceptance: from a plain request the agent writes a FRust function, compiles it, fixes its own errors and shows a passing test, with nothing written outside the container.
+
+**Phase 5c: Node authoring.** Signal Lab graph tools (get, add, connect, set, compile, play-check, save, render), writing new `node` and `component` declarations and having them appear in the palette, building a pod and adding it. Acceptance: "make me a wobbling bass" produces a graph or node that compiles, renders, and whose measured render matches the description.
+
 **Phase 6: Other apps.** The same runtime in Movie, Live, Texture, Developer and the rest, each with its own providers.
 
 **Phase 7: Executable procedures and voice.** Authored processes with `executionMode: assisted` and `automated` run through the same loop; hands-free voice as another way to send requests and hear reports.
@@ -423,6 +522,9 @@ Each phase ends with its tests passing and something the user can try.
 | `SuiteContextEngine` / context store | Feeds project knowledge into the assembler. |
 | Help system (`help/` in Station, research in `projects/djehuti-suite-help`) | Supplies help excerpts, policy records, process records and the context-assembly design. |
 | `CreationStationTaskPlanner` | Deleted when Phase 3 lands. |
+| `projects/frust-ide-agent/FRUST_IDE_AGENT_SPEC.md` (research) | Source of the coder tool surface, work loop, permission modes and knowledge corpus; adapted to a VFS code space (section 6A). |
+| `third_party/FrustLang/.../10_node_compiler/NODE_LANGUAGE_DESIGN.md` | Defines nodes as reflection of compiled FRust; the agent authors nodes by writing FRust and wires them with graph tools. |
+| `frust.y` / `frust.l` (FrustLang) | Source of the generated language cards; changes make the language help stale (section 6A.5). |
 
 ## 18. Decisions
 
@@ -435,6 +537,9 @@ Each phase ends with its tests passing and something the user can try.
 | Runtime lives in `shared/`, not in Station | Proposed | for review |
 | One run equals one undo step, including engine-side mixer state | Proposed | for review |
 | Agent state stored in the VFS only | Proposed (follows the storage rule) | for review |
+| The agent is a coder: writes, compiles, tests and uses FRust and nodes | Yes (user, 2026-09-20) | agreed |
+| Code lives in a code space inside the project container, never on disk | Proposed | for review |
+| Compiler needs a source-in-memory entry point (FrustLang change) | Proposed | for review |
 | Structured-output fallback for models without tool calling | Proposed | for review |
 
 ## 19. Open questions for review
@@ -443,3 +548,5 @@ Each phase ends with its tests passing and something the user can try.
 2. **Mixer state and undo.** Move per-track mixer state into the timeline's snapshotted state (preferred, one source of truth), or capture engine state alongside it (smaller change)?
 3. **How much of a run to show.** Default to a compact action log with details on demand, or show every tool call?
 4. **Providers to support first.** Which of the user's accounts and models must work in Phase 2?
+5. **Compiling without files.** Add a source-in-memory entry point to the FRust compiler (preferred, a change in the FrustLang repo), or serve virtual files to it from the VFS service? Until decided, compile tools inherit the Script panel's temporary-file behavior.
+6. **Where coding sits in the order.** Phase 5b/5c (after the Station tools) as written, or pull the FRust knowledge cards and language help forward now, since they are useful to the Script panel and to people with no assistant at all.
