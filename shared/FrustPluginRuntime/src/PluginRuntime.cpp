@@ -100,29 +100,7 @@ bool PluginRuntime::reload(const std::string& key, std::string& error)
     return true;
 }
 
-namespace
-{
-// Carries the host's callback and the text it returned across the C
-// callback, which needs a pointer that stays valid until the next call.
-struct SourceProviderContext
-{
-    const PluginRuntime::SourceFiles* files = nullptr;
-    std::string lastText;
-};
-
-const char* sourceProviderThunk(const char* fileName, void* userData)
-{
-    auto* context = static_cast<SourceProviderContext*>(userData);
-    if (context == nullptr || context->files == nullptr || !*context->files)
-        return nullptr;
-    if (!(*context->files)(fileName, context->lastText))
-        return nullptr;
-    return context->lastText.c_str();
-}
-}
-
-bool PluginRuntime::loadSource(const std::string& key, const std::string& name, const std::string& sourceText,
-                               const SourceFiles& siblingFiles, std::string& error)
+bool PluginRuntime::loadSource(const std::string& key, const ::frust::CompileRequest& request, std::string& error)
 {
     if (key.empty())
     {
@@ -136,9 +114,7 @@ bool PluginRuntime::loadSource(const std::string& key, const std::string& name, 
         return false;
     }
 
-    SourceProviderContext context;
-    context.files = &siblingFiles;
-    const auto plugin = frust_plugin_load_source(name.c_str(), sourceText.c_str(), sourceProviderThunk, &context);
+    const auto plugin = frust_plugin_host::loadFromSource(request);
     if (plugin == nullptr)
     {
         error = frust_plugin_last_error();
@@ -152,8 +128,7 @@ bool PluginRuntime::loadSource(const std::string& key, const std::string& name, 
     return true;
 }
 
-bool PluginRuntime::reloadSource(const std::string& key, const std::string& sourceText,
-                                 const SourceFiles& siblingFiles, std::string& error)
+bool PluginRuntime::reloadSource(const std::string& key, const ::frust::CompileRequest& request, std::string& error)
 {
     const auto found = plugins.find(key);
     if (found == plugins.end())
@@ -163,9 +138,7 @@ bool PluginRuntime::reloadSource(const std::string& key, const std::string& sour
         return false;
     }
 
-    SourceProviderContext context;
-    context.files = &siblingFiles;
-    const auto reloadedPlugin = frust_plugin_reload_source(found->second, sourceText.c_str(), sourceProviderThunk, &context);
+    const auto reloadedPlugin = frust_plugin_host::reloadFromSource(found->second, request);
     if (reloadedPlugin == nullptr)
     {
         error = frust_plugin_last_error();

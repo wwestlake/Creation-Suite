@@ -1,6 +1,5 @@
 #include "creation/frust/SuiteFratePodWorkspace.h"
 
-#include <frate/FratePodBuilder.h>
 
 namespace creation::frust {
 namespace {
@@ -15,10 +14,34 @@ juce::String jsonString(const juce::String& value) {
 
 } // namespace
 
+SuitePodSource::SuitePodSource(creation::assets::ProjectSession& session, FratePodVfsResolver& resolver)
+    : session_(session), resolver_(resolver) {}
+
+bool SuitePodSource::findPod(const std::string& name, const std::string& version, frate::PodFiles& files) {
+    // A pod authored in this project wins, if it is the version asked for.
+    if (session_.isValid()) {
+        SuiteFratePodWorkspace local(session_, *this);
+        frate::PodFiles own;
+        juce::String ignored;
+        if (local.readPod(juce::String(name), own, ignored)) {
+            const auto manifest = own.find("frate.json");
+            if (manifest != own.end()) {
+                const juce::var parsed = juce::JSON::parse(juce::String(manifest->second));
+                if (parsed.getProperty("version", {}).toString().toStdString() == version) {
+                    files = std::move(own);
+                    return true;
+                }
+            }
+        }
+    }
+
+    const auto status = resolver_.resolve(name, version, files);
+    return status == PodResolveStatus::ResolvedFromVfsCache || status == PodResolveStatus::ResolvedFromRegistry;
+}
+
 SuiteFratePodWorkspace::SuiteFratePodWorkspace(creation::assets::ProjectSession& session,
-                                               SuiteFrateBuildService& buildService,
-                                               juce::File materializationRoot)
-    : session_(session), buildService_(buildService), materializationRoot_(std::move(materializationRoot)) {}
+                                               frate::PodSource& dependencies)
+    : session_(session), dependencies_(dependencies) {}
 
 juce::String SuiteFratePodWorkspace::sourceRootFor(const juce::String& podName) {
     return "Assets/Source/FRust/PluginPods/" + podName + "/";
@@ -89,77 +112,65 @@ bool SuiteFratePodWorkspace::writeSource(const PodScaffoldOptions& options, cons
     return true;
 }
 
-bool SuiteFratePodWorkspace::materialize(const juce::String& podName, juce::File& outDirectory,
-                                         juce::String& error) {
+bool SuiteFratePodWorkspace::readPod(const juce::String& podName, frate::PodFiles& files,
+                                      juce::String& error) const {
     const auto root = sourceRootFor(podName);
     const auto entries = session_.listEntryPaths();
-    juce::StringArray podEntries;
-    for (const auto& entry : entries)
-        if (entry.startsWith(root)) podEntries.add(entry);
-    if (podEntries.isEmpty()) {
-        error = "Pod '" + podName + "' does not exist in the project VFS.";
-        return false;
-    }
-
-    outDirectory = materializationRoot_.getChildFile(session_.getProjectId()).getChildFile(podName);
-    if (outDirectory.exists()) outDirectory.deleteRecursively();
-    if (!outDirectory.createDirectory()) {
-        error = "Could not create the disposable pod build directory.";
-        return false;
-    }
-    for (const auto& entry : podEntries) {
+    frate::PodFiles result;
+    for (const auto& entry : entries) {
+        if (!entry.startsWith(root)) continue;
         juce::MemoryBlock data;
         if (!session_.readEntry(entry, data)) {
             error = "Could not read VFS entry " + entry + ".";
             return false;
         }
-        const auto relative = entry.substring(root.length());
-        const auto target = outDirectory.getChildFile(relative.replaceCharacter('/', juce::File::getSeparatorChar()));
-        if (!target.getParentDirectory().createDirectory()
-            || !target.replaceWithData(data.getData(), data.getSize())) {
-            error = "Could not materialize VFS entry " + entry + ".";
-            return false;
-        }
+        result[entry.substring(root.length()).toStdString()]
+            .assign(static_cast<const char*>(data.getData()), data.getSize());
     }
-    return true;
-}
-
-bool SuiteFratePodWorkspace::persistDerived(const juce::String& podName, const juce::File& podDirectory,
-                                            juce::String& packageEntry, juce::String& error) {
-    const auto root = derivedRootFor(podName);
-    const auto buildDirectory = podDirectory.getChildFile("build");
-    for (const auto& file : buildDirectory.findChildFiles(juce::File::findFiles, true)) {
-        const auto relative = file.getRelativePathFrom(buildDirectory).replaceCharacter('\\', '/');
-        if (!session_.writeEntryFromFile(root + "build/" + relative, file, error)) return false;
-    }
-
-    const auto package = frate::FratePodBuilder::packagePod(podDirectory);
-    if (!package.existsAsFile()) {
-        error = "Frate built the pod but could not package it.";
+    if (result.empty()) {
+        error = "Pod " + podName + " does not exist in the project VFS.";
         return false;
     }
-    packageEntry = root + package.getFileName();
-    return session_.writeEntryFromFile(packageEntry, package, error);
+    files = std::move(result);
+    return true;
 }
 
 PodWorkspaceBuildResult SuiteFratePodWorkspace::build(const juce::String& podName) {
     PodWorkspaceBuildResult result;
     result.sourceRoot = sourceRootFor(podName);
     result.derivedRoot = derivedRootFor(podName);
-    juce::File podDirectory;
+
     juce::String error;
-    if (!validPodName(podName) || !materialize(podName, podDirectory, error)) {
-        result.build.status = BuildStatus::PodDirectoryInvalid;
-        result.build.output = error.isNotEmpty() ? error : "Invalid pod name.";
+    if (!validPodName(podName) || !readPod(podName, result.files, error)) {
+        result.output = error.isNotEmpty() ? error : "Invalid pod name.";
         return result;
     }
-    result.materializedPodDirectory = podDirectory;
-    result.build = buildService_.build(podDirectory);
-    if (result.build.status != BuildStatus::Success) return result;
-    if (!persistDerived(podName, podDirectory, result.packageEntry, error)) {
-        result.build.status = BuildStatus::CompileFailed;
-        result.build.output = error;
+
+    const auto built = frate::buildPod(result.files, &dependencies_);
+    if (!built.ok) {
+        for (const auto& diagnostic : built.diagnostics)
+            result.output << juce::String(::frust::FormatDiagnostic(diagnostic)) << "\n";
+        if (result.output.isEmpty()) result.output = "The FRust compiler reported a failure without a message.";
+        return result;
     }
+
+    // Build output goes back into the project VFS as entries, straight from memory.
+    result.objectEntry = result.derivedRoot + "build/" + juce::String(built.name) + ".o";
+    const juce::MemoryBlock object(built.object.data(), built.object.size());
+    std::string packageBytes, packError;
+    if (!frate::packPod(result.files, packageBytes, packError)) {
+        result.output = "The pod built but could not be packaged: " + juce::String(packError);
+        return result;
+    }
+    result.packageEntry = result.derivedRoot + juce::String(built.name) + "-" + juce::String(built.version) + ".frpod";
+    if (!session_.writeEntry(result.objectEntry, object)
+        || !session_.writeEntry(result.packageEntry, juce::MemoryBlock(packageBytes.data(), packageBytes.size()))) {
+        result.output = "The pod built but its output could not be written into the project VFS.";
+        return result;
+    }
+
+    result.success = true;
+    result.output = "Built " + juce::String(built.name) + " " + juce::String(built.version) + ".";
     return result;
 }
 
