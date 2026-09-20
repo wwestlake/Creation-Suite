@@ -281,6 +281,14 @@ Before wiring any "choose an X" UI in any app, check whether the framework alrea
 
 Violated and fixed 2026-08-11: CreationStation's own settings (`settings.xml`), control-surface mappings, and window layout, plus CreationEngine's settings file, were all raw OS files written via `juce::File`/`XmlElement`, entirely bypassing the VFS — this is exactly why a user's ~10 configured VST plugin search folders silently vanished (the write silently no-op'd whenever the VFS root wasn't yet configured at save time, with no error surfaced). All four were migrated to `SuiteVfsJsonStore`-backed VFS entries in that pass; treat that migration as the concrete precedent for how to do this correctly. **Before adding any new local persistence in any app, check whether `SuiteVfsJsonStore` already covers the need — it almost always does.** This is the same failure category as the LLVM/C: drive rules above: the suite is pre-release, under construction — there is no reason to build app-local storage "for now" instead of doing it correctly the first time.
 
+## The ":STUPID" Rule: stop and talk
+
+When you find something that is plainly wrong for this architecture - code that touches the OS file system instead of the VFS, a click handler that copies or opens a huge file instead of reading the manifest, a leftover from the app's early days that nobody removed, a workaround built on top of a workaround - that is a `:STUPID`. Do not quietly patch around it, do not rewrite a large piece of shared code in one go, and do not carry on with the task as if it were fine.
+
+**Stop, and talk to the user first.** Say in plain words what you found, why it is wrong, and what you would change. Then wait. The user decides the order and scope.
+
+Why this exists: real examples include a details panel that copied a 2 GB video out of the VFS on every click (a 20 second wait), a raw file-system browser mode kept in the shared Assets window, and a storage folder that fell back to a default on the C: drive. Each one was found by the user, not by the agent, and each was made worse by moving on without saying anything. There is no legacy to protect: greenfield rules apply, and replaced things are deleted outright, but only after the user has agreed to the plan.
+
 ## Documentation Index
 
 This file is a MAP, not a manual — it tells you which document governs a given topic; it does not restate that document's content. Before starting work in an area below, open the linked file(s) and read them, live, every session — do not rely on a memory of having read them before, and do not let anything here substitute for actually opening the file.

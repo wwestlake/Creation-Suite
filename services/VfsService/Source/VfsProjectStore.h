@@ -2,28 +2,20 @@
 
 #include <creation/assets/ProjectManifest.h>
 #include <creation/suite/SuiteSettings.h>
+#include <creation/vfs/SuiteVolume.h>
 
 #include <juce_core/juce_core.h>
 
-// Real, plain juce::File folder I/O against project directories under the configured VFS
-// root -- no FatFs, no mounted volume, no packed container file. Deliberately private to
-// this service executable (not a shared/linkable library): the whole point of the "service
-// owns the entire VFS" architecture is that no app process ever touches VFS files directly,
-// and keeping the implementation un-linkable from anywhere else makes that structural, not
-// just a documented convention. See docs/architecture/Suite-Shared-Project-Model.md.
+#include <cstdint>
+
+// The VFS service's storage. EVERYTHING - every project, asset, setting, layout, mapping - lives inside ONE container
+// file, vfs.bin, in the VFS root (an exFAT volume in a sparse file; see shared/VFS). Nothing is stored as real files or
+// folders on the OS disk. Inside the volume:
 //
-// One project = one real folder, at the TOP of the VFS -- projects are not owned by, or
-// nested under, any app. appDomain is stamped into the manifest at creation time as pure
-// originating metadata; it is never a storage path segment or a listing filter. See
-// docs/architecture/Suite-Shared-Project-Model.md.
-//   <suiteVfsRoot>/Project Containers/<projectId>/
-//     Project/project-manifest.json   (creation::assets::ProjectContainerPaths::manifestPath)
-//     Assets/..., Metadata/..., Exports/...   (whatever entries the app writes)
-// The suite root project (small suite-wide settings entries) is just another instance of
-// this, rooted directly at <suiteVfsRoot>/suite/ -- see resolveSuiteRootFolder.
+//   Project Containers/<projectId>/...   one folder per project (the manifest is at ProjectContainerPaths::manifestPath)
+//   suite/...                            suite-level entries (settings, layouts, control-surface mappings, ...)
 //
-// Every public method here is a discrete, stateless filesystem operation; callers
-// (Main.cpp's HTTP handlers) are responsible for their own request-level locking.
+// The volume is not thread safe: the service serializes every call to this class with one lock (see Main.cpp).
 class VfsProjectStore final
 {
 public:
@@ -31,20 +23,18 @@ public:
     {
         juce::String projectId;
         creation::assets::ProjectManifest manifest;
-        // The old packed-container model got "how big is this project" for free from the OS
-        // (one file's size). A real folder tree doesn't have that for free -- computed here by
-        // summing every entry's size, so callers (project browser UI) don't have to.
         std::int64_t totalSizeBytes = 0;
     };
 
+    // The size the container is created with when the VFS root has none yet. It is sparse: it takes almost no real
+    // space until data is written. The limit is fixed when the container is made.
+    static constexpr std::int64_t kContainerSizeBytes = 1024LL * 1024LL * 1024LL * 1024LL;
+
+    // Opens vfs.bin in the settings' VFS root, creating and formatting it the first time. Check isReady().
     explicit VfsProjectStore(const creation::suite::SuiteSettings& settings);
 
-    // The root the suite-entry methods below resolve paths against. Callers already prefix
-    // logical paths with "suite/" (Main.cpp's normalizeEntryPath), so this is the VFS root
-    // itself -- the prefix in the path is what puts entries under <suiteVfsRoot>/suite/ on
-    // disk, matching the layout the old container used. Used for the existing /suite/entry*
-    // endpoints, reimplemented against this store instead of a mounted volume.
-    juce::File suiteRootFolder() const;
+    bool isReady() const noexcept { return volume.isOpen(); }
+    const juce::String& startupError() const noexcept { return startupError_; }
 
     bool createProject(creation::assets::SuiteAppDomain appDomain,
                        const juce::String& projectName,
@@ -60,11 +50,6 @@ public:
                        juce::String& errorMessage);
 
     bool listProjects(juce::Array<ProjectSummary>& outProjects) const;
-    bool findProjectFolderById(const juce::String& projectId, juce::File& outFolder) const;
-
-    // One-shot startup migration off the old <AppDomain>/<projectId> nesting onto the flat
-    // <projectId> layout above. Safe to call every startup -- a no-op once migrated.
-    void migrateLegacyDomainNestedProjects();
 
     bool cloneProject(const juce::String& sourceProjectId, const juce::String& newProjectName,
                       juce::String& outNewProjectId, juce::String& errorMessage);
@@ -77,23 +62,19 @@ public:
                     const juce::MemoryBlock& data, juce::String& errorMessage);
     bool removeEntry(const juce::String& projectId, const juce::String& logicalPath);
 
-    // Big entries (a video) arrive in pieces so no single request has to carry the whole file. Pieces are
-    // appended, in order, to "<entry>.upload-part"; the last one (offset + size == totalSize) moves the part
-    // file over the real entry, so a half-finished upload never replaces or corrupts the existing entry.
-    // A piece whose offset is not exactly the part file's current size is refused.
+    // A big entry is written in pieces: each piece lands at `offset` in a partial file, and the last one (offset +
+    // chunkSize == totalSize) moves it into place as the finished entry. A finished entry never appears half-written.
     bool writeEntryChunk(const juce::String& projectId, const juce::String& logicalPath,
                          std::int64_t offset, std::int64_t totalSize,
                          const void* chunk, size_t chunkSize,
                          bool& outCompleted, juce::String& errorMessage);
-    // One piece of an entry, for downloading big files without holding them whole: up to `length` bytes
-    // starting at `offset`. outTotalSize is the whole entry's size.
     bool readEntryRange(const juce::String& projectId, const juce::String& logicalPath,
                         std::int64_t offset, std::int64_t length,
                         juce::MemoryBlock& outData, std::int64_t& outTotalSize) const;
     bool discardEntryUpload(const juce::String& projectId, const juce::String& logicalPath);
     juce::StringArray listEntryPaths(const juce::String& projectId) const;
 
-    // Suite-root-scoped equivalents (no projectId -- always the one suite folder).
+    // Suite-level entries. The logical path starts with "suite/" (the service adds it), e.g. "suite/station-layout.json".
     bool readSuiteEntry(const juce::String& logicalPath, juce::MemoryBlock& outData) const;
     bool writeSuiteEntry(const juce::String& logicalPath, const juce::MemoryBlock& data);
     bool removeSuiteEntry(const juce::String& logicalPath);
@@ -101,16 +82,11 @@ public:
 
 private:
     static juce::String normalizeLogicalPath(const juce::String& logicalPath);
-    static bool readManifestFromFolder(const juce::File& projectFolder, creation::assets::ProjectManifest& outManifest,
-                                       juce::String& errorMessage);
-    static bool writeManifestToFolder(const juce::File& projectFolder, const creation::assets::ProjectManifest& manifest,
-                                      juce::String& errorMessage);
-    static bool readEntryFromFolder(const juce::File& rootFolder, const juce::String& logicalPath,
-                                    juce::MemoryBlock& outData);
-    static bool writeEntryToFolder(const juce::File& rootFolder, const juce::String& logicalPath,
-                                   const juce::MemoryBlock& data, juce::String& errorMessage);
-    static bool removeEntryFromFolder(const juce::File& rootFolder, const juce::String& logicalPath);
-    static juce::StringArray listEntryPathsInFolder(const juce::File& rootFolder, const juce::String& excludePath);
+    static bool isSafePath(const juce::String& normalizedPath);
+    static juce::String projectFolderPath(const juce::String& projectId);
+    bool projectExists(const juce::String& projectId) const;
+    static juce::String partialUploadPath(const juce::String& entryPath);
 
-    creation::suite::SuiteSettings settings_;
+    mutable creation::vfs::SuiteVolume volume;
+    juce::String startupError_;
 };

@@ -62,6 +62,35 @@ public:
     // are not included). Order is not guaranteed.
     juce::StringArray listFiles() const;
 
+    // ---- What a service needs on top of whole-file read/write. The volume is NOT thread safe (FatFs is built
+    // without re-entrancy): the one program that owns it must serialize every call.
+
+    // Size in bytes of a file, or -1 if there is no such file.
+    juce::int64 fileSize(const juce::String& logicalPath) const;
+    bool directoryExists(const juce::String& logicalPath) const;
+    bool createDirectory(const juce::String& logicalPath, juce::String& errorMessage);
+
+    // Reads up to `length` bytes starting at `offset` (fewer at the end of the file). outTotalSize is the whole file's size.
+    bool readRange(const juce::String& logicalPath, juce::int64 offset, juce::int64 length,
+                   juce::MemoryBlock& outData, juce::int64& outTotalSize, juce::String& errorMessage) const;
+
+    // Writes `size` bytes at `offset`. With truncateFirst the file is created empty first (a new upload's first
+    // piece); otherwise the file must already exist and the bytes go at `offset`.
+    bool writeAt(const juce::String& logicalPath, juce::int64 offset, const void* data, size_t size,
+                 bool truncateFirst, juce::String& errorMessage);
+
+    // Moves a file to a new path, replacing whatever is there.
+    bool renameFile(const juce::String& fromPath, const juce::String& toPath, juce::String& errorMessage);
+    bool copyFile(const juce::String& fromPath, const juce::String& toPath, juce::String& errorMessage);
+
+    // Deletes a file, or a folder and everything inside it.
+    bool deleteTree(const juce::String& logicalPath, juce::String& errorMessage);
+
+    // Names (not paths) of the folders directly inside a folder.
+    juce::StringArray listDirectories(const juce::String& logicalPath) const;
+    // Every file inside a folder, however deep, as paths relative to that folder.
+    juce::StringArray listFilesUnder(const juce::String& logicalPath) const;
+
 private:
     bool acquireDriveSlot(juce::String& errorMessage);
     void releaseDriveSlot();

@@ -1,5 +1,6 @@
 #include "creation/assets/ProjectSession.h"
 #include "creation/services/SuiteVfsServiceClient.h"
+#include "creation/assets/VfsEntryInputStream.h"
 
 namespace
 {
@@ -116,6 +117,19 @@ juce::StringArray ProjectSession::listEntryPaths() const
 bool ProjectSession::containsEntry(const juce::String& logicalPath) const
 {
     return listEntryPaths().contains(normalizeLogicalPath(logicalPath));
+}
+
+std::unique_ptr<juce::InputStream> ProjectSession::openEntryStream(const juce::String& logicalPath) const
+{
+    creation::services::SuiteVfsServiceClient client;
+    if (! client.discover())
+        return nullptr;
+
+    auto stream = std::make_unique<VfsEntryInputStream>(client, projectId, normalizeLogicalPath(logicalPath));
+    if (! stream->isValid())
+        return nullptr;
+
+    return stream;
 }
 
 bool ProjectSession::readEntry(const juce::String& logicalPath, juce::MemoryBlock& outData) const

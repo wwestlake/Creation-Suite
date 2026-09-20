@@ -1,6 +1,7 @@
 #include <creation/vfs/SuiteVolume.h>
 
 #include <array>
+#include <vector>
 
 #include "ff.h"
 #include "FatFsDiskIo.h"
@@ -358,6 +359,287 @@ juce::StringArray SuiteVolume::listFiles() const {
         return results;
 
     CollectFiles(juce::String(driveIndex) + ":/", {}, results);
+    return results;
+}
+
+juce::int64 SuiteVolume::fileSize(const juce::String& logicalPath) const {
+    if (! mounted)
+        return -1;
+    FILINFO info{};
+    if (f_stat(drivePrefixedPath(logicalPath).toRawUTF8(), &info) != FR_OK || (info.fattrib & AM_DIR))
+        return -1;
+    return static_cast<juce::int64>(info.fsize);
+}
+
+bool SuiteVolume::directoryExists(const juce::String& logicalPath) const {
+    if (! mounted)
+        return false;
+    FILINFO info{};
+    return f_stat(drivePrefixedPath(logicalPath).toRawUTF8(), &info) == FR_OK && (info.fattrib & AM_DIR) != 0;
+}
+
+bool SuiteVolume::createDirectory(const juce::String& logicalPath, juce::String& errorMessage) {
+    if (! mounted) {
+        errorMessage = "The volume is not open.";
+        return false;
+    }
+    // ensureParentDirectories makes every folder up to (not including) the last segment; a trailing "/" makes the
+    // last segment a parent too.
+    if (! ensureParentDirectories(logicalPath + "/x")) {
+        errorMessage = "Could not create the folder.";
+        return false;
+    }
+    return true;
+}
+
+bool SuiteVolume::readRange(const juce::String& logicalPath, juce::int64 offset, juce::int64 length,
+                            juce::MemoryBlock& outData, juce::int64& outTotalSize, juce::String& errorMessage) const {
+    outData.reset();
+    outTotalSize = 0;
+    if (! mounted) {
+        errorMessage = "The volume is not open.";
+        return false;
+    }
+
+    FIL file{};
+    if (f_open(&file, drivePrefixedPath(logicalPath).toRawUTF8(), FA_READ) != FR_OK) {
+        errorMessage = "The requested asset was not found.";
+        return false;
+    }
+
+    const auto total = static_cast<juce::int64>(f_size(&file));
+    outTotalSize = total;
+    if (offset < 0 || offset > total || length < 0) {
+        f_close(&file);
+        errorMessage = "The requested range is outside the asset.";
+        return false;
+    }
+
+    const auto count = juce::jmin(length, total - offset);
+    if (count == 0) {
+        f_close(&file);
+        return true;
+    }
+
+    outData.setSize(static_cast<size_t>(count));
+    bool ok = f_lseek(&file, static_cast<FSIZE_t>(offset)) == FR_OK;
+    auto* bytes = static_cast<std::uint8_t*>(outData.getData());
+    size_t done = 0;
+    while (ok && done < static_cast<size_t>(count)) {
+        const auto thisChunk = static_cast<UINT>(juce::jmin(static_cast<size_t>(count) - done, kIoChunkBytes));
+        UINT bytesRead = 0;
+        if (f_read(&file, bytes + done, thisChunk, &bytesRead) != FR_OK || bytesRead != thisChunk)
+            ok = false;
+        done += thisChunk;
+    }
+
+    f_close(&file);
+    if (! ok) {
+        errorMessage = "Could not read the asset's data.";
+        outData.reset();
+        return false;
+    }
+    return true;
+}
+
+bool SuiteVolume::writeAt(const juce::String& logicalPath, juce::int64 offset, const void* data, size_t size,
+                          bool truncateFirst, juce::String& errorMessage) {
+    if (! mounted) {
+        errorMessage = "The volume is not open.";
+        return false;
+    }
+    if (offset < 0) {
+        errorMessage = "A write cannot start before the beginning of a file.";
+        return false;
+    }
+    if (truncateFirst && ! ensureParentDirectories(logicalPath)) {
+        errorMessage = "Could not create the asset's parent directories.";
+        return false;
+    }
+
+    FIL file{};
+    const BYTE mode = truncateFirst ? static_cast<BYTE>(FA_CREATE_ALWAYS | FA_WRITE) : static_cast<BYTE>(FA_OPEN_EXISTING | FA_WRITE);
+    if (f_open(&file, drivePrefixedPath(logicalPath).toRawUTF8(), mode) != FR_OK) {
+        errorMessage = "Could not open the asset for writing.";
+        return false;
+    }
+
+    bool ok = offset == 0 || f_lseek(&file, static_cast<FSIZE_t>(offset)) == FR_OK;
+    const auto* bytes = static_cast<const std::uint8_t*>(data);
+    size_t done = 0;
+    while (ok && done < size) {
+        const auto thisChunk = static_cast<UINT>(juce::jmin(size - done, kIoChunkBytes));
+        UINT written = 0;
+        if (f_write(&file, bytes + done, thisChunk, &written) != FR_OK || written != thisChunk)
+            ok = false;
+        done += thisChunk;
+    }
+
+    f_close(&file);
+    if (! ok) {
+        errorMessage = "Could not write the asset's data (is the container full?).";
+        return false;
+    }
+    return true;
+}
+
+bool SuiteVolume::renameFile(const juce::String& fromPath, const juce::String& toPath, juce::String& errorMessage) {
+    if (! mounted) {
+        errorMessage = "The volume is not open.";
+        return false;
+    }
+    if (! ensureParentDirectories(toPath)) {
+        errorMessage = "Could not create the destination's parent directories.";
+        return false;
+    }
+
+    auto target = toPath.replaceCharacter('\\', '/');
+    while (target.startsWithChar('/'))
+        target = target.substring(1);
+
+    f_unlink(drivePrefixedPath(toPath).toRawUTF8()); // replace whatever is there; failing because nothing is there is fine
+    // FatFs takes the new name without a drive number: it stays on the old name's volume.
+    if (f_rename(drivePrefixedPath(fromPath).toRawUTF8(), target.toRawUTF8()) != FR_OK) {
+        errorMessage = "Could not rename the asset.";
+        return false;
+    }
+    return true;
+}
+
+bool SuiteVolume::copyFile(const juce::String& fromPath, const juce::String& toPath, juce::String& errorMessage) {
+    if (! mounted) {
+        errorMessage = "The volume is not open.";
+        return false;
+    }
+    if (! ensureParentDirectories(toPath)) {
+        errorMessage = "Could not create the destination's parent directories.";
+        return false;
+    }
+
+    FIL source{};
+    if (f_open(&source, drivePrefixedPath(fromPath).toRawUTF8(), FA_READ) != FR_OK) {
+        errorMessage = "The asset to copy was not found.";
+        return false;
+    }
+
+    FIL destination{};
+    if (f_open(&destination, drivePrefixedPath(toPath).toRawUTF8(), FA_CREATE_ALWAYS | FA_WRITE) != FR_OK) {
+        f_close(&source);
+        errorMessage = "Could not create the copy.";
+        return false;
+    }
+
+    constexpr size_t kCopyBytes = 4 * 1024 * 1024;
+    std::vector<std::uint8_t> buffer(kCopyBytes);
+    bool ok = true;
+    FSIZE_t remaining = f_size(&source);
+    while (ok && remaining > 0) {
+        const auto thisChunk = static_cast<UINT>(juce::jmin<FSIZE_t>(remaining, static_cast<FSIZE_t>(kCopyBytes)));
+        UINT bytesRead = 0, bytesWritten = 0;
+        if (f_read(&source, buffer.data(), thisChunk, &bytesRead) != FR_OK || bytesRead != thisChunk
+            || f_write(&destination, buffer.data(), bytesRead, &bytesWritten) != FR_OK || bytesWritten != bytesRead)
+            ok = false;
+        remaining -= thisChunk;
+    }
+
+    f_close(&destination);
+    f_close(&source);
+    if (! ok) {
+        errorMessage = "Could not copy the asset's data.";
+        return false;
+    }
+    return true;
+}
+
+namespace {
+bool DeleteTreeAt(const juce::String& drivePrefix, const juce::String& relativePath) {
+    const auto full = drivePrefix + relativePath;
+    FILINFO info{};
+    if (f_stat(full.toRawUTF8(), &info) != FR_OK)
+        return false;
+
+    if (! (info.fattrib & AM_DIR))
+        return f_unlink(full.toRawUTF8()) == FR_OK;
+
+    // Collect the children first: FatFs does not like a directory being changed while it is being read.
+    juce::StringArray children;
+    DIR dir{};
+    if (f_opendir(&dir, full.toRawUTF8()) != FR_OK)
+        return false;
+    FILINFO child{};
+    while (f_readdir(&dir, &child) == FR_OK && child.fname[0] != 0)
+        children.add(juce::String(child.fname));
+    f_closedir(&dir);
+
+    for (const auto& name : children)
+        if (! DeleteTreeAt(drivePrefix, relativePath + "/" + name))
+            return false;
+
+    return f_unlink(full.toRawUTF8()) == FR_OK;
+}
+} // namespace
+
+bool SuiteVolume::deleteTree(const juce::String& logicalPath, juce::String& errorMessage) {
+    if (! mounted) {
+        errorMessage = "The volume is not open.";
+        return false;
+    }
+
+    auto cleaned = logicalPath.replaceCharacter('\\', '/');
+    while (cleaned.startsWithChar('/'))
+        cleaned = cleaned.substring(1);
+    while (cleaned.endsWithChar('/'))
+        cleaned = cleaned.dropLastCharacters(1);
+    if (cleaned.isEmpty()) {
+        errorMessage = "Refusing to delete the whole volume.";
+        return false;
+    }
+
+    if (! DeleteTreeAt(juce::String(driveIndex) + ":/", cleaned)) {
+        errorMessage = "Could not delete it.";
+        return false;
+    }
+    return true;
+}
+
+juce::StringArray SuiteVolume::listDirectories(const juce::String& logicalPath) const {
+    juce::StringArray names;
+    if (! mounted)
+        return names;
+
+    auto cleaned = logicalPath.replaceCharacter('\\', '/');
+    while (cleaned.startsWithChar('/'))
+        cleaned = cleaned.substring(1);
+
+    DIR dir{};
+    if (f_opendir(&dir, (juce::String(driveIndex) + ":/" + cleaned).toRawUTF8()) != FR_OK)
+        return names;
+
+    FILINFO info{};
+    while (f_readdir(&dir, &info) == FR_OK && info.fname[0] != 0)
+        if (info.fattrib & AM_DIR)
+            names.add(juce::String(info.fname));
+    f_closedir(&dir);
+    return names;
+}
+
+juce::StringArray SuiteVolume::listFilesUnder(const juce::String& logicalPath) const {
+    juce::StringArray results;
+    if (! mounted)
+        return results;
+
+    auto cleaned = logicalPath.replaceCharacter('\\', '/');
+    while (cleaned.startsWithChar('/'))
+        cleaned = cleaned.substring(1);
+    while (cleaned.endsWithChar('/'))
+        cleaned = cleaned.dropLastCharacters(1);
+
+    juce::StringArray fromVolumeRoot;
+    CollectFiles(juce::String(driveIndex) + ":/", cleaned, fromVolumeRoot);
+
+    const auto prefix = cleaned.isEmpty() ? juce::String() : cleaned + "/";
+    for (const auto& path : fromVolumeRoot)
+        results.add(path.startsWith(prefix) ? path.substring(prefix.length()) : path);
     return results;
 }
 
