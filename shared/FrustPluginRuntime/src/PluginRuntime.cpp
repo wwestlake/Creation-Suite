@@ -128,6 +128,35 @@ bool PluginRuntime::loadSource(const std::string& key, const ::frust::CompileReq
     return true;
 }
 
+bool PluginRuntime::loadFromEnvironment(const std::string& key, ::frust::HostEnvironment& env,
+                                        const ::frust::FileCompileRequest& request, std::string& error)
+{
+    if (key.empty())
+    {
+        error = "A FRust plugin needs a non-empty runtime key.";
+        return false;
+    }
+    if (plugins.contains(key))
+    {
+        error = "FRust plugin '" + key + "' is already loaded. Reload or unload it explicitly.";
+        errors[key] = error;
+        return false;
+    }
+
+    const auto plugin = frust_plugin_host::loadFromEnvironment(env, request);
+    if (plugin == nullptr)
+    {
+        error = frust_plugin_last_error();
+        errors[key] = error;
+        return false;
+    }
+
+    frust_plugin_call_on_init(plugin);
+    plugins.emplace(key, plugin);
+    errors.erase(key);
+    return true;
+}
+
 bool PluginRuntime::reloadSource(const std::string& key, const ::frust::CompileRequest& request, std::string& error)
 {
     const auto found = plugins.find(key);
