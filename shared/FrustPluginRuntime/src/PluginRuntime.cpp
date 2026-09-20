@@ -100,6 +100,85 @@ bool PluginRuntime::reload(const std::string& key, std::string& error)
     return true;
 }
 
+namespace
+{
+// Carries the host's callback and the text it returned across the C
+// callback, which needs a pointer that stays valid until the next call.
+struct SourceProviderContext
+{
+    const PluginRuntime::SourceFiles* files = nullptr;
+    std::string lastText;
+};
+
+const char* sourceProviderThunk(const char* fileName, void* userData)
+{
+    auto* context = static_cast<SourceProviderContext*>(userData);
+    if (context == nullptr || context->files == nullptr || !*context->files)
+        return nullptr;
+    if (!(*context->files)(fileName, context->lastText))
+        return nullptr;
+    return context->lastText.c_str();
+}
+}
+
+bool PluginRuntime::loadSource(const std::string& key, const std::string& name, const std::string& sourceText,
+                               const SourceFiles& siblingFiles, std::string& error)
+{
+    if (key.empty())
+    {
+        error = "A FRust plugin needs a non-empty runtime key.";
+        return false;
+    }
+    if (plugins.contains(key))
+    {
+        error = "FRust plugin '" + key + "' is already loaded. Reload or unload it explicitly.";
+        errors[key] = error;
+        return false;
+    }
+
+    SourceProviderContext context;
+    context.files = &siblingFiles;
+    const auto plugin = frust_plugin_load_source(name.c_str(), sourceText.c_str(), sourceProviderThunk, &context);
+    if (plugin == nullptr)
+    {
+        error = frust_plugin_last_error();
+        errors[key] = error;
+        return false;
+    }
+
+    frust_plugin_call_on_init(plugin);
+    plugins.emplace(key, plugin);
+    errors.erase(key);
+    return true;
+}
+
+bool PluginRuntime::reloadSource(const std::string& key, const std::string& sourceText,
+                                 const SourceFiles& siblingFiles, std::string& error)
+{
+    const auto found = plugins.find(key);
+    if (found == plugins.end())
+    {
+        error = "Cannot reload FRust plugin '" + key + "' because it is not loaded.";
+        errors[key] = error;
+        return false;
+    }
+
+    SourceProviderContext context;
+    context.files = &siblingFiles;
+    const auto reloadedPlugin = frust_plugin_reload_source(found->second, sourceText.c_str(), sourceProviderThunk, &context);
+    if (reloadedPlugin == nullptr)
+    {
+        error = frust_plugin_last_error();
+        errors[key] = error;
+        plugins.erase(found);
+        return false;
+    }
+
+    found->second = reloadedPlugin;
+    errors.erase(key);
+    return true;
+}
+
 void PluginRuntime::unload(const std::string& key)
 {
     const auto found = plugins.find(key);
