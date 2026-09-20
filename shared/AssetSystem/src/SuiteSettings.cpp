@@ -3,17 +3,6 @@
 
 namespace
 {
-juce::File getDefaultSuiteDataRoot()
-{
-    auto roamingAppData = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
-    auto appDataRoot = roamingAppData.getParentDirectory();
-    auto localAppData = appDataRoot.getChildFile("Local");
-    if (localAppData.isDirectory())
-        return localAppData.getChildFile("Djehuti Suite").getChildFile("Data");
-
-    return roamingAppData.getChildFile("Djehuti Suite").getChildFile("Data");
-}
-
 juce::var createJsonObject(const creation::suite::SuiteSettings& settings)
 {
     auto* object = new juce::DynamicObject();
@@ -83,7 +72,7 @@ bool SuiteSettingsStore::save(const SuiteSettings& settings, juce::String& error
 juce::File SuiteSettingsStore::getSuiteConfigDirectory() const
 {
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile("Djehuti Suite");
+        .getChildFile("Djehuti-Suite");
 }
 
 juce::File SuiteSettingsStore::getSuiteSettingsFile() const
@@ -93,10 +82,10 @@ juce::File SuiteSettingsStore::getSuiteSettingsFile() const
 
 SuiteSettings SuiteSettingsStore::makeDefaultSettings() const
 {
-    auto suiteRoot = getDefaultSuiteDataRoot();
-
+    // There is NO default VFS root. The user chooses it once (a large drive that is not the system drive) and only
+    // that pointer is saved on the OS filesystem; until then suiteVfsRoot stays empty and the suite asks for it. A
+    // built-in default would silently put the whole VFS - projects, caches, everything - on the system drive.
     SuiteSettings settings;
-    settings.suiteVfsRoot = suiteRoot.getFullPathName();
     // Was hardcoded to "codex-{debug,release}-bin" regardless of which
     // agent's build was actually running -- every agent that never
     // explicitly overrides this in suite-settings.json silently tried to

@@ -2,6 +2,9 @@
 
 #include <creation/ui/SuiteCommonSpacePanel.h>
 
+#include <creation/suite/SuiteSettings.h>
+#include <creation/suite/SuiteStoragePaths.h>
+
 #if JUCE_WINDOWS
  #include <windows.h>
 #endif
@@ -125,6 +128,64 @@ SuiteJUCEApplication::SuiteJUCEApplication(SuiteLogoId logoId, int minimumSplash
 SuiteJUCEApplication::~SuiteJUCEApplication() = default;
 
 void SuiteJUCEApplication::initialise(const juce::String&)
+{
+    // A place for the VFS is a requirement to run: nothing in the suite has anywhere to put anything without it, and
+    // nothing is ever written to a default location. No choice, no application.
+    juce::String error;
+    creation::suite::SuiteSettingsStore store;
+    const auto settings = store.load(error);
+    const auto root = creation::suite::getSuiteRootDirectory(settings);
+    if (creation::suite::hasStorageRoot(settings) && (root.isDirectory() || root.createDirectory().wasOk()))
+    {
+        beginStartup();
+        return;
+    }
+
+    requireStorageRoot();
+}
+
+void SuiteJUCEApplication::requireStorageRoot()
+{
+    juce::AlertWindow::showMessageBoxAsync(
+        juce::MessageBoxIconType::InfoIcon,
+        "Where should the suite keep its data?",
+        "The Djehuti Suite keeps everything - projects, media, caches, settings - in one folder that you choose. "
+        "Nothing is stored anywhere else. Pick a folder on a drive with plenty of space. "
+        "If you cancel, the application will close: it cannot run without a place to store its data.",
+        "Choose folder...", nullptr,
+        juce::ModalCallbackFunction::create([this](int)
+        {
+            rootChooser_ = std::make_unique<juce::FileChooser>("Choose the folder for the Djehuti Suite's data", juce::File(), "*", true);
+            rootChooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+                                      [this](const juce::FileChooser& chooser)
+                                      {
+                                          const auto chosen = chooser.getResult();
+                                          rootChooser_.reset();
+
+                                          if (chosen == juce::File() || ! (chosen.isDirectory() || chosen.createDirectory().wasOk()))
+                                          {
+                                              quit();
+                                              return;
+                                          }
+
+                                          creation::suite::SuiteSettingsStore store;
+                                          juce::String error;
+                                          auto settings = store.load(error);
+                                          settings.suiteVfsRoot = chosen.getFullPathName();
+                                          if (! store.save(settings, error))
+                                          {
+                                              juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                                                                                    "Could not save the storage location", error);
+                                              quit();
+                                              return;
+                                          }
+
+                                          beginStartup();
+                                      });
+        }));
+}
+
+void SuiteJUCEApplication::beginStartup()
 {
     splashWindow_ = std::make_unique<SplashWindow>(getApplicationName(), logoId_, getApplicationVersion());
     splashWindow_->setVisible(true);

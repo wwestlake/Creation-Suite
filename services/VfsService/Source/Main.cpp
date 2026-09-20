@@ -6,6 +6,7 @@
 #include <creation/assets/ProjectManifest.h>
 #include <creation/services/SuiteProcessRegistry.h>
 #include <creation/suite/SuiteSettings.h>
+#include <creation/suite/SuiteStoragePaths.h>
 
 #include <httplib.h>
 #include <ixwebsocket/IXNetSystem.h>
@@ -30,14 +31,17 @@ constexpr const char* kServiceAppId = "CreationSuiteVfsService";
 constexpr double kIdleShutdownGraceSeconds = 20.0;
 constexpr int kLivenessCheckIntervalMs = 5000;
 
+// Logs live inside the VFS root (Logs/), never in the OS user-data folder: the only thing the suite keeps outside the
+// VFS is the root pointer. Until the root is known nothing is logged.
+juce::File serviceLogsDirectory;
+
 void appendBootLog(const std::string& message)
 {
-    const char* appData = std::getenv("APPDATA");
-    const std::string base = appData != nullptr ? appData : "C:\\Users\\wwestlake\\AppData\\Roaming";
-    const std::string logsDirectory = base + "\\Creation Suite\\Logs";
-    juce::File(logsDirectory).createDirectory();
+    if (serviceLogsDirectory == juce::File())
+        return;
 
-    std::ofstream out(logsDirectory + "\\CreationSuiteVfsService-boot.log", std::ios::app);
+    serviceLogsDirectory.createDirectory();
+    std::ofstream out(serviceLogsDirectory.getChildFile("CreationSuiteVfsService-boot.log").getFullPathName().toStdString(), std::ios::app);
     if (! out.is_open())
         return;
 
@@ -46,13 +50,11 @@ void appendBootLog(const std::string& message)
 
 void appendServiceLog(const juce::String& message)
 {
-    auto logFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                       .getChildFile("Djehuti Suite")
-                       .getChildFile("Logs")
-                       .getChildFile("CreationSuiteVfsService.log");
+    if (serviceLogsDirectory == juce::File())
+        return;
 
-    if (! logFile.getParentDirectory().exists())
-        logFile.getParentDirectory().createDirectory();
+    auto logFile = serviceLogsDirectory.getChildFile("CreationSuiteVfsService.log");
+    serviceLogsDirectory.createDirectory();
 
     juce::FileOutputStream stream(logFile);
     if (! stream.openedOk())
@@ -130,6 +132,10 @@ int main(int, char*[])
 
     juce::String settingsError;
     const auto settings = creation::suite::SuiteSettingsStore().load(settingsError);
+    if (! creation::suite::hasStorageRoot(settings))
+        return 3; // no VFS root chosen: the service has nowhere to keep anything and must not invent one
+
+    serviceLogsDirectory = creation::suite::getLogsDirectory(settings);
     appendBootLog("main: settings loaded");
     appendServiceLog("startup; suiteVfsRoot=" + settings.suiteVfsRoot
                      + (settingsError.isNotEmpty() ? " settingsError=" + settingsError : ""));

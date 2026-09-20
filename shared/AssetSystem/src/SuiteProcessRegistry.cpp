@@ -1,5 +1,6 @@
 #include <creation/services/SuiteProcessRegistry.h>
 #include <creation/suite/SuiteSettings.h>
+#include <creation/suite/SuiteStoragePaths.h>
 
 #if JUCE_WINDOWS
 #include <windows.h>
@@ -7,9 +8,16 @@
 
 namespace
 {
-juce::File getSuiteConfigDirectory()
+// The registry lives inside the VFS root, never in the OS user-data folder (only the root pointer is allowed there).
+// Empty File when no root is chosen yet.
+juce::File getRegistryRootDirectory()
 {
-    return creation::suite::SuiteSettingsStore().getSuiteConfigDirectory();
+    juce::String error;
+    const auto settings = creation::suite::SuiteSettingsStore().load(error);
+    if (! creation::suite::hasStorageRoot(settings))
+        return {};
+
+    return creation::suite::getSuiteRootDirectory(settings);
 }
 
 // This suite builds Windows-only today (every app's own build docs
@@ -75,7 +83,8 @@ SuiteProcessRegistration::~SuiteProcessRegistration()
     // comment on why a crash deliberately does NOT get this treatment
     // (EnumerateLiveProcesses' staleness filter is what handles that).
     if (appId_.isNotEmpty())
-        RegistrationFile().deleteFile();
+        if (const auto file = RegistrationFile(); file != juce::File())
+            file.deleteFile();
 }
 
 void SuiteProcessRegistration::RegisterSelf(const juce::String& appId, int oscPort, const juce::String& pipeName, int httpPort)
@@ -133,20 +142,29 @@ void SuiteProcessRegistration::WriteHeartbeatFile()
     record.openProjectContainerPath = openProjectContainerPath_;
 
     auto directory = SuiteProcessRegistry::RegistryDirectory();
+    if (directory == juce::File())
+        return;
+
     if (! directory.exists())
         directory.createDirectory();
 
-    RegistrationFile().replaceWithText(juce::JSON::toString(toVar(record), true));
+    if (const auto file = RegistrationFile(); file != juce::File())
+        file.replaceWithText(juce::JSON::toString(toVar(record), true));
 }
 
 juce::File SuiteProcessRegistration::RegistrationFile() const
 {
-    return SuiteProcessRegistry::RegistryDirectory().getChildFile(appId_ + "-" + juce::String(static_cast<int>(processId_)) + ".json");
+    const auto directory = SuiteProcessRegistry::RegistryDirectory();
+    if (directory == juce::File())
+        return {};
+
+    return directory.getChildFile(appId_ + "-" + juce::String(static_cast<int>(processId_)) + ".json");
 }
 
 juce::File SuiteProcessRegistry::RegistryDirectory()
 {
-    return getSuiteConfigDirectory().getChildFile("processes");
+    const auto root = getRegistryRootDirectory();
+    return root == juce::File() ? juce::File() : root.getChildFile("processes");
 }
 
 juce::Array<SuiteProcessRecord> SuiteProcessRegistry::EnumerateLiveProcesses(double staleSeconds)

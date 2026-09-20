@@ -24,8 +24,10 @@
   defines the storage roots once, and apps consume them.
 - There is no recurring "is storage configured?" workflow inside apps.
   After suite settings exist, apps must start ready to use.
-- Default suite roots count as configured. Explicit user-selected roots
-  also count as configured. Both are valid.
+- There is NO default suite root. The first time any suite app runs with no
+  root chosen, it asks the user for a folder; if the user cancels, the app
+  closes (a place to store data is a requirement to run). Only the chosen
+  root is configured.
 - If a configured directory does not exist yet, the app should create it
   silently. Missing directories are a runtime initialization detail, not
   a configuration failure.
