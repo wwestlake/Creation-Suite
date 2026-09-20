@@ -3,6 +3,7 @@
 #include <frust_plugin_host/FrustPluginHost.h>
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -55,6 +56,17 @@ public:
     [[nodiscard]] std::vector<std::string> loadedPluginKeys() const;
     [[nodiscard]] std::string lastError(const std::string& key) const;
     [[nodiscard]] std::vector<NodeLibraryManifest> nodeLibraries(const std::string& key) const;
+
+    // Loading from source text, for hosts that keep sources somewhere other than
+    // the disk (Station keeps them in its VFS container). `siblingFiles` is
+    // asked for the files a `use self::x;` names ("x.frust", then "x.fr");
+    // return false if there is no such file. It may be empty for a single-file
+    // plugin. Nothing here opens a file.
+    using SourceFiles = std::function<bool(const std::string& fileName, std::string& text)>;
+    bool loadSource(const std::string& key, const std::string& name, const std::string& sourceText,
+                    const SourceFiles& siblingFiles, std::string& error);
+    bool reloadSource(const std::string& key, const std::string& sourceText,
+                      const SourceFiles& siblingFiles, std::string& error);
 
     void fireEvent(const char* name, void* payload = nullptr) const;
 
