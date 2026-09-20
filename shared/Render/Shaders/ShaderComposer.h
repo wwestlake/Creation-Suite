@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -39,6 +40,13 @@ namespace ce {
 //     after the version line, before any included content.
 class ShaderComposer final {
 public:
+    // Third source mode: the shader text comes from memory (embedded in the app, or generated - for example the GLSL
+    // a node graph compiles to). The provider is asked for each path the composer needs ("programs/x.frag",
+    // "library/y.glsl") and returns false when it has no such entry. Includes and defines work exactly as in the
+    // other modes.
+    using SourceProvider = std::function<bool(const juce::String& relativePath, juce::String& outText)>;
+    explicit ShaderComposer(SourceProvider provider);
+
     explicit ShaderComposer(juce::File shaderRoot);
     ShaderComposer(creation::assets::VirtualFileSystem& vfs, juce::String vfsRootPrefix);
 
@@ -50,11 +58,17 @@ public:
                                            const juce::String& fragmentEntry,
                                            const std::vector<juce::String>& defines = {});
 
+    // Drops every compiled program. A compiled program belongs to the OpenGL context that made it, so this must be
+    // called (with that context still current) when the context is closing; the next GetProgram() compiles afresh
+    // in whichever context is current then.
+    void ClearCache() { cache_.clear(); }
+
 private:
     bool ReadTextByRelativePath(const juce::String& relativePath, juce::String& outText) const;
     juce::String ComposeSource(const juce::String& entryRelativePath, const std::vector<juce::String>& defines);
     juce::String ResolveIncludes(const juce::String& source, std::vector<juce::String>& alreadyIncluded);
 
+    SourceProvider provider_;                          // non-empty in in-memory mode.
     juce::File shaderRoot_;                            // valid in disk mode, ignored otherwise.
     creation::assets::VirtualFileSystem* vfs_ = nullptr; // non-null in VFS mode.
     juce::String vfsRootPrefix_;                        // prepended to relative paths in VFS mode.

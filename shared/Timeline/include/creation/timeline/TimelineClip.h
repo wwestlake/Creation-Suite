@@ -53,6 +53,9 @@ struct TimelineClip
     // A video clip whose sound has been split onto its own audio clip: the picture no longer plays its own
     // sound, or it would be heard twice.
     bool soundDetached = false;
+    // A video clip's own effect and layout settings (green screen, size/position/opacity for picture-in-picture...),
+    // as named values so a new effect adds keys without changing the file format. Empty = all defaults.
+    juce::NamedValueSet videoParams;
     std::vector<float> peaks;
     std::vector<float> rightPeaks;
     std::vector<MidiNoteEvent> midiNotes;
