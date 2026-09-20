@@ -64,6 +64,12 @@ public:
     bool loadSource(const std::string& key, const ::frust::CompileRequest& request, std::string& error);
     bool reloadSource(const std::string& key, const ::frust::CompileRequest& request, std::string& error);
 
+    // Loading through a HostEnvironment: the plugin's source, the files its `use self::x;` lines
+    // name and the pods it uses are all read through `env` (the VFS, in the Suite). request.sources[0]
+    // is the plugin's virtual path.
+    bool loadFromEnvironment(const std::string& key, ::frust::HostEnvironment& env,
+                             const ::frust::FileCompileRequest& request, std::string& error);
+
     void fireEvent(const char* name, void* payload = nullptr) const;
 
 private:
