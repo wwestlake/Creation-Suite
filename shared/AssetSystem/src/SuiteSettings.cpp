@@ -1,6 +1,25 @@
 #include "creation/suite/SuiteStoragePaths.h"
 #include "creation/suite/SuiteSettings.h"
 
+namespace creation::suite
+{
+juce::File installedServicesDirectory()
+{
+    // The installer records the folder it put the shared services in; the default is where it puts them unless told otherwise.
+    juce::String recorded;
+#if JUCE_WINDOWS
+    recorded = juce::WindowsRegistry::getValue("HKEY_LOCAL_MACHINE\SOFTWARE\LagDaemon Software\Djehuti Suite\ServicesDir", {},
+                                               juce::WindowsRegistry::WoW64_64bit);
+#endif
+    if (recorded.isNotEmpty() && juce::File(recorded).getChildFile(vfsServiceExecutableName).existsAsFile())
+        return juce::File(recorded);
+
+    const auto standard = juce::File::getSpecialLocation(juce::File::globalApplicationsDirectory)
+                              .getChildFile("Djehuti Suite").getChildFile("Services");
+    return standard.getChildFile(vfsServiceExecutableName).existsAsFile() ? standard : juce::File();
+}
+}
+
 namespace
 {
 juce::var createJsonObject(const creation::suite::SuiteSettings& settings)
@@ -106,19 +125,24 @@ SuiteSettings SuiteSettingsStore::makeDefaultSettings() const
     {
         settings.suiteExecutablesRoot = currentDir.getFullPathName();
     }
+    else if (const auto installed = creation::suite::installedServicesDirectory(); installed != juce::File())
+    {
+        settings.suiteExecutablesRoot = installed.getFullPathName();
+    }
+#if JUCE_DEBUG
     else
     {
+        // A developer machine only: the build folders of the agents' workspaces. This is deliberately NOT in release
+        // builds. It was, and it made a release without the service work on every developer's machine (which has one) and
+        // fail on every customer's, with nothing to say why.
         juce::String currentPath = currentDir.getFullPathName();
         juce::String agentPrefix = "gemini";
         if (currentPath.containsIgnoreCase("CreationSuite-Claude")) agentPrefix = "claude";
         else if (currentPath.containsIgnoreCase("CreationSuite-Codex")) agentPrefix = "codex";
 
-#if JUCE_DEBUG
         settings.suiteExecutablesRoot = "D:/CreationSuite-Workspaces/" + agentPrefix + "-debug-bin";
-#else
-        settings.suiteExecutablesRoot = "D:/CreationSuite-Workspaces/" + agentPrefix + "-release-bin";
-#endif
     }
+#endif
     return settings;
 }
 }

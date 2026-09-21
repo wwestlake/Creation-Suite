@@ -48,12 +48,54 @@ juce::File findServiceExecutable()
 {
     juce::String loadError;
     const auto settings = creation::suite::SuiteSettingsStore().load(loadError);
-    return juce::File(settings.suiteExecutablesRoot).getChildFile("DjehutiSuiteVfsService.exe");
+    const juce::File configured = settings.suiteExecutablesRoot.isNotEmpty() ? juce::File(settings.suiteExecutablesRoot) : juce::File();
+
+    // In order: the folder in the suite settings, the folder this program runs from, and where the installer puts the shared
+    // services. The first that really holds the service wins, so a stale saved folder does not hide a good install.
+    const juce::File folders[] = {
+        configured,
+        juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory(),
+        creation::suite::installedServicesDirectory() };
+    for (const auto& folder : folders)
+        if (folder != juce::File() && folder.getChildFile(creation::suite::vfsServiceExecutableName).existsAsFile())
+            return folder.getChildFile(creation::suite::vfsServiceExecutableName);
+
+    // Not found anywhere: the configured place, so a message can name where it was expected.
+    return configured != juce::File() ? configured.getChildFile(creation::suite::vfsServiceExecutableName) : juce::File();
 }
 }
 
 namespace creation::services
 {
+SuiteVfsServiceClient::ServiceStatus SuiteVfsServiceClient::checkService(int timeoutMs)
+{
+    ServiceStatus status;
+    status.executable = findServiceExecutable();
+
+    SuiteVfsServiceClient client;
+    if (! client.discover(timeoutMs))
+    {
+        status.problem = status.executable.existsAsFile()
+            ? "The Djehuti Suite storage service could not be started (" + status.executable.getFullPathName()
+                  + "). Djehuti cannot run without it. Restart your computer, and if this message returns, run the Djehuti installer again."
+            : "The Djehuti Suite storage service (" + juce::String(creation::suite::vfsServiceExecutableName)
+                  + ") is not installed. Djehuti cannot run without it. Run the Djehuti installer again: it installs the service.";
+        return status;
+    }
+
+    status.version = client.serviceVersion_;
+    if (client.serviceProtocol_ < minimumVfsServiceProtocol)
+    {
+        status.problem = "The Djehuti Suite storage service that is running is older than this program needs"
+                         + (status.version.isNotEmpty() ? " (version " + status.version + ")" : juce::String())
+                         + ". Close every Djehuti program and run the Djehuti installer again, which updates it.";
+        return status;
+    }
+
+    status.ready = true;
+    return status;
+}
+
 bool SuiteVfsServiceClient::discover(int timeoutMs)
 {
     for (const auto& record : creation::services::SuiteProcessRegistry::EnumerateLiveProcesses())
@@ -61,6 +103,8 @@ bool SuiteVfsServiceClient::discover(int timeoutMs)
         if (record.appId == kServiceAppId && record.httpPort > 0)
         {
             httpPort_ = record.httpPort;
+            serviceProtocol_ = record.serviceProtocol;
+            serviceVersion_ = record.serviceVersion;
             return true;
         }
     }
@@ -80,6 +124,8 @@ bool SuiteVfsServiceClient::discover(int timeoutMs)
         if (record.appId == kServiceAppId && record.httpPort > 0)
         {
             httpPort_ = record.httpPort;
+            serviceProtocol_ = record.serviceProtocol;
+            serviceVersion_ = record.serviceVersion;
             return true;
         }
     }
@@ -102,6 +148,8 @@ bool SuiteVfsServiceClient::discover(int timeoutMs)
             if (record.appId == kServiceAppId && record.httpPort > 0)
             {
                 httpPort_ = record.httpPort;
+            serviceProtocol_ = record.serviceProtocol;
+            serviceVersion_ = record.serviceVersion;
                 return true;
             }
         }

@@ -28,6 +28,12 @@ struct SuiteProcessRecord
     // for something else.
     int httpPort = 0;
 
+    // The VFS service says which protocol it speaks and which version it is, so a client can refuse a service that is
+    // too old instead of failing in some confusing way later. 0 / empty for a service that predates this (or a process
+    // that is not the service).
+    int serviceProtocol = 0;
+    juce::String serviceVersion;
+
     juce::Time startedAt;
     juce::Time lastHeartbeat;
 
@@ -76,6 +82,9 @@ public:
     // immediately rather than waiting for the next interval, since a
     // project open/close is exactly the moment another app might be
     // checking.
+    // The VFS service calls this before RegisterSelf: the protocol it speaks and its own version.
+    void SetServiceInfo(int protocol, const juce::String& version) { serviceProtocol_ = protocol; serviceVersion_ = version; }
+
     void SetOpenProject(const juce::File& containerFile);
     void ClearOpenProject();
 
@@ -90,6 +99,8 @@ private:
     int oscPort_ = 0;
     juce::String pipeName_;
     int httpPort_ = 0;
+    int serviceProtocol_ = 0;
+    juce::String serviceVersion_;
     juce::Time startedAt_;
     juce::uint32 processId_ = 0;
     juce::String openProjectContainerPath_;

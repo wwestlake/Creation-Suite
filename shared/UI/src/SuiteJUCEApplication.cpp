@@ -2,6 +2,7 @@
 
 #include <creation/ui/SuiteCommonSpacePanel.h>
 
+#include <creation/services/SuiteVfsServiceClient.h>
 #include <creation/suite/SuiteSettings.h>
 #include <creation/suite/SuiteStoragePaths.h>
 
@@ -198,6 +199,19 @@ void SuiteJUCEApplication::beginStartup()
 
 void SuiteJUCEApplication::finishStartup()
 {
+    // Every suite app needs the storage service to run at all: settings, projects and everything the app keeps go through it.
+    // It is checked here (and started if it is not running) before the app builds its window, and if it is missing or too old
+    // the person is told exactly that, instead of the app hanging on a service that is not there.
+    const auto service = creation::services::SuiteVfsServiceClient::checkService();
+    if (! service.ready)
+    {
+        closeSplash();
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, getApplicationName() + " cannot start",
+                                               service.problem, "Close", nullptr,
+                                               juce::ModalCallbackFunction::create([this](int) { quit(); }));
+        return;
+    }
+
     // Each app's own MainWindow constructor already calls setVisible(true)
     // itself (unchanged behavior from before this class existed), so
     // createMainWindow() returns an already-visible window.

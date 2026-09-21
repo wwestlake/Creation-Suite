@@ -42,6 +42,8 @@ juce::var toVar(const creation::services::SuiteProcessRecord& record)
     object->setProperty("oscPort", record.oscPort);
     object->setProperty("pipeName", record.pipeName);
     object->setProperty("httpPort", record.httpPort);
+    object->setProperty("serviceProtocol", record.serviceProtocol);
+    object->setProperty("serviceVersion", record.serviceVersion);
     object->setProperty("startedAtMs", record.startedAt.toMilliseconds());
     object->setProperty("lastHeartbeatMs", record.lastHeartbeat.toMilliseconds());
     object->setProperty("openProjectContainerPath", record.openProjectContainerPath);
@@ -60,6 +62,8 @@ creation::services::SuiteProcessRecord fromVar(const juce::var& value)
     record.oscPort = static_cast<int>(object->getProperty("oscPort"));
     record.pipeName = object->getProperty("pipeName").toString();
     record.httpPort = static_cast<int>(object->getProperty("httpPort"));
+    record.serviceProtocol = static_cast<int>(object->getProperty("serviceProtocol"));
+    record.serviceVersion = object->getProperty("serviceVersion").toString();
     record.startedAt = juce::Time(static_cast<juce::int64>(object->getProperty("startedAtMs")));
     record.lastHeartbeat = juce::Time(static_cast<juce::int64>(object->getProperty("lastHeartbeatMs")));
     record.openProjectContainerPath = object->getProperty("openProjectContainerPath").toString();
@@ -142,6 +146,8 @@ void SuiteProcessRegistration::WriteHeartbeatFile()
     record.oscPort = oscPort_;
     record.pipeName = pipeName_;
     record.httpPort = httpPort_;
+    record.serviceProtocol = serviceProtocol_;
+    record.serviceVersion = serviceVersion_;
     record.startedAt = startedAt_;
     record.lastHeartbeat = juce::Time::getCurrentTime();
     record.openProjectContainerPath = openProjectContainerPath_;
