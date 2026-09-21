@@ -15,7 +15,7 @@
   -ext WixUtilExtension.
 -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
-     xmlns:util="http://schemas.microsoft.com/wix/2006/UtilExtension">
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
 
   <Fragment>
     <DirectoryRef Id="ProgramFiles64Folder">
