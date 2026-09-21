@@ -108,6 +108,10 @@ ScriptResult ScriptRunner::check(const std::string& script) const
     auto compiled = ::frust::Compile(request);
     for (auto& diagnostic : compiled.diagnostics)
     {
+        // Errors from the check before code generation carry a position but no file; a script is one file, so they are
+        // in the script.
+        if (diagnostic.file.empty() && diagnostic.phase == ::frust::Diagnostic::Phase::Codegen && diagnostic.line > 0)
+            diagnostic.file = scriptFileName;
         if (diagnostic.file == scriptFileName && diagnostic.line > headerLines)
             diagnostic.line -= headerLines;
         result.diagnostics.push_back(diagnostic);

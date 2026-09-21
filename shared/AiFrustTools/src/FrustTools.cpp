@@ -2,6 +2,7 @@
 
 #include <juce_core/juce_core.h>
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -143,6 +144,30 @@ private:
 };
 }
 
+std::string repairHint(const std::string& message)
+{
+    const auto has = [&](const char* part) { return message.find(part) != std::string::npos; };
+
+    if (has("unexpected !"))
+        return "FRust has no macros (no format!, println!). Return a string literal, and report numbers with the API's log functions.";
+    if (has("cannot call a method on"))
+        return "Values have no methods in FRust (no .to_string(), .len(), ...). Use plain functions from the API.";
+    if (has("unexpected &"))
+        return "FRust has no && or ||. Nest `if` blocks, or combine parenthesized comparisons with & (and) / | (or): if ((a == 1) & (b == 2)) { ... }";
+    if (has("is not defined for these operands"))
+        return "Operators work on numbers only. There is no String concatenation; report text with separate log calls.";
+    if (has("has no return value"))
+        return "The last line of a function must be an expression giving its value, with no `;` after it.";
+    if (has("expecting }") || has("expecting ;"))
+        return "In a block, every statement except the last ends with `;`, including `if`/`else` and `while` blocks (write `};`). "
+               "The last expression is the block's value and has no `;`. The real mistake is usually on the line BEFORE the one reported. "
+               "Also check every `if`/`while` condition: it must be in parentheses, `if (ok) { ... }`, because a bare name before `{` is read "
+               "as a struct value and gives this same error.";
+    if (has("is not defined for this operand"))
+        return "That operator works on numbers only (`!` also on bool). Text cannot be negated or combined.";
+    return {};
+}
+
 std::string describeScriptResult(const creation::frust::ScriptResult& result)
 {
     std::string text;
@@ -150,8 +175,16 @@ std::string describeScriptResult(const creation::frust::ScriptResult& result)
     if (! result.diagnostics.empty())
     {
         text += "The script did not compile:\n";
+        std::vector<std::string> hints;
         for (const auto& diagnostic : result.diagnostics)
+        {
             text += "  " + ::frust::FormatDiagnostic(diagnostic) + "\n";
+            const auto hint = repairHint(diagnostic.message);
+            if (! hint.empty() && std::find(hints.begin(), hints.end(), hint) == hints.end())
+                hints.push_back(hint);
+        }
+        for (const auto& hint : hints)
+            text += "Hint: " + hint + "\n";
         return text;
     }
 
