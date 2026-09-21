@@ -115,6 +115,41 @@ private:
     creation::frust::ScriptRunner& runner;
 };
 
+class LookupTool final : public Tool
+{
+public:
+    explicit LookupTool(std::function<std::string(const std::string&)> searchFunction) : search(std::move(searchFunction)) {}
+
+    ToolSpec spec() const override
+    {
+        return { "frust_lookup",
+                 "Search the help for how to write FRust and use the application's script API. Use it when you are unsure of the "
+                 "syntax, an error message, or what a function does, instead of guessing. Ask a specific question.",
+                 R"({"type":"object","properties":{"query":{"type":"string","description":"What you want to know, e.g. how to loop over tracks, or what 'expecting }' means."}},"required":["query"]})" };
+    }
+
+    Effect effect() const override { return Effect::read; }
+
+    ToolResult run(const std::string& argumentsJson, ToolContext&) override
+    {
+        juce::var parsed;
+        std::string query;
+        if (! juce::JSON::parse(juce::String(argumentsJson), parsed).failed())
+            if (auto* object = parsed.getDynamicObject())
+                query = object->getProperty("query").toString().toStdString();
+        if (query.empty())
+            return ToolResult::failure("Give a query: what do you want to know?");
+
+        const auto found = search ? search(query) : std::string();
+        if (found.empty())
+            return ToolResult::success("Nothing in the help matches that. Try different words, or use frust_api_reference.");
+        return ToolResult::success(found);
+    }
+
+private:
+    std::function<std::string(const std::string&)> search;
+};
+
 class ApiReferenceTool final : public Tool
 {
 public:
@@ -207,6 +242,11 @@ std::shared_ptr<Tool> makeRunFrustTool(creation::frust::ScriptRunner& runner)
 std::shared_ptr<Tool> makeCheckFrustTool(creation::frust::ScriptRunner& runner)
 {
     return std::make_shared<CheckFrustTool>(runner);
+}
+
+std::shared_ptr<Tool> makeFrustLookupTool(std::function<std::string(const std::string& query)> search)
+{
+    return std::make_shared<LookupTool>(std::move(search));
 }
 
 std::shared_ptr<Tool> makeFrustApiReferenceTool(const creation::frust::ScriptApi& api)
