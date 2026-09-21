@@ -60,12 +60,19 @@ if(CMAKE_PREFIX_PATH)
     list(GET CMAKE_PREFIX_PATH 0 CREATION_VFS_DLL_COPY_PREFIX)
 endif()
 
+# ORDER MATTERS: zlib and the libraries that use it come BEFORE the suite's own libraries. This program tells JUCE to use the
+# external zlib (JUCE_INCLUDE_ZLIB_CODE=0 above), but the suite libraries below were compiled with JUCE's bundled zlib, so
+# their copy of juce_core defines a C symbol (inflate) that this program's copy needs from the real zlib. When zlib is a static
+# library (the release build) and comes after them, the linker satisfies `inflate` from the suite library's juce_core, pulls
+# that whole copy in beside this program's own, and fails with thousands of "already defined" errors (LNK2005). With a
+# DLL zlib (a developer build) the symbol is an import and the problem never shows, which is why this only failed in the release
+# pipeline. Putting zlib first lets it satisfy `inflate` before the suite libraries are searched.
 target_link_libraries(CreationSuiteVfsService PRIVATE
+    ixwebsocket::ixwebsocket
+    ZLIB::ZLIB
     creation_suite_asset_system
     creation_suite_services
     httplib::httplib
-    ixwebsocket::ixwebsocket
-    ZLIB::ZLIB
     juce::juce_core
     juce::juce_events
     juce::juce_recommended_config_flags
