@@ -16,6 +16,13 @@ struct SuiteSettings
     juce::String suiteExecutablesRoot;
 };
 
+// The name of the suite's storage service, which every suite app needs in order to run.
+constexpr const char* vfsServiceExecutableName = "DjehutiSuiteVfsService.exe";
+
+// Where the installer put the suite's shared services: the folder it recorded in the registry, else the default install
+// folder. An empty File if the service is in neither, so a caller can say plainly that it is not installed.
+juce::File installedServicesDirectory();
+
 class SuiteSettingsStore final
 {
 public:

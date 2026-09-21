@@ -5,6 +5,7 @@
 
 #include <creation/assets/ProjectManifest.h>
 #include <creation/services/SuiteProcessRegistry.h>
+#include <creation/services/SuiteVfsServiceClient.h>
 #include <creation/suite/SuiteSettings.h>
 #include <creation/suite/SuiteStoragePaths.h>
 
@@ -536,6 +537,7 @@ int main(int, char*[])
     appendBootLog("main: websocket started");
 
     creation::services::SuiteProcessRegistration registration;
+    registration.SetServiceInfo(creation::services::vfsServiceProtocol, JUCE_APPLICATION_VERSION_STRING);
     registration.RegisterSelf(kServiceAppId, /*oscPort*/ 0, /*pipeName*/ {}, httpPort);
     appendBootLog("main: process registered");
 

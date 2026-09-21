@@ -16,9 +16,25 @@ namespace creation::services
 // Every logical path passed to readEntry/writeEntry/removeEntry is scoped
 // under "suite/" by the service itself -- callers just pass their own
 // entry name (e.g. "ai-settings.json"), not a full path.
+// The wire protocol of the VFS service. The service reports the one it speaks and a client refuses a service older than
+// the one it needs. Raise it (in this one place) only when the service's API changes in a way an older service cannot serve.
+constexpr int vfsServiceProtocol = 1;
+constexpr int minimumVfsServiceProtocol = 1;
+
 class SuiteVfsServiceClient final
 {
 public:
+    // Whether the suite's storage service is there, running (started if it was not) and new enough. Every suite app needs
+    // it, so an app checks this once at startup and says what is wrong instead of hanging.
+    struct ServiceStatus
+    {
+        bool ready = false;
+        juce::String problem;          // in words a person can act on, set when not ready
+        juce::String version;          // of the service that answered
+        juce::File executable;         // the service program that was (or would have been) started
+    };
+    static ServiceStatus checkService(int timeoutMs = 15000);
+
     struct ProjectSummary
     {
         juce::String projectId;
@@ -89,6 +105,8 @@ private:
     juce::URL baseUrl(const juce::String& path) const;
 
     int httpPort_ = 0;
+    int serviceProtocol_ = 0;
+    juce::String serviceVersion_;
     mutable juce::String lastWriteError_;
     mutable bool lastWriteCancelled_ = false;
     mutable juce::String lastReadError_;
