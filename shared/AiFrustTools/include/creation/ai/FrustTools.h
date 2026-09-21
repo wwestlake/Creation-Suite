@@ -3,6 +3,7 @@
 #include <creation/ai/Tool.h>
 #include <creation/frust/ScriptRunner.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -20,6 +21,11 @@ std::shared_ptr<Tool> makeCheckFrustTool(creation::frust::ScriptRunner& runner);
 
 // `frust_api_reference`: the application's API declarations and the premade modules a script can `use`.
 std::shared_ptr<Tool> makeFrustApiReferenceTool(const creation::frust::ScriptApi& api);
+
+// `frust_lookup`: search the application's help (the FRust language, its API, how the tools work) for a question, and
+// return the matching excerpts. The application supplies the search; the assistant calls this when it is unsure how to
+// write something, instead of guessing.
+std::shared_ptr<Tool> makeFrustLookupTool(std::function<std::string(const std::string& query)> search);
 
 // The text of a script result as the model should read it.
 std::string describeScriptResult(const creation::frust::ScriptResult& result);
