@@ -3,10 +3,19 @@
   The Djehuti Suite's shared services, as a fragment every app's installer includes. Today that is the storage service
   (DjehutiSuiteVfsService.exe): no suite app can run without it, so an app's installer always leaves a working copy behind.
 
-  One copy is shared by the whole suite, in "Program Files\Djehuti Suite\Services". Every app's installer uses these SAME
-  component GUIDs, so Windows Installer keeps a reference count: installing a second app reuses the copy, uninstalling one
-  app leaves it for the others, and the last one out removes it. A newer copy replaces an older one (Windows Installer only
-  overwrites a file with a newer version); an older installer never downgrades it.
+  The suite installs into ONE folder the user chooses (the suite folder, SUITEFOLDER), in two levels:
+
+      <suite folder>\Services\             suite-level things, shared by every app (this fragment)
+      <suite folder>\<App name>\           each application, in its own folder (the app's installer)
+
+  The including installer defines the SUITEFOLDER directory (with its default under Program Files, which the user sees and
+  can change) and lets the user choose it. Once the suite is installed its folder is recorded (SuiteDir, below), and the next
+  app's installer starts from that folder, so the whole suite stays in one place.
+
+  One copy of each service is shared by the whole suite. Every app's installer uses these SAME component GUIDs, so Windows
+  Installer keeps a reference count: installing a second app reuses the copy, uninstalling one app leaves it for the others,
+  and the last one out removes it. A newer copy replaces an older one (Windows Installer only overwrites a file with a newer
+  version); an older installer never downgrades it.
 
   The app finds the service through the ServicesDir registry value written here (see installedServicesDirectory() in
   shared/AssetSystem), and refuses a service that is too old (the protocol check in SuiteVfsServiceClient::checkService).
@@ -18,14 +27,18 @@
      xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
 
   <Fragment>
-    <DirectoryRef Id="ProgramFiles64Folder">
-      <Directory Id="SuiteFolder" Name="Djehuti Suite">
-        <Directory Id="SERVICESFOLDER" Name="Services" />
-      </Directory>
+    <DirectoryRef Id="SUITEFOLDER">
+      <Directory Id="SERVICESFOLDER" Name="Services" />
     </DirectoryRef>
   </Fragment>
 
   <Fragment>
+    <!-- An installed suite: start from its folder, so a second app joins it instead of starting a new suite somewhere else. -->
+    <Property Id="SUITEFOLDER">
+      <RegistrySearch Id="ExistingSuiteFolder" Root="HKLM" Key="SOFTWARE\LagDaemon Software\Djehuti Suite" Name="SuiteDir"
+                      Type="raw" Win64="yes" />
+    </Property>
+
     <ComponentGroup Id="SuiteServicesGroup">
       <!-- Fixed GUIDs: they must never change, and every suite app's installer must use these exact ones. -->
       <Component Id="VfsServiceExe" Directory="SERVICESFOLDER" Guid="B26FFEF7-B933-4654-AE18-A8793D313D91" Win64="yes">
@@ -33,8 +46,10 @@
       </Component>
 
       <Component Id="VfsServiceRegistry" Directory="SERVICESFOLDER" Guid="63547C6F-D031-43E8-9B36-6D48D4D762C8" Win64="yes">
+        <RegistryValue Root="HKLM" Key="SOFTWARE\LagDaemon Software\Djehuti Suite" Name="SuiteDir" Type="string"
+                       Value="[SUITEFOLDER]" KeyPath="yes" />
         <RegistryValue Root="HKLM" Key="SOFTWARE\LagDaemon Software\Djehuti Suite" Name="ServicesDir" Type="string"
-                       Value="[SERVICESFOLDER]" KeyPath="yes" />
+                       Value="[SERVICESFOLDER]" />
       </Component>
     </ComponentGroup>
 
