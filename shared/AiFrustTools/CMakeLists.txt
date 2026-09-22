@@ -14,6 +14,7 @@ endforeach()
 add_library(creation_suite_ai_frust_tools STATIC
     include/creation/ai/FrustTools.h
     src/FrustTools.cpp
+    src/FrateRegistryTool.cpp
 )
 target_include_directories(creation_suite_ai_frust_tools PUBLIC include)
 target_compile_features(creation_suite_ai_frust_tools PUBLIC cxx_std_20)
