@@ -41,5 +41,16 @@ if(MSVC)
     target_compile_options(creation_suite_ui PRIVATE /FS)
 endif()
 
+execute_process(
+    COMMAND git describe --tags --always --dirty
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE CS_DEPLOY_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(CS_DEPLOY_VERSION)
+    target_compile_definitions(creation_suite_ui PRIVATE "CS_DEPLOY_VERSION=\"${CS_DEPLOY_VERSION}\"")
+endif()
+
 # Auto-generated output name overrides
 set_target_properties(creation_suite_ui PROPERTIES OUTPUT_NAME "djehuti_suite_ui")
