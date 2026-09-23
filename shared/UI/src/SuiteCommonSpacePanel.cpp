@@ -296,8 +296,8 @@ void SuiteCommonSpacePanel::paint(juce::Graphics& g)
                           false);
     }
 
-    g.setGradientFill(juce::ColourGradient(juce::Colour(0x46050a10), imageBounds.getCentreX(), imageBounds.getY(),
-                                           juce::Colour(0xb0141921), imageBounds.getCentreX(), imageBounds.getBottom(), false));
+    g.setGradientFill(juce::ColourGradient(juce::Colour(0x10050a10), imageBounds.getCentreX(), imageBounds.getY(),
+                                           juce::Colour(0x40141921), imageBounds.getCentreX(), imageBounds.getBottom(), false));
     g.fillRect(imageBounds);
 
     auto suiteBounds = getLogoCardBounds(SuiteLogoId::suite, imageBounds);
