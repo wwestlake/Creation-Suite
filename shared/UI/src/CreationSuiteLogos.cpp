@@ -46,13 +46,9 @@ juce::Image getSuiteLogoImage(SuiteLogoId logoId)
         case SuiteLogoId::modeler:
             return loadLogo(BinaryData::creation_modeler_png, BinaryData::creation_modeler_pngSize);
         case SuiteLogoId::engineer:
+            return loadLogo(BinaryData::creation_engineer_png, BinaryData::creation_engineer_pngSize);
         case SuiteLogoId::remote:
-            // No dedicated artwork yet -- fall back to the generic suite
-            // mark until real icons are made. Swap these to their own
-            // loadLogo() calls once assets/djehuti_engineer.png and
-            // assets/djehuti_remote.png exist and are wired into
-            // CMakeLists.txt's juce_add_binary_data() call.
-            return loadLogo(BinaryData::creation_suite_png, BinaryData::creation_suite_pngSize);
+            return loadLogo(BinaryData::creation_remote_png, BinaryData::creation_remote_pngSize);
     }
 
     return {};
