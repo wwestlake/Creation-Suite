@@ -26,6 +26,9 @@ public:
     // Fired on every selection change, including to "none" (id 0 -- a real NodeId is never 0).
     std::function<void(ce::node_system::NodeId)> onSelectionChanged;
 
+    // Fired when a node is double-clicked, providing its exact screen bounds for UI anchoring.
+    std::function<void(ce::node_system::NodeId, juce::Rectangle<float>)> onNodeDoubleClicked;
+
     // Fired after any edit that changes the graph's shape or wiring (node added/removed/moved is
     // NOT included -- only add/remove/connect/disconnect, the things that actually change
     // generated source).
@@ -49,6 +52,7 @@ public:
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
+    void mouseDoubleClick(const juce::MouseEvent& event) override;
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
     bool keyPressed(const juce::KeyPress& key) override;
 

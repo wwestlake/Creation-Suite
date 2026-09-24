@@ -451,6 +451,16 @@ void NodeGraphComponent::mouseUp(const juce::MouseEvent& event) {
     panning_ = false;
 }
 
+void NodeGraphComponent::mouseDoubleClick(const juce::MouseEvent& event) {
+    const NodeId hitNode = HitTestNode(event.position);
+    if (hitNode != 0 && onNodeDoubleClicked) {
+        const Node* node = graph_.FindNode(hitNode);
+        if (node != nullptr) {
+            onNodeDoubleClicked(hitNode, NodeScreenBounds(*node));
+        }
+    }
+}
+
 void NodeGraphComponent::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) {
     const auto worldBefore = ScreenToWorld(event.position);
     const float factor = wheel.deltaY > 0.0f ? 1.1f : (1.0f / 1.1f);
