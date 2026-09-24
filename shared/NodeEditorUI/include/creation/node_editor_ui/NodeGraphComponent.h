@@ -34,6 +34,12 @@ public:
     // generated source).
     std::function<void()> onGraphChanged;
 
+    // Fired to determine if a node requires extra vertical space for custom inline UI.
+    std::function<float(ce::node_system::NodeId)> onGetNodeExtraHeight;
+
+    // Fired when a node is drawn, allowing the owner to paint custom inline UI in the extra space.
+    std::function<void(juce::Graphics&, ce::node_system::NodeId, juce::Rectangle<float>)> onPaintNode;
+
     ce::node_system::NodeId SelectedNode() const { return selectedNode_; }
     void ClearSelection();
 
@@ -41,6 +47,9 @@ public:
     // addition to -- not instead of -- the normal selection outline), or clears it.
     void SetErrorNode(ce::node_system::NodeId id) { errorNode_ = id; repaint(); }
     void ClearErrorNode() { SetErrorNode(0); }
+
+    juce::Point<float> WorldToScreen(juce::Point<float> world) const;
+    juce::Point<float> ScreenToWorld(juce::Point<float> screen) const;
 
     // Re-reads `graph_` from scratch (e.g. after the owning panel replaces it wholesale via
     // Load) -- resets selection, keeps the current pan/zoom so loading a graph doesn't disorient
@@ -68,8 +77,7 @@ private:
         bool isInput = false;
     };
 
-    juce::Point<float> WorldToScreen(juce::Point<float> world) const;
-    juce::Point<float> ScreenToWorld(juce::Point<float> screen) const;
+
     juce::Rectangle<float> NodeScreenBounds(const ce::node_system::Node& node) const;
     float NodeWorldHeight(const ce::node_system::Node& node) const;
     juce::Point<float> PinScreenPos(const ce::node_system::Node& node, const ce::node_system::Pin& pin,
@@ -118,3 +126,5 @@ private:
 };
 
 } // namespace creation::node_editor_ui
+
+

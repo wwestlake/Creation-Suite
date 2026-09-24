@@ -104,7 +104,9 @@ juce::Point<float> NodeGraphComponent::ScreenToWorld(juce::Point<float> screen) 
 
 float NodeGraphComponent::NodeWorldHeight(const Node& node) const {
     const std::size_t rows = std::max(node.Inputs().size(), node.Outputs().size());
-    return kHeaderHeight + static_cast<float>(rows) * kRowHeight + kBottomPadding;
+    float height = kHeaderHeight + static_cast<float>(rows) * kRowHeight + kBottomPadding;
+    if (onGetNodeExtraHeight) height += onGetNodeExtraHeight(node.Id());
+    return height;
 }
 
 juce::Rectangle<float> NodeGraphComponent::NodeScreenBounds(const Node& node) const {
@@ -348,6 +350,10 @@ void NodeGraphComponent::DrawNode(juce::Graphics& g, const Node& node) {
                                            (kNodeWidth * 0.5f) * zoom_, kRowHeight * zoom_),
                    juce::Justification::centredRight, true);
     }
+
+    if (onPaintNode) {
+        onPaintNode(g, node.Id(), bounds);
+    }
 }
 
 void NodeGraphComponent::resized() {}
@@ -522,3 +528,6 @@ void NodeGraphComponent::itemDropped(const SourceDetails& details) {
 }
 
 } // namespace creation::node_editor_ui
+
+
+
