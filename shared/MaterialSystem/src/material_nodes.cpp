@@ -224,3 +224,4 @@ void RegisterMaterialNodes(ns::NodeTypeRegistry& registry)
 }
 
 } // namespace ce::material
+

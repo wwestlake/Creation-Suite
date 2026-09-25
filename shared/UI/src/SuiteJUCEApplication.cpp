@@ -63,7 +63,12 @@ public:
         panel.setSelectedLogoId(logoId);
         panel.setStatusText("Starting " + appDisplayName + "...");
         panel.setProgress(0.02f);
-        panel.setVersionText(versionText.isNotEmpty() ? "v" + versionText : juce::String());
+       #ifdef CS_DEPLOY_VERSION
+        auto displayVersion = versionText + " (" + juce::String(CS_DEPLOY_VERSION) + ")";
+       #else
+        auto displayVersion = versionText;
+       #endif
+        panel.setVersionText(displayVersion.isNotEmpty() ? "v" + displayVersion : juce::String());
         panel.setCopyrightText(getSuiteCopyrightText());
         setContentNonOwned(&panel, true);
         centreWithSize(1040, 620);
@@ -110,7 +115,12 @@ public:
         panel.setMode(SuiteCommonSpacePanel::Mode::about);
         panel.setSelectedLogoId(logoId);
         panel.setStatusText(appDisplayName);
-        panel.setVersionText(versionText.isNotEmpty() ? "v" + versionText : juce::String());
+       #ifdef CS_DEPLOY_VERSION
+        auto displayVersion = versionText + " (" + juce::String(CS_DEPLOY_VERSION) + ")";
+       #else
+        auto displayVersion = versionText;
+       #endif
+        panel.setVersionText(displayVersion.isNotEmpty() ? "v" + displayVersion : juce::String());
         panel.setCopyrightText(getSuiteCopyrightText());
         panel.setPrimaryAction("Close", std::move(onClose));
         setContentNonOwned(&panel, true);

@@ -11,6 +11,7 @@ add_library(creation_suite_ui STATIC
     src/SuiteAssetManagerPanel.cpp
     src/NamedAssetSaveLoadMenu.cpp
     src/SuiteAiAccountDialog.cpp
+    src/FrustyComponent.cpp
 )
 
 juce_add_binary_data(creation_suite_ui_assets
@@ -22,7 +23,10 @@ juce_add_binary_data(creation_suite_ui_assets
         assets/creation_live.png
         assets/creation_texture.png
         assets/creation_modeler.png
+        assets/creation_engineer.png
+        assets/creation_remote.png
         assets/creation_suite_banner.png
+        assets/frusty_sprite_atlas.png
 )
 
 target_include_directories(creation_suite_ui PUBLIC include)
@@ -37,6 +41,17 @@ target_compile_features(creation_suite_ui PUBLIC cxx_std_20)
 
 if(MSVC)
     target_compile_options(creation_suite_ui PRIVATE /FS)
+endif()
+
+execute_process(
+    COMMAND git describe --tags --always --dirty
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE CS_DEPLOY_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(CS_DEPLOY_VERSION)
+    target_compile_definitions(creation_suite_ui PRIVATE "CS_DEPLOY_VERSION=\"${CS_DEPLOY_VERSION}\"")
 endif()
 
 # Auto-generated output name overrides

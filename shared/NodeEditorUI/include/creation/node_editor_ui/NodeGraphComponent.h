@@ -26,10 +26,19 @@ public:
     // Fired on every selection change, including to "none" (id 0 -- a real NodeId is never 0).
     std::function<void(ce::node_system::NodeId)> onSelectionChanged;
 
+    // Fired when a node is double-clicked, providing its exact screen bounds for UI anchoring.
+    std::function<void(ce::node_system::NodeId, juce::Rectangle<float>)> onNodeDoubleClicked;
+
     // Fired after any edit that changes the graph's shape or wiring (node added/removed/moved is
     // NOT included -- only add/remove/connect/disconnect, the things that actually change
     // generated source).
     std::function<void()> onGraphChanged;
+
+    // Fired to determine if a node requires extra vertical space for custom inline UI.
+    std::function<float(ce::node_system::NodeId)> onGetNodeExtraHeight;
+
+    // Fired when a node is drawn, allowing the owner to paint custom inline UI in the extra space.
+    std::function<void(juce::Graphics&, ce::node_system::NodeId, juce::Rectangle<float>)> onPaintNode;
 
     ce::node_system::NodeId SelectedNode() const { return selectedNode_; }
     void ClearSelection();
@@ -38,6 +47,9 @@ public:
     // addition to -- not instead of -- the normal selection outline), or clears it.
     void SetErrorNode(ce::node_system::NodeId id) { errorNode_ = id; repaint(); }
     void ClearErrorNode() { SetErrorNode(0); }
+
+    juce::Point<float> WorldToScreen(juce::Point<float> world) const;
+    juce::Point<float> ScreenToWorld(juce::Point<float> screen) const;
 
     // Re-reads `graph_` from scratch (e.g. after the owning panel replaces it wholesale via
     // Load) -- resets selection, keeps the current pan/zoom so loading a graph doesn't disorient
@@ -49,6 +61,7 @@ public:
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
+    void mouseDoubleClick(const juce::MouseEvent& event) override;
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
     bool keyPressed(const juce::KeyPress& key) override;
 
@@ -64,8 +77,7 @@ private:
         bool isInput = false;
     };
 
-    juce::Point<float> WorldToScreen(juce::Point<float> world) const;
-    juce::Point<float> ScreenToWorld(juce::Point<float> screen) const;
+
     juce::Rectangle<float> NodeScreenBounds(const ce::node_system::Node& node) const;
     float NodeWorldHeight(const ce::node_system::Node& node) const;
     juce::Point<float> PinScreenPos(const ce::node_system::Node& node, const ce::node_system::Pin& pin,
@@ -114,3 +126,5 @@ private:
 };
 
 } // namespace creation::node_editor_ui
+
+
