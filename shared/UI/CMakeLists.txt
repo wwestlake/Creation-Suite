@@ -11,6 +11,7 @@ add_library(creation_suite_ui STATIC
     src/SuiteAssetManagerPanel.cpp
     src/NamedAssetSaveLoadMenu.cpp
     src/SuiteAiAccountDialog.cpp
+    src/FrustyComponent.cpp
 )
 
 juce_add_binary_data(creation_suite_ui_assets
@@ -25,6 +26,7 @@ juce_add_binary_data(creation_suite_ui_assets
         assets/creation_engineer.png
         assets/creation_remote.png
         assets/creation_suite_banner.png
+        assets/frusty_sprite_atlas.png
 )
 
 target_include_directories(creation_suite_ui PUBLIC include)

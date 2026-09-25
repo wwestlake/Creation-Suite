@@ -21,6 +21,8 @@ juce::String toStorageToken(AssetKind kind)
         case AssetKind::pod: return "pod";
         case AssetKind::objectDefinition: return "objectDefinition";
         case AssetKind::character: return "character";
+    case AssetKind::material: return "material";
+        case AssetKind::texture: return "texture";
         case AssetKind::game: return "game";
         case AssetKind::scene: return "scene";
         case AssetKind::instance: return "instance";
@@ -73,6 +75,8 @@ juce::String toDisplayName(AssetKind kind)
         case AssetKind::pod: return "Pod";
         case AssetKind::objectDefinition: return "Object Definition";
         case AssetKind::character: return "Character";
+    case AssetKind::material: return "Material";
+        case AssetKind::texture: return "Texture";
         case AssetKind::game: return "Game";
         case AssetKind::scene: return "Scene";
         case AssetKind::instance: return "Instance";

@@ -30,6 +30,8 @@ enum class AssetKind
     // bases, editable recipes, published definitions, garments, policies,
     // instances, and rosters without baking an Engine-only taxonomy here.
     character,
+    material,
+    texture,
     game,
     scene,
     // A Suite-wide concept, not app-specific: one PLACEMENT's own entry,
