@@ -1,5 +1,8 @@
 # Agent Instructions
 
+## Tool Paths
+
+- **Node.js (node / npm / npx)**: `D:\tools\node22\node-v22.20.0-win-x64\node.exe` and `D:\tools\node22\node-v22.20.0-win-x64\npm.cmd`. Node is installed but not on the PATH. Always use absolute paths or set up the environment block when running web builds.
 ## Scope
 
 These instructions apply to the umbrella `Creation Suite` repository.
@@ -58,6 +61,19 @@ Implementation rule:
 Do not collapse these into one generic "popup menu" pattern. If the user right-clicked a location in the workspace, mouse location is authoritative.
 
 This rule is mandatory, not stylistic. If a right-click menu is anchored to an unrelated toolbar button, parent panel edge, or generic fallback location, that implementation is wrong and should be treated as a bug.
+
+## LiteSemRAG Memory Cards (ISD Structure)
+
+This workspace uses a hierarchical Information Space Design (ISD) structure based on JSONL memory cards to organize durable agent rules without cluttering context windows.
+
+- **Suite-Level Cards**: `D:\CreationSuite-Workspaces\CreationSuite-Gemini\.frusty\MEMORY_SUITE_CARDS.jsonl`
+  - Scope: `suite`
+  - Use for: Suite-wide rules (e.g., C++ standards, single-core build mandates, VFS rules).
+- **App-Level Cards**: `D:\CreationSuite-Workspaces\CreationSuite-Gemini\apps\<AppName>\.frusty\MEMORY_APP_CARDS.jsonl`
+  - Scope: `app`
+  - Use for: Application-specific rules (e.g., audio threading in Station, Node catalogs in Texture).
+
+When building context, agents should prioritize App-Level cards over Suite-Level cards to allow specific domains to override global defaults. All memory interactions should read/write to these exact paths depending on the active working context.
 
 ## Shared Ownership Rule
 

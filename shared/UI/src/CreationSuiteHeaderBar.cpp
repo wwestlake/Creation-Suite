@@ -709,44 +709,7 @@ void CreationSuiteHeaderBar::paint(juce::Graphics& g)
     if (logoImage.isValid())
         g.drawImageWithin(logoImage, 10, 4, 72, 72, juce::RectanglePlacement::centred, false);
 
-    if (! logoRailBounds.isEmpty())
-    {
-        auto rail = logoRailBounds.toFloat();
-        g.setColour(juce::Colour(0xff151b23));
-        g.fillRoundedRectangle(rail, 12.0f);
-        g.setColour(juce::Colour(0xff2b384a));
-        g.drawRoundedRectangle(rail, 12.0f, 1.0f);
-
-        auto ids = creation::ui::getSuiteLogoIds();
-        auto tileWidth = rail.getWidth() / (float) ids.size();
-        for (size_t index = 0; index < ids.size(); ++index)
-        {
-            auto id = ids[index];
-            auto tile = juce::Rectangle<float>(rail.getX() + tileWidth * (float) index,
-                                               rail.getY(),
-                                               tileWidth,
-                                               rail.getHeight()).reduced(4.0f, 4.0f);
-            auto accent = creation::ui::getSuiteLogoAccentColour(id);
-
-            if (id == selectedLogoId)
-            {
-                g.setColour(accent.withAlpha(0.18f));
-                g.fillRoundedRectangle(tile, 10.0f);
-                g.setColour(accent.withAlpha(0.92f));
-                g.drawRoundedRectangle(tile, 10.0f, 1.8f);
-            }
-
-            auto icon = creation::ui::getSuiteLogoImage(id);
-            if (icon.isValid())
-                g.drawImageWithin(icon,
-                                  (int) tile.getX(),
-                                  (int) tile.getY(),
-                                  (int) tile.getWidth(),
-                                  (int) tile.getHeight(),
-                                  juce::RectanglePlacement::centred,
-                                  false);
-        }
-    }
+    // logoRailBounds drawing removed as per user request
 
     g.setColour(juce::Colour(0xff242a36));
     g.drawLine(0.0f, static_cast<float>(getHeight()) - 1.0f, static_cast<float>(getWidth()), static_cast<float>(getHeight()) - 1.0f, 1.0f);
@@ -891,13 +854,12 @@ void CreationSuiteHeaderBar::resized()
         need = 7 * buttonWidth + projectGap + 5 * utilityGap;
     }
 
-    const int spare = juce::jmax(0, available - need - sectionGap); // for the title and the decorative rail
+    const int spare = juce::jmax(0, available - need - sectionGap); // for the title
     const int titleWidth = juce::jlimit(60, titleFull, spare);
-    const int railWidth = spare - titleWidth >= 100 ? juce::jmin(railFull, spare - titleWidth) : 0;
 
     titleLabel.setBounds(topRow.removeFromLeft(titleWidth));
     topRow.removeFromLeft(sectionGap);
-    logoRailBounds = railWidth > 0 ? topRow.removeFromLeft(railWidth) : juce::Rectangle<int>();
+    logoRailBounds = juce::Rectangle<int>();
 
     auto utilityRow = topRow;
     const bool compactOthers = othersCompact || projectCompact;

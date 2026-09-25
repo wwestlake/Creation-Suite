@@ -104,7 +104,9 @@ juce::Point<float> NodeGraphComponent::ScreenToWorld(juce::Point<float> screen) 
 
 float NodeGraphComponent::NodeWorldHeight(const Node& node) const {
     const std::size_t rows = std::max(node.Inputs().size(), node.Outputs().size());
-    return kHeaderHeight + static_cast<float>(rows) * kRowHeight + kBottomPadding;
+    float height = kHeaderHeight + static_cast<float>(rows) * kRowHeight + kBottomPadding;
+    if (onGetNodeExtraHeight) height += onGetNodeExtraHeight(node.Id());
+    return height;
 }
 
 juce::Rectangle<float> NodeGraphComponent::NodeScreenBounds(const Node& node) const {
@@ -348,6 +350,10 @@ void NodeGraphComponent::DrawNode(juce::Graphics& g, const Node& node) {
                                            (kNodeWidth * 0.5f) * zoom_, kRowHeight * zoom_),
                    juce::Justification::centredRight, true);
     }
+
+    if (onPaintNode) {
+        onPaintNode(g, node.Id(), bounds);
+    }
 }
 
 void NodeGraphComponent::resized() {}
@@ -451,6 +457,16 @@ void NodeGraphComponent::mouseUp(const juce::MouseEvent& event) {
     panning_ = false;
 }
 
+void NodeGraphComponent::mouseDoubleClick(const juce::MouseEvent& event) {
+    const NodeId hitNode = HitTestNode(event.position);
+    if (hitNode != 0 && onNodeDoubleClicked) {
+        const Node* node = graph_.FindNode(hitNode);
+        if (node != nullptr) {
+            onNodeDoubleClicked(hitNode, NodeScreenBounds(*node));
+        }
+    }
+}
+
 void NodeGraphComponent::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) {
     const auto worldBefore = ScreenToWorld(event.position);
     const float factor = wheel.deltaY > 0.0f ? 1.1f : (1.0f / 1.1f);
@@ -512,3 +528,6 @@ void NodeGraphComponent::itemDropped(const SourceDetails& details) {
 }
 
 } // namespace creation::node_editor_ui
+
+
+
