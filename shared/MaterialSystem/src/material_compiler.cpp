@@ -54,11 +54,19 @@ std::string ColorLiteral(const ns::PinDefaultValue& value)
     return "vec3(1.0f)";
 }
 
-std::string Sanitize(std::string name)
+// Turns a user-facing name into a GLSL identifier fragment. GLSL reserves every identifier containing "__",
+// and callers prepend a prefix ending in '_', so the result never contains a run of underscores and never
+// starts or ends with one.
+std::string Sanitize(const std::string& name)
 {
-    std::replace_if(name.begin(), name.end(), [](char c) { return !(std::isalnum(static_cast<unsigned char>(c)) || c == '_'); }, '_');
-    if (name.empty() || std::isdigit(static_cast<unsigned char>(name.front()))) name.insert(name.begin(), '_');
-    return name;
+    std::string out;
+    for (const char c : name) {
+        if (std::isalnum(static_cast<unsigned char>(c))) out += c;
+        else if (!out.empty() && out.back() != '_') out += '_';
+    }
+    while (!out.empty() && out.back() == '_') out.pop_back();
+    if (out.empty() || std::isdigit(static_cast<unsigned char>(out.front()))) out.insert(out.begin(), 'p');
+    return out;
 }
 
 // Rotator (UE's canonical name) needs a helper -- GLSL has no local
@@ -169,7 +177,9 @@ MaterialCompileResult CompileMaterialGraph(const ns::Graph& graph, const ns::Nod
                 result.errors.push_back("Texture Sample node has no texture file path set.");
             } else {
                 auto& uniformName = textureSlots[*path];
-                if (uniformName.empty()) uniformName = "uMaterialTex_" + Sanitize(std::to_string(textureSlots.size()) + "_" + *path);
+                // Numbered, not derived from the path: a path could only ever produce a worse identifier, and the
+                // path -> uniform mapping is handed to the host in result.source.textures anyway.
+                if (uniformName.empty()) uniformName = "uMaterialTex" + std::to_string(textureSlots.size() - 1);
                 expression = "texture(" + uniformName + ", " + inputExpression("uv", "vUV") + ").rgb";
             }
         } else if (type == "material.surface.output") {
