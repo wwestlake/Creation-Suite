@@ -3,6 +3,7 @@
 #include <node_system/monad_nodes.h>
 #include <node_system/graph_analysis.h>
 #include <node_system/type_registry.h>
+#include <node_system/symbol_nodes.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -133,6 +134,62 @@ int main()
         const auto result = monadRegistry.Find("core.wrap.result")->outputs.front().type;
         if (ce::node_system::IsConnectionCompatible(option, result))
             fail("Option<T> was accepted by a Result<T> input.");
+
+        // Graph symbols (params, constants, variables) - SYMBOLS.md.
+        {
+            namespace ns = ce::node_system;
+            ns::Graph symbolGraph("SymbolGraph", ns::GraphTarget::Dataflow);
+            const std::string plain = ns::SerializeGraph(symbolGraph);
+            if (plain.find("symbol") != std::string::npos)
+                fail("A graph without symbols wrote symbol lines.");
+
+            ns::Symbol scale;
+            scale.id = ns::MakeSymbolId("Tile Scale", symbolGraph.Symbols());
+            scale.name = "Tile Scale";
+            scale.kind = ns::SymbolKind::Param;
+            scale.type = ns::DataType::Float;
+            scale.value = 4.0f;
+            scale.accessibility = "agent";
+            if (scale.id != "tile_scale" || ! symbolGraph.AddSymbol(scale))
+                fail("Could not add a param symbol with a made id.");
+            if (ns::MakeSymbolId("Tile Scale", symbolGraph.Symbols()) != "tile_scale_2")
+                fail("MakeSymbolId did not avoid an existing id.");
+            if (symbolGraph.AddSymbol(scale))
+                fail("A duplicate symbol id was accepted.");
+
+            ns::Symbol tint { "tint", "Base Tint", ns::SymbolKind::Constant, ns::DataType::Color, ns::Vec3Default { 0.25f, 0.5f, 0.75f },
+                              "graph", false, "" };
+            ns::Symbol count { "counter", "Run Counter", ns::SymbolKind::Variable, ns::DataType::Int, std::int64_t { 7 },
+                               "private", true, "How many times the graph has run." };
+            ns::Symbol label { "label", "Label", ns::SymbolKind::Param, ns::DataType::String, std::string("hello symbol world"),
+                               "public", false, "" };
+            if (! symbolGraph.AddSymbol(tint) || ! symbolGraph.AddSymbol(count) || ! symbolGraph.AddSymbol(label))
+                fail("Could not add constant / variable / text symbols.");
+
+            ns::NodeTypeRegistry symbolRegistry;
+            ns::RegisterSymbolGetNodes(symbolRegistry);
+            auto* get = ns::AddSymbolGetNode(symbolGraph, symbolRegistry, scale, &error);
+            if (get == nullptr || get->TypeName() != "core.symbol.get.float" || ns::SymbolForGetNode(symbolGraph, *get) == nullptr
+                || ns::SymbolForGetNode(symbolGraph, *get)->name != "Tile Scale")
+                fail("A Get node bound to a symbol does not find it.");
+
+            const std::string text = ns::SerializeGraph(symbolGraph);
+            if (text.find("symbol param tile_scale float agent 0 default float 4\n") == std::string::npos)
+                fail("Unexpected symbol line:\n" + text);
+
+            std::string symbolError;
+            auto reloaded = ns::DeserializeGraph(text, symbolError);
+            if (reloaded == nullptr)
+                fail("Symbols did not reload: " + symbolError);
+            if (reloaded->Symbols() != symbolGraph.Symbols())
+                fail("Symbols changed across save and reload.");
+            if (ns::SerializeGraph(*reloaded) != text)
+                fail("A graph with symbols does not round-trip byte for byte.");
+            const auto* reloadedGet = reloaded->FindNode(get->Id());
+            if (reloadedGet == nullptr || ns::SymbolForGetNode(*reloaded, *reloadedGet) == nullptr)
+                fail("A Get node lost its symbol across save and reload.");
+            std::cout << "NodeSystem symbols: ok" << std::endl;
+        }
 
         return 0;
     }

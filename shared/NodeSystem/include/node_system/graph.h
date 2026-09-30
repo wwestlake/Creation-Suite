@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "node_system/node.h"
+#include "node_system/symbols.h"
 
 namespace ce::node_system {
 
@@ -89,6 +90,15 @@ public:
     GraphTarget Target() const { return target_; }
     void SetTarget(GraphTarget target) { target_ = target; }
 
+    // Graph symbols (symbols.h): the params, constants and variables that belong to this graph, in the order they
+    // were added. Get nodes refer to them by id.
+    const std::vector<Symbol>& Symbols() const { return symbols_; }
+    const Symbol* FindSymbol(const std::string& id) const;
+    Symbol* FindSymbol(const std::string& id);
+    // False if the id is empty, contains a space, or is already used.
+    bool AddSymbol(Symbol symbol);
+    bool RemoveSymbol(const std::string& id);
+
 private:
     std::optional<ConnectionId> ConnectInternal(std::optional<ConnectionId> explicitId, NodeId fromNode,
                                                  PinId fromPin, NodeId toNode, PinId toPin, ConnectError* outError);
@@ -97,6 +107,7 @@ private:
     GraphTarget target_ = GraphTarget::Behavior;
     std::unordered_map<NodeId, std::unique_ptr<Node>> nodes_;
     std::vector<Connection> connections_;
+    std::vector<Symbol> symbols_;
     NodeId nextNodeId_ = 1;
     ConnectionId nextConnectionId_ = 1;
 };

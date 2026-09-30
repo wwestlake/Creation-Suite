@@ -142,6 +142,17 @@ std::string SerializeGraph(const Graph& graph) {
     os << "graph " << graph.Name() << "\n";
     os << "target " << GraphTargetToString(graph.Target()) << "\n";
 
+    // Graph symbols (symbols.h), in order. Absent entirely for a graph without any, so older graphs serialise
+    // byte-for-byte as before.
+    for (const Symbol& symbol : graph.Symbols()) {
+        os << "symbol " << SymbolKindToString(symbol.kind) << " " << symbol.id << " " << DataTypeToString(symbol.type) << " "
+           << symbol.accessibility << " " << (symbol.persistent ? 1 : 0) << SerializeDefaultValue(symbol.value) << "\n";
+        os << "symbolname " << symbol.id << " " << symbol.name << "\n";
+        if (!symbol.description.empty()) {
+            os << "symboldescription " << symbol.id << " " << symbol.description << "\n";
+        }
+    }
+
     std::vector<NodeId> nodeIds;
     nodeIds.reserve(graph.Nodes().size());
     for (const auto& [id, node] : graph.Nodes()) {
@@ -236,6 +247,83 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
             if (graph) {
                 graph->SetTarget(target);
             }
+        } else if (keyword == "symbol") {
+            if (!graph) {
+                return fail("'symbol' line before 'graph' line");
+            }
+            std::string kindText, id, typeText, access;
+            int persistent = 0;
+            if (!(tok >> kindText >> id >> typeText >> access >> persistent)) {
+                return fail("malformed 'symbol' line (expected: symbol <kind> <id> <dataType> <accessibility> <persistent> [default ...])");
+            }
+            const auto kind = SymbolKindFromString(kindText);
+            if (!kind) {
+                return fail("unknown symbol kind '" + kindText + "'");
+            }
+            const auto type = DataTypeFromString(typeText);
+            if (!type) {
+                return fail("unknown data type '" + typeText + "'");
+            }
+            PinDefaultValue value;
+            std::string defaultKeyword;
+            if (tok >> defaultKeyword) {
+                if (defaultKeyword != "default") {
+                    return fail("unexpected trailing token '" + defaultKeyword + "' on 'symbol' line");
+                }
+                std::string valueKind;
+                tok >> valueKind;
+                if (valueKind == "float") {
+                    float v = 0.0f;
+                    if (!(tok >> v)) return fail("malformed float symbol value");
+                    value = v;
+                } else if (valueKind == "int") {
+                    std::int64_t v = 0;
+                    if (!(tok >> v)) return fail("malformed int symbol value");
+                    value = v;
+                } else if (valueKind == "bool") {
+                    std::string b;
+                    if (!(tok >> b) || (b != "true" && b != "false")) return fail("symbol bool value must be 'true' or 'false'");
+                    value = (b == "true");
+                } else if (valueKind == "vec3") {
+                    Vec3Default v;
+                    if (!(tok >> v.x >> v.y >> v.z)) return fail("malformed vec3 symbol value");
+                    value = v;
+                } else if (valueKind == "string") {
+                    std::string rest;
+                    std::getline(tok, rest);
+                    if (!rest.empty() && rest.front() == ' ') {
+                        rest.erase(0, 1);
+                    }
+                    value = rest;
+                } else {
+                    return fail("unknown symbol value kind '" + valueKind + "'");
+                }
+            }
+            Symbol symbol;
+            symbol.id = id;
+            symbol.name = id;
+            symbol.kind = *kind;
+            symbol.type = *type;
+            symbol.value = value;
+            symbol.accessibility = access;
+            symbol.persistent = persistent != 0;
+            if (!graph->AddSymbol(symbol)) {
+                return fail("duplicate symbol id '" + id + "'");
+            }
+        } else if (keyword == "symbolname" || keyword == "symboldescription") {
+            std::string id, rest;
+            if (!graph || !(tok >> id)) {
+                return fail("malformed '" + keyword + "' line");
+            }
+            Symbol* symbol = graph->FindSymbol(id);
+            if (symbol == nullptr) {
+                return fail("'" + keyword + "' for unknown symbol '" + id + "'");
+            }
+            std::getline(tok, rest);
+            if (!rest.empty() && rest.front() == ' ') {
+                rest.erase(0, 1);
+            }
+            (keyword == "symbolname" ? symbol->name : symbol->description) = rest;
         } else if (keyword == "node") {
             if (!graph) {
                 return fail("'node' line before 'graph' line");
