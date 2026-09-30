@@ -1,4 +1,5 @@
 #include <creation/node_editor_ui/NodeGraphComponent.h>
+#include <node_system/symbol_nodes.h>
 
 #include <algorithm>
 #include <cmath>
@@ -309,8 +310,18 @@ void NodeGraphComponent::DrawNode(juce::Graphics& g, const Node& node) {
     g.fillRect(headerBounds.withTop(headerBounds.getBottom() - 6.0f * zoom_)); // square off the rounded bottom corners.
 
     const auto* descriptor = registry_.Find(node.TypeName());
-    const std::string& title = (descriptor != nullptr && !descriptor->displayName.empty()) ? descriptor->displayName : node.TypeName();
-    g.setColour(juce::Colours::white);
+    std::string title = (descriptor != nullptr && !descriptor->displayName.empty()) ? descriptor->displayName : node.TypeName();
+    // A symbol Get node is titled with the symbol it reads (SYMBOLS.md); one whose symbol is gone says so in red.
+    bool missingSymbol = false;
+    if (ce::node_system::IsSymbolGetNode(node.TypeName())) {
+        if (const auto* symbol = ce::node_system::SymbolForGetNode(graph_, node))
+            title = symbol->name;
+        else {
+            title = "Missing symbol";
+            missingSymbol = true;
+        }
+    }
+    g.setColour(missingSymbol ? juce::Colour(0xffff8a80) : juce::Colours::white);
     g.setFont(juce::Font(juce::FontOptions(std::max(10.0f, 13.0f * zoom_))).boldened());
     g.drawText(title, headerBounds.reduced(6.0f * zoom_, 0.0f), juce::Justification::centredLeft, true);
 
@@ -514,7 +525,14 @@ bool NodeGraphComponent::isInterestedInDragSource(const SourceDetails& details) 
 void NodeGraphComponent::itemDropped(const SourceDetails& details) {
     const auto typeName = details.description.toString().toStdString();
     std::string error;
-    Node* node = ce::node_system::AddRegisteredNode(graph_, registry_, typeName, &error);
+    Node* node = nullptr;
+    // "symbol:<id>" (dragged from a SymbolsPanel) adds a Get node bound to that symbol; anything else is a node type.
+    if (typeName.rfind(kSymbolDragPrefix, 0) == 0) {
+        if (const auto* symbol = graph_.FindSymbol(typeName.substr(std::string(kSymbolDragPrefix).size())))
+            node = ce::node_system::AddSymbolGetNode(graph_, registry_, *symbol, &error);
+    } else {
+        node = ce::node_system::AddRegisteredNode(graph_, registry_, typeName, &error);
+    }
     if (node == nullptr) {
         return;
     }

@@ -8,6 +8,10 @@
 namespace creation::node_editor_ui
 {
 
+// Drag description for a graph symbol (params / constants / variables, shared/NodeSystem/SYMBOLS.md):
+// "symbol:<id>". Dropping one on a NodeGraphComponent adds a Get node bound to that symbol.
+inline constexpr const char* kSymbolDragPrefix = "symbol:";
+
 // Ported from apps/CreationEngine/Source/Views/NodeEditor/NodeGraphComponent.h - that original is
 // left untouched (this is a copy-and-adapt into shared/, not a move-and-repoint of CreationEngine
 // itself, since this session has no verified CreationEngine build environment to check that

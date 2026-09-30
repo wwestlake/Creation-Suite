@@ -1,0 +1,59 @@
+#pragma once
+
+#include <juce_gui_basics/juce_gui_basics.h>
+
+#include "node_system/graph.h"
+
+namespace creation::node_editor_ui
+{
+
+// The Variables panel: lists a graph's symbols - params, constants and variables (shared/NodeSystem/SYMBOLS.md) -
+// and edits them. "+" adds one; selecting one shows its name, kind, type, value, access, persistent flag and
+// description; dragging a row onto a NodeGraphComponent adds a Get node bound to it. The suite's standard panel for
+// every node system - apps host it, they do not reimplement it.
+class SymbolsPanel final : public juce::Component, private juce::ListBoxModel
+{
+public:
+    explicit SymbolsPanel(ce::node_system::Graph& graph);
+    ~SymbolsPanel() override;
+
+    // A symbol was added, removed or changed: the owner marks its document edited and re-evaluates / recompiles.
+    std::function<void()> onSymbolsChanged;
+
+    // The data types this app's nodes can use (default: number, integer, toggle, colour, text).
+    void setAllowedTypes(std::vector<ce::node_system::DataType> types);
+
+    // Re-reads the graph (after it was loaded or replaced).
+    void refresh();
+
+    void paint(juce::Graphics& g) override;
+    void resized() override;
+
+private:
+    class Editor;
+
+    int getNumRows() override;
+    void paintListBoxItem(int row, juce::Graphics& g, int width, int height, bool selected) override;
+    void selectedRowsChanged(int row) override;
+    juce::var getDragSourceDescription(const juce::SparseSet<int>& rows) override;
+
+    void showAddMenu();
+    void addSymbol(ce::node_system::SymbolKind kind, ce::node_system::DataType type);
+    void changed();
+
+    ce::node_system::Graph& graph;
+    std::vector<ce::node_system::DataType> allowedTypes;
+    juce::Label title;
+    juce::TextButton addButton { "+" };
+    juce::ListBox list;
+    std::unique_ptr<Editor> editor;
+    juce::String selectedId;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SymbolsPanel)
+};
+
+// Display names used by the panel (and by apps that show symbols elsewhere).
+juce::String symbolTypeName(ce::node_system::DataType type);
+juce::String symbolKindName(ce::node_system::SymbolKind kind);
+
+} // namespace creation::node_editor_ui
