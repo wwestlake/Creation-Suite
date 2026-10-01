@@ -4,6 +4,7 @@
 #include <node_system/graph_analysis.h>
 #include <node_system/type_registry.h>
 #include <node_system/symbol_nodes.h>
+#include <node_system/graph_nodes.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -301,6 +302,70 @@ int main()
             if (reloaded == nullptr || reloaded->DiagramType() != "image" || ns::SerializeGraph(*reloaded) != text)
                 fail("A typed graph does not round-trip byte for byte.");
             std::cout << "NodeSystem graph types: ok" << std::endl;
+        }
+
+        // Graphs as nodes (GRAPH_TYPES.md phase 2): a graph's interface, and a Graph node whose pins follow it.
+        {
+            namespace ns = ce::node_system;
+            ns::NodeTypeRegistry reg;
+            ns::RegisterGraphNode(reg);
+            const ns::PinTypeDesc texture { ns::PinKind::Data, ns::DataType::Texture };
+            ns::NodeTypeDescriptor input { "test.input", ns::Domain::Core, { { "name", { ns::PinKind::Data, ns::DataType::String }, std::string() } },
+                                           { { "image", texture, {} } } };
+            input.graphPort = ns::GraphPort::input;
+            ns::NodeTypeDescriptor output { "test.output", ns::Domain::Core,
+                                            { { "image", texture, std::string() }, { "name", { ns::PinKind::Data, ns::DataType::String }, std::string() } },
+                                            { { "image", texture, {} } } };
+            output.graphPort = ns::GraphPort::output;
+            reg.Register(input);
+            reg.Register(output);
+
+            // The used graph: a param "strength" (Float 0.5), an image input "source", an output "result".
+            ns::Graph inner("Inner", ns::GraphTarget::Dataflow);
+            inner.AddSymbol({ "strength", "Strength", ns::SymbolKind::Param, ns::DataType::Float, 0.5f, "public", false, "" });
+            auto* in = ns::AddRegisteredNode(inner, reg, "test.input", &error);
+            auto* out = ns::AddRegisteredNode(inner, reg, "test.output", &error);
+            for (const auto& p : in->Inputs()) in->FindPin(p.id)->defaultValue = std::string("source");
+            for (const auto& p : out->Inputs()) if (p.name == "name") out->FindPin(p.id)->defaultValue = std::string("result");
+            const auto face = ns::InterfaceOf(inner, reg);
+            if (face.inputs.size() != 2 || face.inputs[0].name != "strength" || face.inputs[0].type.dataType != ns::DataType::Float
+                || ! std::holds_alternative<float>(face.inputs[0].defaultValue) || face.inputs[1].name != "source"
+                || face.inputs[1].type.dataType != ns::DataType::Texture || face.outputs.size() != 1 || face.outputs[0].name != "result")
+                fail("The graph's interface is not its param, input and output.");
+
+            // A Graph node using it gets the pins; a wire into "source" survives a sync with the same interface and
+            // goes when the input is renamed.
+            ns::Graph host("Host", ns::GraphTarget::Dataflow);
+            auto* user = ns::AddRegisteredNode(host, reg, ns::kGraphNodeType, &error);
+            auto* feed = ns::AddRegisteredNode(host, reg, "test.input", &error);
+            if (user == nullptr || feed == nullptr || ! ns::SyncGraphNodePins(host, user->Id(), face))
+                fail("Could not add a Graph node.");
+            if (user->Inputs().size() != 3 || user->Inputs()[1].name != "strength" || user->Outputs().size() != 1 || user->Outputs()[0].name != "result")
+                fail("The Graph node's pins do not follow the interface.");
+            ns::PinId sourcePin = 0;
+            for (const auto& p : user->Inputs()) if (p.name == "source") sourcePin = p.id;
+            if (! host.Connect(feed->Id(), feed->Outputs().front().id, user->Id(), sourcePin))
+                fail("Could not wire into the Graph node.");
+            ns::SyncGraphNodePins(host, user->Id(), face);
+            if (host.Connections().size() != 1)
+                fail("Syncing the same interface lost a wire.");
+            for (const auto& p : in->Inputs()) in->FindPin(p.id)->defaultValue = std::string("photo");
+            ns::SyncGraphNodePins(host, user->Id(), ns::InterfaceOf(inner, reg));
+            bool hasPhoto = false, hasSource = false;
+            for (const auto& p : user->Inputs()) { hasPhoto = hasPhoto || p.name == "photo"; hasSource = hasSource || p.name == "source"; }
+            if (! hasPhoto || hasSource || ! host.Connections().empty())
+                fail("Renaming the input did not replace the pin and drop its wire.");
+
+            // A Graph node validates against its descriptor (its extra pins vary) and round-trips.
+            std::vector<std::string> graphErrors;
+            if (! ns::ValidateAgainstRegistry(host, reg, &graphErrors))
+                fail("A Graph node does not validate: " + (graphErrors.empty() ? std::string() : graphErrors.front()));
+            const std::string text = ns::SerializeGraph(host);
+            std::string hostError;
+            auto reloaded = ns::DeserializeGraph(text, hostError);
+            if (reloaded == nullptr || ns::SerializeGraph(*reloaded) != text)
+                fail("A graph with a Graph node does not round-trip.");
+            std::cout << "NodeSystem graph nodes: ok" << std::endl;
         }
 
         return 0;

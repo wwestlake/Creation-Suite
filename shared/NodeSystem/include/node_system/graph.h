@@ -84,6 +84,8 @@ public:
                                                PinId toPin, ConnectError* outError = nullptr);
 
     bool Disconnect(ConnectionId id);
+    // Removes every wire to or from one pin of one node.
+    void DisconnectPin(NodeId node, PinId pin);
 
     const std::vector<Connection>& Connections() const { return connections_; }
     const std::string& Name() const { return name_; }

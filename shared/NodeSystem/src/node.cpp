@@ -1,5 +1,7 @@
 #include "node_system/node.h"
 
+#include <algorithm>
+
 namespace ce::node_system {
 
 Node::Node(NodeId id, std::string typeName, Domain domain)
@@ -47,6 +49,17 @@ Pin* Node::FindPin(PinId pinId) {
         if (pin.id == pinId) return &pin;
     }
     return nullptr;
+}
+
+bool Node::RemovePin(PinId pinId) {
+    for (auto* pins : { &inputs_, &outputs_ }) {
+        auto it = std::find_if(pins->begin(), pins->end(), [pinId](const Pin& p) { return p.id == pinId; });
+        if (it != pins->end()) {
+            pins->erase(it);
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace ce::node_system
