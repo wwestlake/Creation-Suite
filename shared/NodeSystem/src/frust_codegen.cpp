@@ -88,6 +88,14 @@ const Pin* InputPinNamed(const Node& node, const char* name) {
 
 std::string EscapeFrustString(const std::string& value) { return EscapeString(value); }
 
+std::string FrustEnumDeclarations(const Graph& graph) {
+    std::string declarations;
+    for (const auto& def : graph.Enums()) {
+        declarations += FrustEnumDeclaration(def) + "\n";
+    }
+    return declarations;
+}
+
 FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
                                                      const NodeLibraryRegistry& libraries,
                                                      const FrustGraphCompileOptions& options) {
@@ -551,6 +559,8 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
             source << "use self::" << module << ";\n";
         }
         if (!importedModules.empty()) source << '\n';
+        // The graph's own enums (GRAPH_TYPES.md / SYMBOLS.md): real FRust enums in the generated source.
+        if (!graph.Enums().empty()) source << FrustEnumDeclarations(graph) << '\n';
     }
     if (options.exposeAsNode) {
         // `node pure` for a pure data function (no entryNode -- nothing

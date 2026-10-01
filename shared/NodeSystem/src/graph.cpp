@@ -118,6 +118,36 @@ bool Graph::Disconnect(ConnectionId id) {
     return true;
 }
 
+const EnumDef* Graph::FindEnum(const std::string& name) const {
+    for (const auto& def : enums_)
+        if (def.name == name)
+            return &def;
+    return nullptr;
+}
+
+EnumDef* Graph::FindEnum(const std::string& name) {
+    for (auto& def : enums_)
+        if (def.name == name)
+            return &def;
+    return nullptr;
+}
+
+bool Graph::AddEnum(EnumDef def) {
+    if (def.name.empty() || def.name.find_first_of(" \t") != std::string::npos || FindEnum(def.name) != nullptr)
+        return false;
+    def.scope = TypeScope::graph; // a graph's own enums are in its scope
+    enums_.push_back(std::move(def));
+    return true;
+}
+
+bool Graph::RemoveEnum(const std::string& name) {
+    const auto it = std::find_if(enums_.begin(), enums_.end(), [&name](const EnumDef& e) { return e.name == name; });
+    if (it == enums_.end())
+        return false;
+    enums_.erase(it);
+    return true;
+}
+
 const Symbol* Graph::FindSymbol(const std::string& id) const {
     for (const auto& symbol : symbols_)
         if (symbol.id == id)

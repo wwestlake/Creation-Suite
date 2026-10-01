@@ -82,4 +82,8 @@ FrustGraphCompileResult CompileBehaviorGraphToFrust(const Graph& graph,
 // escaping logic.
 std::string EscapeFrustString(const std::string& value);
 
+// The graph's own enums (Graph::Enums) as FRust declarations, one per line - emitted at the top of the graph's
+// generated source (with the manifest and imports), so its Int settings that carry them are those enums' values.
+std::string FrustEnumDeclarations(const Graph& graph);
+
 } // namespace ce::node_system

@@ -97,10 +97,10 @@ std::vector<std::string> FlowCaseNames(const Graph& graph, const NodeTypeRegistr
             if (fromPin == nullptr) {
                 break;
             }
-            if (const EnumDef* def = PinEnum(registry, *from, *fromPin)) {
+            if (const EnumDef* def = PinEnum(graph, registry, *from, *fromPin)) {
                 std::vector<std::string> names;
                 for (const auto& variant : def->variants) {
-                    names.push_back(PinName(variant));
+                    names.push_back(PinName(variant.name));
                 }
                 if (!names.empty()) {
                     return names;
@@ -164,6 +164,15 @@ bool SyncFlowNodeCases(Graph& graph, const NodeTypeRegistry& registry, NodeId id
     }
     if (current == names) {
         return false;
+    }
+
+    // The same number of cases under new names (an enum's variant renamed): rename in place, so wires stay.
+    if (current.size() == names.size()) {
+        const auto pins = FlowCasePins(*node);
+        for (size_t i = 0; i < pins.size(); ++i) {
+            node->FindPin(pins[i]->id)->name = names[i];
+        }
+        return true;
     }
 
     // Remove the case pins whose names are gone, then add the missing ones; matching pins keep their wires.

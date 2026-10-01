@@ -6,6 +6,7 @@
 #include <node_system/symbol_nodes.h>
 #include <node_system/graph_nodes.h>
 #include <node_system/flow_nodes.h>
+#include <node_system/frust_codegen.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -421,6 +422,91 @@ int main()
             if (reloaded == nullptr || ns::SerializeGraph(*reloaded) != text)
                 fail("A graph with flow nodes does not round-trip.");
             std::cout << "NodeSystem flow nodes: ok" << std::endl;
+        }
+
+        // Enums made in the node system (owner, 2026-10-01): saved with the graph, used by Choice params and Switch
+        // selectors, compiled to FRust enums.
+        {
+            namespace ns = ce::node_system;
+            ns::NodeTypeRegistry reg;
+            ns::RegisterSymbolGetNodes(reg);
+            ns::RegisterFlowNodes(reg, { ns::StandardFlowType(ns::DataType::Texture) });
+
+            ns::Graph own("OwnEnums", ns::GraphTarget::Dataflow);
+            const auto name = ns::MakeEnumName("HSV Channel", own.Enums());
+            if (name != "HsvChannel" || ! own.AddEnum({ name, "HSV Channel", { "Hue", "Saturation", "Value" }, "" })
+                || own.AddEnum({ name, "Again", {}, "" }) || ns::MakeEnumName("HSV Channel", own.Enums()) != "HsvChannel2")
+                fail("Graph enums did not add with a made name.");
+
+            // A Choice param of it drives a Switch: the cases are Hue, Saturation, Value.
+            ns::Symbol channel { "channel", "Channel", ns::SymbolKind::Param, ns::DataType::Int, std::int64_t { 1 }, "agent", false, "", "HsvChannel" };
+            own.AddSymbol(channel);
+            auto* get = ns::AddSymbolGetNode(own, reg, channel, &error);
+            auto* sw = ns::AddRegisteredNode(own, reg, "core.switch.image", &error);
+            ns::PinId selector = 0;
+            for (const auto& p : sw->Inputs()) if (p.name == ns::kFlowSelectorPin) selector = p.id;
+            own.Connect(get->Id(), get->Outputs().front().id, sw->Id(), selector);
+            ns::SyncFlowNodeCases(own, reg, sw->Id());
+            auto names = [](const ns::Node& n) {
+                std::vector<std::string> out;
+                for (const auto* p : ns::FlowCasePins(n)) out.push_back(p->name);
+                return out;
+            };
+            if (names(*sw) != std::vector<std::string> { "Hue", "Saturation", "Value" })
+                fail("A graph enum did not name the Switch's cases.");
+
+            // Renaming a variant renames the case in place: a wire into it stays.
+            auto* feed = ns::AddRegisteredNode(own, reg, "core.switch.image", &error); // any image output will do
+            ns::SyncFlowNodeCases(own, reg, feed->Id());
+            const auto valueCase = ns::FlowCasePins(*sw)[2]->id;
+            own.Connect(feed->Id(), feed->Outputs().front().id, sw->Id(), valueCase);
+            own.FindEnum("HsvChannel")->variants[2] = "Brightness";
+            ns::SyncFlowNodeCases(own, reg, sw->Id());
+            if (names(*sw) != std::vector<std::string> { "Hue", "Saturation", "Brightness" } || ns::FlowCasePins(*sw)[2]->id != valueCase
+                || own.Connections().size() != 2)
+                fail("Renaming a variant lost the case's wire.");
+
+            // Saved with the graph, before the symbols that use it, and read back the same.
+            const std::string text = ns::SerializeGraph(own);
+            if (text.find("enum HsvChannel\nenumname HsvChannel HSV Channel\nenumvariant HsvChannel Hue\nenumvariant HsvChannel Saturation\n"
+                          "enumvariant HsvChannel Brightness\nsymbol param channel int") == std::string::npos)
+                fail("Unexpected enum lines:\n" + text);
+            std::string enumError;
+            auto reloaded = ns::DeserializeGraph(text, enumError);
+            if (reloaded == nullptr || ns::SerializeGraph(*reloaded) != text || reloaded->FindEnum("HsvChannel") == nullptr
+                || ns::FindEnumFor(*reloaded, reg, "HsvChannel")->variants.size() != 3)
+                fail("A graph with its own enum does not round-trip.");
+
+            // Compiled to FRust.
+            if (ns::FrustEnumDeclarations(own) != "enum HsvChannel { Hue, Saturation, Brightness }\n"
+                || ns::FrustEnumDeclaration({ "Weather", "Weather", { "Dry", "deep snow" }, "" }) != "enum Weather { Dry, DeepSnow }")
+                fail("Unexpected FRust enum: " + ns::FrustEnumDeclarations(own));
+            // Values carry a description and a colour, saved and read back.
+            own.FindEnum("HsvChannel")->variants[0].colour = 0xffff4040u;
+            own.FindEnum("HsvChannel")->variants[0].description = "Where on the colour wheel";
+            const std::string coloured = ns::SerializeGraph(own);
+            auto colouredBack = ns::DeserializeGraph(coloured, enumError);
+            if (colouredBack == nullptr || colouredBack->FindEnum("HsvChannel")->variants[0].colour != 0xffff4040u
+                || colouredBack->FindEnum("HsvChannel")->variants[0].description != "Where on the colour wheel"
+                || colouredBack->FindEnum("HsvChannel")->scope != ns::TypeScope::graph)
+                fail("An enum value's colour or description did not round-trip.");
+
+            // Project types: a types file in the project scope, swapped into a registry beside its built-in enums.
+            ns::NodeTypeRegistry projectRegistry;
+            projectRegistry.RegisterEnum({ "Axis", "Axis", { "Horizontal", "Vertical" }, "" });
+            const std::string typesText = ns::SerializeTypes({ { "Weather", "Weather", { "Dry", "Wet" }, "" } });
+            std::vector<ns::EnumDef> projectEnums;
+            std::string typesError;
+            if (typesText.rfind("frtypes 1\n", 0) != 0 || ! ns::DeserializeTypes(typesText, ns::TypeScope::project, projectEnums, typesError)
+                || projectEnums.size() != 1 || projectEnums[0].scope != ns::TypeScope::project || projectEnums[0].variants[1].name != "Wet")
+                fail("A types file did not read back: " + typesError);
+            projectRegistry.ReplaceEnums(ns::TypeScope::project, projectEnums);
+            if (projectRegistry.FindEnum("Weather") == nullptr || projectRegistry.FindEnum("Axis") == nullptr)
+                fail("Project enums did not join the built-in ones.");
+            projectRegistry.ReplaceEnums(ns::TypeScope::project, {});
+            if (projectRegistry.FindEnum("Weather") != nullptr || projectRegistry.FindEnum("Axis") == nullptr)
+                fail("Replacing the project's enums touched the built-in ones.");
+            std::cout << "NodeSystem graph enums: ok" << std::endl;
         }
 
         return 0;

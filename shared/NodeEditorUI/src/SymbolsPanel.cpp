@@ -220,7 +220,7 @@ private:
         if (const auto* def = panel.enumOf(symbol))
         {
             for (size_t i = 0; i < def->variants.size(); ++i)
-                choice.addItem(def->variants[i], static_cast<int>(i) + 1);
+                choice.addItem(def->variants[i].name, static_cast<int>(i) + 1);
             if (const auto* i = std::get_if<std::int64_t>(&v))
                 choice.setSelectedId(static_cast<int>(*i) + 1, juce::dontSendNotification);
             choice.onChange = [this, setValue]() { setValue(static_cast<std::int64_t>(choice.getSelectedId() - 1)); };
@@ -336,15 +336,27 @@ std::vector<SymbolsPanel::TypeChoice> SymbolsPanel::typeChoices() const
     std::vector<TypeChoice> choices;
     for (auto t : allowedTypes)
         choices.push_back({ t, {}, symbolTypeName(t) });
+    // Enums in scope (TYPES.md): the graph's own first, then the project's, pods' and built-in ones; a name defined
+    // closer in wins.
+    std::vector<const ns::EnumDef*> inScope;
+    for (const auto& e : graph.Enums())
+        inScope.push_back(&e);
     if (enumSource != nullptr)
         for (const auto& e : enumSource->Enums())
-            choices.push_back({ ns::DataType::Int, e.name, juce::String(e.displayName.empty() ? e.name : e.displayName) });
+            if (graph.FindEnum(e.name) == nullptr)
+                inScope.push_back(&e);
+    for (const auto* e : inScope)
+            choices.push_back({ ns::DataType::Int, e->name, juce::String(e->displayName.empty() ? e->name : e->displayName) });
     return choices;
 }
 
 const ns::EnumDef* SymbolsPanel::enumOf(const ns::Symbol& symbol) const
 {
-    return enumSource != nullptr && ! symbol.enumType.empty() ? enumSource->FindEnum(symbol.enumType) : nullptr;
+    if (symbol.enumType.empty())
+        return nullptr;
+    if (const auto* own = graph.FindEnum(symbol.enumType))
+        return own;
+    return enumSource != nullptr ? enumSource->FindEnum(symbol.enumType) : nullptr;
 }
 
 juce::String SymbolsPanel::typeLabel(const ns::Symbol& symbol) const

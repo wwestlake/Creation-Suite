@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <map>
 #include <vector>
 
@@ -35,6 +36,10 @@ public:
     // Shows only the node types that belong in a graph of this type (GRAPH_TYPES.md); empty shows them all.
     void SetDiagramType(std::string diagramType);
 
+    // Enter in the search box, or a double-click on a node: add this type to the graph (the app passes it to
+    // NodeGraphComponent::AddNodeAtCentre).
+    std::function<void(const std::string& typeName)> onAddRequested;
+
     void resized() override;
     void paint(juce::Graphics& g) override;
 
@@ -42,6 +47,9 @@ private:
     int getNumRows() override;
     void paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected) override;
     void listBoxItemClicked(int row, const juce::MouseEvent& event) override;
+    void listBoxItemDoubleClicked(int row, const juce::MouseEvent& event) override;
+    void returnKeyPressed(int lastRowSelected) override;
+    void AddRow(int row);
     juce::var getDragSourceDescription(const juce::SparseSet<int>& selectedRows) override;
 
     void RebuildRows();
@@ -50,7 +58,7 @@ private:
     // (AddRegisteredNode dispatches on it); displayName/category are pure
     // presentation, falling back to typeName when a registration hasn't
     // set one (existing FRust node types, mid-migration to this field).
-    struct Entry { std::string typeName, displayName, category; };
+    struct Entry { std::string typeName, displayName, category, description; };
     std::vector<Entry> entries_;
     const ce::node_system::NodeTypeRegistry& registry_;
     std::string diagramType_;
@@ -71,6 +79,7 @@ private:
     juce::Label titleLabel_{ {}, "Nodes" };
     juce::TextEditor filterBox_;
     juce::ListBox listBox_;
+    juce::Label noMatches_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NodePalette)
 };
