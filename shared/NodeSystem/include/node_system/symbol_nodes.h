@@ -24,6 +24,10 @@ bool IsSymbolGetNode(const std::string& typeName);
 // The symbol a Get node reads, or null if its id is empty or no longer in the graph.
 const Symbol* SymbolForGetNode(const Graph& graph, const Node& node);
 
+// Points a Get node at `symbol`: its id, and its output's enum (a Choice's Get node wires only into that enum or
+// a plain integer).
+void BindSymbolGetNode(Node& node, const Symbol& symbol);
+
 // Adds a Get node already bound to `symbol` (for example when a symbol is dragged onto the graph).
 Node* AddSymbolGetNode(Graph& graph, const NodeTypeRegistry& registry, const Symbol& symbol, std::string* errorOut = nullptr);
 

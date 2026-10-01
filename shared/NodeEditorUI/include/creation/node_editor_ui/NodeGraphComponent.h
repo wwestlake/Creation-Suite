@@ -41,8 +41,11 @@ public:
     // Fired to determine if a node requires extra vertical space for custom inline UI.
     std::function<float(ce::node_system::NodeId)> onGetNodeExtraHeight;
 
-    // Fired when a node is drawn, allowing the owner to paint custom inline UI in the extra space.
+    // Fired when a node is drawn, allowing the owner to paint custom inline UI in the extra space. The bounds are
+    // the node's on-screen bounds, so the extra height (in graph units) is onGetNodeExtraHeight(id) * Zoom() there.
     std::function<void(juce::Graphics&, ce::node_system::NodeId, juce::Rectangle<float>)> onPaintNode;
+
+    float Zoom() const noexcept { return zoom_; }
 
     ce::node_system::NodeId SelectedNode() const { return selectedNode_; }
     void ClearSelection();

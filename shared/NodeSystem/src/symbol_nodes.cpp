@@ -56,6 +56,15 @@ const Symbol* SymbolForGetNode(const Graph& graph, const Node& node) {
     return nullptr;
 }
 
+void BindSymbolGetNode(Node& node, const Symbol& symbol) {
+    for (const auto& pin : node.Inputs())
+        if (pin.name == kSymbolIdPin)
+            node.FindPin(pin.id)->defaultValue = symbol.id;
+    for (const auto& pin : node.Outputs())
+        if (pin.name == kSymbolValuePin)
+            node.FindPin(pin.id)->type.enumType = symbol.enumType;
+}
+
 Node* AddSymbolGetNode(Graph& graph, const NodeTypeRegistry& registry, const Symbol& symbol, std::string* errorOut) {
     const auto type = SymbolGetNodeType(symbol.type);
     if (type.empty()) {
@@ -66,9 +75,7 @@ Node* AddSymbolGetNode(Graph& graph, const NodeTypeRegistry& registry, const Sym
     Node* node = AddRegisteredNode(graph, registry, type, errorOut);
     if (node == nullptr)
         return nullptr;
-    for (const auto& pin : node->Inputs())
-        if (pin.name == kSymbolIdPin)
-            node->FindPin(pin.id)->defaultValue = symbol.id;
+    BindSymbolGetNode(*node, symbol);
     return node;
 }
 

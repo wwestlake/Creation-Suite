@@ -118,6 +118,9 @@ std::string SerializePinLine(NodeId nodeId, const Pin& pin) {
         os << "stream " << DataTypeToString(pin.type.dataType);
     } else {
         os << "data " << DataTypeToString(pin.type.dataType);
+        if (!pin.type.enumType.empty()) {
+            os << " enum " << pin.type.enumType;
+        }
     }
     os << SerializeDefaultValue(pin.defaultValue);
     return os.str();
@@ -148,6 +151,9 @@ std::string SerializeGraph(const Graph& graph) {
         os << "symbol " << SymbolKindToString(symbol.kind) << " " << symbol.id << " " << DataTypeToString(symbol.type) << " "
            << symbol.accessibility << " " << (symbol.persistent ? 1 : 0) << SerializeDefaultValue(symbol.value) << "\n";
         os << "symbolname " << symbol.id << " " << symbol.name << "\n";
+        if (!symbol.enumType.empty()) {
+            os << "symbolenum " << symbol.id << " " << symbol.enumType << "\n";
+        }
         if (!symbol.description.empty()) {
             os << "symboldescription " << symbol.id << " " << symbol.description << "\n";
         }
@@ -324,6 +330,16 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
                 rest.erase(0, 1);
             }
             (keyword == "symbolname" ? symbol->name : symbol->description) = rest;
+        } else if (keyword == "symbolenum") {
+            std::string id, enumName;
+            if (!graph || !(tok >> id >> enumName)) {
+                return fail("malformed 'symbolenum' line (expected: symbolenum <id> <EnumName>)");
+            }
+            Symbol* symbol = graph->FindSymbol(id);
+            if (symbol == nullptr) {
+                return fail("'symbolenum' for unknown symbol '" + id + "'");
+            }
+            symbol->enumType = enumName;
         } else if (keyword == "node") {
             if (!graph) {
                 return fail("'node' line before 'graph' line");
@@ -391,7 +407,14 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
 
             PinDefaultValue defaultValue;
             std::string maybeDefaultKeyword;
-            if (tok >> maybeDefaultKeyword) {
+            bool haveKeyword = static_cast<bool>(tok >> maybeDefaultKeyword);
+            if (haveKeyword && maybeDefaultKeyword == "enum") {
+                if (type.kind != PinKind::Data || !(tok >> type.enumType)) {
+                    return fail("malformed 'enum' on 'pin' line (expected: data <dataType> enum <EnumName>)");
+                }
+                haveKeyword = static_cast<bool>(tok >> maybeDefaultKeyword);
+            }
+            if (haveKeyword) {
                 if (maybeDefaultKeyword != "default") {
                     return fail("unexpected trailing token '" + maybeDefaultKeyword + "' on 'pin' line");
                 }

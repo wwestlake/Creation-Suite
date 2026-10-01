@@ -37,6 +37,8 @@ struct Symbol {
     std::string accessibility = "graph";
     bool persistent = false;            // variables: kept between runs
     std::string description;
+    // A Choice: an Int symbol whose value is one of a registered enum's variants (enums.h). Empty otherwise.
+    std::string enumType;
 
     bool operator==(const Symbol&) const = default;
 };

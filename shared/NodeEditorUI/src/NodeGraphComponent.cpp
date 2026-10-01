@@ -52,8 +52,8 @@ juce::Colour DataTypeColourFor(ce::node_system::DataType type) {
         case DataType::Vec4:          return juce::Colour(0xff4a80e0);
         case DataType::Color:         return juce::Colour(0xffe0b84a);
         case DataType::Bool:          return juce::Colour(0xffd85a5a);
-        case DataType::Int:           return juce::Colour(0xff5ad8a0);
-        case DataType::String:        return juce::Colour(0xffd85ad0);
+        case DataType::Int:           return juce::Colour(0xff6ee04a); // clear green: the old mint read as Float's cyan
+        case DataType::String:        return juce::Colour(0xfff0b8d8); // pale pink: the old magenta read as Texture's purple
         case DataType::Transform:     return juce::Colour(0xffe08a3a);
         case DataType::BoneTransform: return juce::Colour(0xffe0a83a);
         case DataType::Texture:       return juce::Colour(0xff9c5a9c);

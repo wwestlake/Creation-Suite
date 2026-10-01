@@ -79,8 +79,6 @@ public:
         auto* symbol = panel.graph.FindSymbol(id);
         if (symbol == nullptr)
             return;
-        const int uses = usesOf(panel.graph, id);
-
         name.setText(symbol->name, juce::dontSendNotification);
         name.onReturnKey = name.onFocusLost = [this]() {
             if (auto* s = symbol_()) { s->name = name.getText().trim().toStdString(); panel.changed(); }
@@ -95,23 +93,23 @@ public:
         };
         row("Kind", kind);
 
-        int typeId = 1;
-        for (auto t : panel.allowedTypes)
+        const auto choices = panel.typeChoices();
+        for (size_t i = 0; i < choices.size(); ++i)
         {
-            type.addItem(symbolTypeName(t), typeId);
-            if (t == symbol->type)
-                type.setSelectedId(typeId, juce::dontSendNotification);
-            ++typeId;
+            if (i == panel.allowedTypes.size())
+                type.addSectionHeading("Choice");
+            type.addItem(choices[i].label, static_cast<int>(i) + 1);
+            if (choices[i].type == symbol->type && choices[i].enumType == symbol->enumType)
+                type.setSelectedId(static_cast<int>(i) + 1, juce::dontSendNotification);
         }
-        // Changing the type would break the wires of the Get nodes that use it.
-        type.setEnabled(uses == 0);
-        type.setTooltip(uses == 0 ? juce::String() : "Used by " + juce::String(uses) + " node(s) - remove those Get nodes to change the type.");
         type.onChange = [this]() {
             auto* s = symbol_();
+            const auto all = panel.typeChoices();
             const int index = type.getSelectedId() - 1;
-            if (s == nullptr || ! juce::isPositiveAndBelow(index, static_cast<int>(panel.allowedTypes.size())))
+            if (s == nullptr || ! juce::isPositiveAndBelow(index, static_cast<int>(all.size())))
                 return;
-            s->type = panel.allowedTypes[static_cast<size_t>(index)];
+            s->type = all[static_cast<size_t>(index)].type;
+            s->enumType = all[static_cast<size_t>(index)].enumType;
             s->value = ns::DefaultValueFor(s->type);
             panel.changed();
             rebuildSoon();
@@ -147,10 +145,9 @@ public:
         };
         row("Description", description, 44);
 
-        usesLabel.setText(uses == 0 ? "Not used yet - drag it onto the graph." : "Used by " + juce::String(uses) + " node(s).",
-                          juce::dontSendNotification);
         usesLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
         addAndMakeVisible(usesLabel);
+        updateUses();
 
         remove.onClick = [this]() {
             panel.graph.RemoveSymbol(id);
@@ -162,6 +159,16 @@ public:
     }
 
     int preferredHeight() const { return y + 70; }
+
+    // How many Get nodes read this symbol. Changing the type would break their wires, so it is locked while any do.
+    void updateUses()
+    {
+        const int uses = usesOf(panel.graph, id);
+        type.setEnabled(uses == 0);
+        type.setTooltip(uses == 0 ? juce::String() : "Used by " + juce::String(uses) + " node(s) - remove those Get nodes to change the type.");
+        usesLabel.setText(uses == 0 ? "Not used yet - drag it onto the graph." : "Used by " + juce::String(uses) + " node(s).",
+                          juce::dontSendNotification);
+    }
 
     void resized() override
     {
@@ -210,7 +217,16 @@ private:
         };
 
         const auto& v = symbol.value;
-        if (symbol.type == ns::DataType::Bool)
+        if (const auto* def = panel.enumOf(symbol))
+        {
+            for (size_t i = 0; i < def->variants.size(); ++i)
+                choice.addItem(def->variants[i], static_cast<int>(i) + 1);
+            if (const auto* i = std::get_if<std::int64_t>(&v))
+                choice.setSelectedId(static_cast<int>(*i) + 1, juce::dontSendNotification);
+            choice.onChange = [this, setValue]() { setValue(static_cast<std::int64_t>(choice.getSelectedId() - 1)); };
+            row("Value", choice);
+        }
+        else if (symbol.type == ns::DataType::Bool)
         {
             toggle.setToggleState(std::holds_alternative<bool>(v) && std::get<bool>(v), juce::dontSendNotification);
             toggle.onClick = [this, setValue]() { setValue(toggle.getToggleState()); };
@@ -274,7 +290,7 @@ private:
     std::vector<RowEntry> rows;
     int y = 0;
     juce::TextEditor name, number, text, description, x, y3, z;
-    juce::ComboBox kind, type, access;
+    juce::ComboBox kind, type, access, choice;
     juce::ToggleButton toggle, persistent;
     Row3 vector;
     juce::Label usesLabel;
@@ -309,6 +325,35 @@ void SymbolsPanel::setAllowedTypes(std::vector<ns::DataType> types)
     refresh();
 }
 
+void SymbolsPanel::setEnums(const ns::NodeTypeRegistry& registry)
+{
+    enumSource = &registry;
+    refresh();
+}
+
+std::vector<SymbolsPanel::TypeChoice> SymbolsPanel::typeChoices() const
+{
+    std::vector<TypeChoice> choices;
+    for (auto t : allowedTypes)
+        choices.push_back({ t, {}, symbolTypeName(t) });
+    if (enumSource != nullptr)
+        for (const auto& e : enumSource->Enums())
+            choices.push_back({ ns::DataType::Int, e.name, juce::String(e.displayName.empty() ? e.name : e.displayName) });
+    return choices;
+}
+
+const ns::EnumDef* SymbolsPanel::enumOf(const ns::Symbol& symbol) const
+{
+    return enumSource != nullptr && ! symbol.enumType.empty() ? enumSource->FindEnum(symbol.enumType) : nullptr;
+}
+
+juce::String SymbolsPanel::typeLabel(const ns::Symbol& symbol) const
+{
+    if (const auto* def = enumOf(symbol))
+        return def->displayName.empty() ? juce::String(def->name) : juce::String(def->displayName);
+    return symbolTypeName(symbol.type);
+}
+
 void SymbolsPanel::refresh()
 {
     list.updateContent();
@@ -327,6 +372,13 @@ void SymbolsPanel::refresh()
     }
     resized();
     repaint();
+}
+
+void SymbolsPanel::graphChanged()
+{
+    list.repaint();
+    if (editor != nullptr)
+        editor->updateUses();
 }
 
 void SymbolsPanel::changed()
@@ -391,7 +443,10 @@ void SymbolsPanel::paintListBoxItem(int row, juce::Graphics& g, int width, int h
     g.drawText(symbol.name, text.removeFromLeft(text.getWidth() * 5 / 10), juce::Justification::centredLeft, true);
     g.setColour(juce::Colour(0xff7fffd4));
     g.setFont(juce::FontOptions(11.0f));
-    g.drawText(symbolTypeName(symbol.type) + "  " + valueSummary(symbol.value), text, juce::Justification::centredRight, true);
+    const auto* def = enumOf(symbol);
+    const auto* index = std::get_if<std::int64_t>(&symbol.value);
+    const auto value = def != nullptr && index != nullptr ? juce::String(ns::EnumVariantName(*def, *index)) : valueSummary(symbol.value);
+    g.drawText(typeLabel(symbol) + "  " + value, text, juce::Justification::centredRight, true);
 }
 
 void SymbolsPanel::selectedRowsChanged(int row)
@@ -418,30 +473,34 @@ void SymbolsPanel::showAddMenu()
     juce::PopupMenu menu;
     const ns::SymbolKind kinds[3] = { ns::SymbolKind::Param, ns::SymbolKind::Constant, ns::SymbolKind::Variable };
     const char* hints[3] = { " - an input set from outside", " - a named fixed value", " - state the graph can change" };
+    const auto choices = typeChoices();
     for (int k = 0; k < 3; ++k)
     {
-        juce::PopupMenu types;
-        for (size_t t = 0; t < allowedTypes.size(); ++t)
-            types.addItem(1000 * (k + 1) + static_cast<int>(t), symbolTypeName(allowedTypes[t]));
+        juce::PopupMenu types, enums;
+        for (size_t t = 0; t < choices.size(); ++t)
+            (choices[t].enumType.empty() ? types : enums).addItem(1000 * (k + 1) + static_cast<int>(t), choices[t].label);
+        if (enums.getNumItems() > 0)
+            types.addSubMenu("Choice", enums);
         menu.addSubMenu(symbolKindName(kinds[k]) + hints[k], types);
     }
     // A button-triggered menu opens at its button.
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addButton), [this, kinds](int result) {
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addButton), [this, kinds, choices](int result) {
         if (result < 1000)
             return;
         const int k = result / 1000 - 1;
         const int t = result % 1000;
-        if (juce::isPositiveAndBelow(k, 3) && juce::isPositiveAndBelow(t, static_cast<int>(allowedTypes.size())))
-            addSymbol(kinds[k], allowedTypes[static_cast<size_t>(t)]);
+        if (juce::isPositiveAndBelow(k, 3) && juce::isPositiveAndBelow(t, static_cast<int>(choices.size())))
+            addSymbol(kinds[k], choices[static_cast<size_t>(t)]);
     });
 }
 
-void SymbolsPanel::addSymbol(ns::SymbolKind kind, ns::DataType type)
+void SymbolsPanel::addSymbol(ns::SymbolKind kind, const TypeChoice& type)
 {
     ns::Symbol symbol;
     symbol.kind = kind;
-    symbol.type = type;
-    symbol.value = ns::DefaultValueFor(type);
+    symbol.type = type.type;
+    symbol.enumType = type.enumType;
+    symbol.value = ns::DefaultValueFor(type.type);
     symbol.name = (symbolKindName(kind) + " " + juce::String(static_cast<int>(graph.Symbols().size()) + 1)).toStdString();
     symbol.id = ns::MakeSymbolId(symbol.name, graph.Symbols());
     symbol.accessibility = kind == ns::SymbolKind::Param ? "public" : "graph";

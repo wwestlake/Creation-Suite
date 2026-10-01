@@ -73,9 +73,11 @@ struct PinTypeDesc {
     PinKind kind = PinKind::Data;
     DataType dataType = DataType::Float;
     MonadTypeDesc monad;
+    // An Int data pin whose values are named by a registered enum (enums.h): "BlendMode". Empty for a plain pin.
+    std::string enumType;
 
     bool operator==(const PinTypeDesc& other) const {
-        return kind == other.kind && dataType == other.dataType && monad == other.monad;
+        return kind == other.kind && dataType == other.dataType && monad == other.monad && enumType == other.enumType;
     }
 };
 
@@ -97,6 +99,11 @@ inline bool IsConnectionCompatible(const PinTypeDesc& output, const PinTypeDesc&
             };
             return matches(output.monad.valueType, input.monad.valueType)
                 && matches(output.monad.errorType, input.monad.errorType);
+        }
+        // Two different enums never connect (a blend mode is not a gradient direction). A plain integer connects to
+        // an enum both ways - a number computed elsewhere, or an enum read as its number.
+        if (!output.enumType.empty() && !input.enumType.empty() && output.enumType != input.enumType) {
+            return false;
         }
         return output.dataType == input.dataType || output.dataType == DataType::Any
             || input.dataType == DataType::Any;

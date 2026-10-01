@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "node_system/enums.h"
 #include "node_system/graph.h"
 #include "node_system/node.h"
 #include "node_system/pin.h"
@@ -131,8 +132,14 @@ public:
     const NodeTypeDescriptor* Find(const std::string& typeName) const;
     const std::unordered_map<std::string, NodeTypeDescriptor>& Types() const { return types_; }
 
+    // The enums the registered node types use (enums.h), in registration order. Re-registering a name replaces it.
+    void RegisterEnum(EnumDef def);
+    const EnumDef* FindEnum(const std::string& name) const;
+    const std::vector<EnumDef>& Enums() const { return enums_; }
+
 private:
     std::unordered_map<std::string, NodeTypeDescriptor> types_;
+    std::vector<EnumDef> enums_;
 };
 
 // Constructs a node in `graph` from `registry`'s descriptor for
@@ -181,5 +188,9 @@ bool ValidateAgainstRegistry(const Graph& graph, const NodeTypeRegistry& registr
 // pin would still see the descriptor-level Any even though this
 // particular instance is concretely bound to e.g. Float.
 DataType ResolveEffectivePinType(const NodeTypeDescriptor& type, const Node& node, const Pin& pin);
+
+// The enum a pin's values are named by: the pin's own tag, else its registered signature's (a pin loaded from a
+// graph saved before its node type tagged it). Null for a plain pin or an unregistered enum.
+const EnumDef* PinEnum(const NodeTypeRegistry& registry, const Node& node, const Pin& pin);
 
 } // namespace ce::node_system
