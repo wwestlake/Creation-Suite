@@ -5,6 +5,7 @@
 #include <node_system/type_registry.h>
 #include <node_system/symbol_nodes.h>
 #include <node_system/graph_nodes.h>
+#include <node_system/flow_nodes.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -366,6 +367,60 @@ int main()
             if (reloaded == nullptr || ns::SerializeGraph(*reloaded) != text)
                 fail("A graph with a Graph node does not round-trip.");
             std::cout << "NodeSystem graph nodes: ok" << std::endl;
+        }
+
+        // Decisions (FLOW.md): Switch and Route, cases named after what drives the selector.
+        {
+            namespace ns = ce::node_system;
+            ns::NodeTypeRegistry reg;
+            ns::RegisterSymbolGetNodes(reg);
+            reg.RegisterEnum({ "Weather", "Weather", { "Dry", "Wet", "Deep Snow" }, "" });
+            ns::RegisterFlowNodes(reg, { ns::StandardFlowType(ns::DataType::Texture), ns::StandardFlowType(ns::DataType::Float) });
+            if (reg.Find("core.switch.image") == nullptr || reg.Find("core.route.number") == nullptr
+                || reg.Find("core.switch.image")->displayName != "Switch (Image)")
+                fail("Flow nodes did not register per type.");
+
+            ns::Graph flow("Flow", ns::GraphTarget::Dataflow);
+            auto* sw = ns::AddRegisteredNode(flow, reg, "core.switch.image", &error);
+            auto* route = ns::AddRegisteredNode(flow, reg, "core.route.number", &error);
+            ns::SyncFlowNodeCases(flow, reg, sw->Id());
+            ns::SyncFlowNodeCases(flow, reg, route->Id());
+            auto names = [](const ns::Node& n) {
+                std::vector<std::string> out;
+                for (const auto* p : ns::FlowCasePins(n)) out.push_back(p->name);
+                return out;
+            };
+            if (names(*sw) != std::vector<std::string> { "case_0", "case_1" } || names(*route) != std::vector<std::string> { "case_0", "case_1" }
+                || sw->Inputs().back().type.dataType != ns::DataType::Texture || route->Outputs().front().type.dataType != ns::DataType::Float)
+                fail("A new flow node does not have two typed cases.");
+
+            // A Choice param in the selector: the cases become Dry, Wet, Deep_Snow.
+            ns::Symbol weather { "weather", "Weather", ns::SymbolKind::Param, ns::DataType::Int, std::int64_t { 1 }, "agent", false, "", "Weather" };
+            flow.AddSymbol(weather);
+            auto* get = ns::AddSymbolGetNode(flow, reg, weather, &error);
+            ns::PinId selector = 0;
+            for (const auto& p : sw->Inputs()) if (p.name == ns::kFlowSelectorPin) selector = p.id;
+            if (! flow.Connect(get->Id(), get->Outputs().front().id, sw->Id(), selector))
+                fail("A Choice did not wire into a selector.");
+            if (! ns::SyncFlowNodeCases(flow, reg, sw->Id()) || names(*sw) != std::vector<std::string> { "Dry", "Wet", "Deep_Snow" })
+                fail("The cases did not take the enum's names.");
+            if (ns::SyncFlowNodeCases(flow, reg, sw->Id()))
+                fail("Syncing again changed something.");
+
+            // Which case a selector picks: integer n, number floor(n), toggle 0 / 1, clamped.
+            if (ns::FlowCaseIndex(std::int64_t { 1 }, 3) != 1 || ns::FlowCaseIndex(2.7f, 3) != 2 || ns::FlowCaseIndex(true, 2) != 1
+                || ns::FlowCaseIndex(std::int64_t { 9 }, 3) != 2 || ns::FlowCaseIndex(-1.0f, 3) != 0)
+                fail("FlowCaseIndex picked the wrong case.");
+
+            std::vector<std::string> flowErrors;
+            if (! ns::ValidateAgainstRegistry(flow, reg, &flowErrors))
+                fail("Flow nodes do not validate: " + (flowErrors.empty() ? std::string() : flowErrors.front()));
+            const std::string text = ns::SerializeGraph(flow);
+            std::string flowError;
+            auto reloaded = ns::DeserializeGraph(text, flowError);
+            if (reloaded == nullptr || ns::SerializeGraph(*reloaded) != text)
+                fail("A graph with flow nodes does not round-trip.");
+            std::cout << "NodeSystem flow nodes: ok" << std::endl;
         }
 
         return 0;

@@ -14,6 +14,7 @@ add_library(creation_suite_node_system STATIC
     src/symbols.cpp
     src/symbol_nodes.cpp
     src/graph_nodes.cpp
+    src/flow_nodes.cpp
 )
 
 if(NOT TARGET node_system)

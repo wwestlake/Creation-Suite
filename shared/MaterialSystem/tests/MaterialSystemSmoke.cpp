@@ -1,6 +1,7 @@
 #include <creation/material/material_compiler.h>
 #include <creation/material/material_nodes.h>
 #include <node_system/symbol_nodes.h>
+#include <node_system/flow_nodes.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -91,6 +92,30 @@ void RunSmoke()
         if (! param || compiledSymbols.source.evaluateFunction.find("uMaterial_tint") == std::string::npos
             || compiledSymbols.source.evaluateFunction.find("0.25f") == std::string::npos)
             throw std::runtime_error("Variables did not become a parameter and a literal:\n" + compiledSymbols.source.evaluateFunction);
+    }
+
+    // Decisions (shared/NodeSystem/FLOW.md): a Switch (Color) with selector 1 and cases red / green becomes
+    // (1.0f < 1.0f ? red : green).
+    {
+        namespace ns = ce::node_system;
+        ns::NodeTypeRegistry flowRegistry;
+        ce::material::RegisterMaterialNodes(flowRegistry);
+        ns::RegisterFlowNodes(flowRegistry, { ns::StandardFlowType(ns::DataType::Color) });
+        ns::Graph flow("FlowSmoke");
+        auto* sw = ns::AddRegisteredNode(flow, flowRegistry, "core.switch.color", &error);
+        auto* out = ns::AddRegisteredNode(flow, flowRegistry, "material.surface.output", &error);
+        if (sw == nullptr || out == nullptr) throw std::runtime_error("Failed to build the Switch material.");
+        ns::SyncFlowNodeCases(flow, flowRegistry, sw->Id());
+        for (const auto& pin : sw->Inputs()) {
+            if (pin.name == "selector") sw->FindPin(pin.id)->defaultValue = std::int64_t { 1 };
+            if (pin.name == "case_0") sw->FindPin(pin.id)->defaultValue = ns::Vec3Default { 1.0f, 0.0f, 0.0f };
+            if (pin.name == "case_1") sw->FindPin(pin.id)->defaultValue = ns::Vec3Default { 0.0f, 1.0f, 0.0f };
+        }
+        if (! flow.Connect(sw->Id(), sw->Outputs().front().id, out->Id(), out->Inputs().front().id).has_value())
+            throw std::runtime_error("Failed to wire the Switch material.");
+        const auto compiledFlow = ce::material::CompileMaterialGraph(flow, flowRegistry);
+        if (! compiledFlow.ok || compiledFlow.source.evaluateFunction.find("(1.0f < 1.0f ? vec3(1.0f") == std::string::npos)
+            throw std::runtime_error("The Switch did not compile to a select:\n" + compiledFlow.source.evaluateFunction);
     }
 
     std::cout << "MaterialSystem smoke passed.\n";
