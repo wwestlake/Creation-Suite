@@ -9,6 +9,7 @@ add_library(creation_suite_node_editor_ui STATIC
     src/NodeGraphComponent.cpp
     src/NodeInspector.cpp
     src/NodePalette.cpp
+    src/SymbolsPanel.cpp
 )
 
 target_include_directories(creation_suite_node_editor_ui PUBLIC include)

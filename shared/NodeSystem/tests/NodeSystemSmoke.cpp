@@ -3,6 +3,7 @@
 #include <node_system/monad_nodes.h>
 #include <node_system/graph_analysis.h>
 #include <node_system/type_registry.h>
+#include <node_system/symbol_nodes.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -133,6 +134,132 @@ int main()
         const auto result = monadRegistry.Find("core.wrap.result")->outputs.front().type;
         if (ce::node_system::IsConnectionCompatible(option, result))
             fail("Option<T> was accepted by a Result<T> input.");
+
+        // Graph symbols (params, constants, variables) - SYMBOLS.md.
+        {
+            namespace ns = ce::node_system;
+            ns::Graph symbolGraph("SymbolGraph", ns::GraphTarget::Dataflow);
+            const std::string plain = ns::SerializeGraph(symbolGraph);
+            if (plain.find("symbol") != std::string::npos)
+                fail("A graph without symbols wrote symbol lines.");
+
+            ns::Symbol scale;
+            scale.id = ns::MakeSymbolId("Tile Scale", symbolGraph.Symbols());
+            scale.name = "Tile Scale";
+            scale.kind = ns::SymbolKind::Param;
+            scale.type = ns::DataType::Float;
+            scale.value = 4.0f;
+            scale.accessibility = "agent";
+            if (scale.id != "tile_scale" || ! symbolGraph.AddSymbol(scale))
+                fail("Could not add a param symbol with a made id.");
+            if (ns::MakeSymbolId("Tile Scale", symbolGraph.Symbols()) != "tile_scale_2")
+                fail("MakeSymbolId did not avoid an existing id.");
+            if (symbolGraph.AddSymbol(scale))
+                fail("A duplicate symbol id was accepted.");
+
+            ns::Symbol tint { "tint", "Base Tint", ns::SymbolKind::Constant, ns::DataType::Color, ns::Vec3Default { 0.25f, 0.5f, 0.75f },
+                              "graph", false, "" };
+            ns::Symbol count { "counter", "Run Counter", ns::SymbolKind::Variable, ns::DataType::Int, std::int64_t { 7 },
+                               "private", true, "How many times the graph has run." };
+            ns::Symbol label { "label", "Label", ns::SymbolKind::Param, ns::DataType::String, std::string("hello symbol world"),
+                               "public", false, "" };
+            if (! symbolGraph.AddSymbol(tint) || ! symbolGraph.AddSymbol(count) || ! symbolGraph.AddSymbol(label))
+                fail("Could not add constant / variable / text symbols.");
+
+            ns::NodeTypeRegistry symbolRegistry;
+            ns::RegisterSymbolGetNodes(symbolRegistry);
+            auto* get = ns::AddSymbolGetNode(symbolGraph, symbolRegistry, scale, &error);
+            if (get == nullptr || get->TypeName() != "core.symbol.get.float" || ns::SymbolForGetNode(symbolGraph, *get) == nullptr
+                || ns::SymbolForGetNode(symbolGraph, *get)->name != "Tile Scale")
+                fail("A Get node bound to a symbol does not find it.");
+
+            const std::string text = ns::SerializeGraph(symbolGraph);
+            if (text.find("symbol param tile_scale float agent 0 default float 4\n") == std::string::npos)
+                fail("Unexpected symbol line:\n" + text);
+
+            std::string symbolError;
+            auto reloaded = ns::DeserializeGraph(text, symbolError);
+            if (reloaded == nullptr)
+                fail("Symbols did not reload: " + symbolError);
+            if (reloaded->Symbols() != symbolGraph.Symbols())
+                fail("Symbols changed across save and reload.");
+            if (ns::SerializeGraph(*reloaded) != text)
+                fail("A graph with symbols does not round-trip byte for byte.");
+            const auto* reloadedGet = reloaded->FindNode(get->Id());
+            if (reloadedGet == nullptr || ns::SymbolForGetNode(*reloaded, *reloadedGet) == nullptr)
+                fail("A Get node lost its symbol across save and reload.");
+            std::cout << "NodeSystem symbols: ok" << std::endl;
+        }
+
+        // Enums: named choices for integer settings, and Choice symbols - SYMBOLS.md "Enums".
+        {
+            namespace ns = ce::node_system;
+            ns::NodeTypeRegistry enumRegistry;
+            ns::RegisterSymbolGetNodes(enumRegistry);
+            enumRegistry.RegisterEnum({ "BlendMode", "Blend Mode",
+                                        { "Normal", "Multiply", "Screen", "Overlay", "Add", "Subtract", "Darken", "Lighten", "Difference" }, "" });
+            enumRegistry.RegisterEnum({ "Axis", "Axis", { "Horizontal", "Vertical" }, "" });
+            const auto* blendMode = enumRegistry.FindEnum("BlendMode");
+            if (blendMode == nullptr || ns::EnumVariantName(*blendMode, 2) != "Screen" || ns::EnumVariantName(*blendMode, 99) != "99")
+                fail("Enum variant names are wrong.");
+
+            ns::PinTypeDesc modeType { ns::PinKind::Data, ns::DataType::Int };
+            modeType.enumType = "BlendMode";
+            ns::PinTypeDesc axisType { ns::PinKind::Data, ns::DataType::Int };
+            axisType.enumType = "Axis";
+            const ns::PinTypeDesc intType { ns::PinKind::Data, ns::DataType::Int };
+            enumRegistry.Register({ "Blend", ns::Domain::Core, { { "mode", modeType, std::int64_t { 0 } } }, {} });
+            enumRegistry.Register({ "Ripple", ns::Domain::Core, { { "axis", axisType, std::int64_t { 0 } } }, {} });
+            enumRegistry.Register({ "ConstInt", ns::Domain::Core, {}, { { "value", intType, std::int64_t { 3 } } } });
+
+            ns::Graph enumGraph("EnumGraph", ns::GraphTarget::Dataflow);
+            ns::Symbol choice { "blend_choice", "Blend Choice", ns::SymbolKind::Param, ns::DataType::Int, std::int64_t { 1 },
+                                "agent", false, "", "BlendMode" };
+            if (! enumGraph.AddSymbol(choice))
+                fail("Could not add a Choice symbol.");
+            auto* get = ns::AddSymbolGetNode(enumGraph, enumRegistry, choice, &error);
+            auto* blend = ns::AddRegisteredNode(enumGraph, enumRegistry, "Blend", &error);
+            auto* ripple = ns::AddRegisteredNode(enumGraph, enumRegistry, "Ripple", &error);
+            auto* constant = ns::AddRegisteredNode(enumGraph, enumRegistry, "ConstInt", &error);
+            if (get == nullptr || blend == nullptr || ripple == nullptr || constant == nullptr)
+                fail("Could not build the enum graph: " + error);
+            if (get->Outputs().front().type.enumType != "BlendMode")
+                fail("A Choice's Get node did not take its enum.");
+
+            const auto getOut = get->Outputs().front().id;
+            if (! enumGraph.Connect(get->Id(), getOut, blend->Id(), blend->Inputs().front().id))
+                fail("A Blend Mode choice did not wire into a Blend Mode setting.");
+            if (enumGraph.Connect(get->Id(), getOut, ripple->Id(), ripple->Inputs().front().id))
+                fail("A Blend Mode choice wired into an Axis setting.");
+            if (! enumGraph.Connect(constant->Id(), constant->Outputs().front().id, ripple->Id(), ripple->Inputs().front().id))
+                fail("A plain integer did not wire into an enum setting.");
+            if (! ns::IsConnectionCompatible(modeType, intType))
+                fail("An enum did not wire into a plain integer.");
+
+            std::vector<std::string> enumErrors;
+            if (! ns::ValidateAgainstRegistry(enumGraph, enumRegistry, &enumErrors))
+                fail("The enum graph does not validate: " + (enumErrors.empty() ? std::string() : enumErrors.front()));
+
+            const std::string text = ns::SerializeGraph(enumGraph);
+            const auto blendPinLine = "pin " + std::to_string(blend->Id()) + " in " + std::to_string(blend->Inputs().front().id)
+                                    + " mode data int enum BlendMode default int 0\n";
+            if (text.find("symbolenum blend_choice BlendMode\n") == std::string::npos || text.find(blendPinLine) == std::string::npos)
+                fail("Unexpected enum lines:\n" + text);
+            std::string enumError;
+            auto reloaded = ns::DeserializeGraph(text, enumError);
+            if (reloaded == nullptr)
+                fail("The enum graph did not reload: " + enumError);
+            if (reloaded->Symbols() != enumGraph.Symbols() || ns::SerializeGraph(*reloaded) != text)
+                fail("The enum graph does not round-trip byte for byte.");
+
+            // A pin saved without its tag still finds its enum through the node type.
+            auto* untagged = blend->FindPin(blend->Inputs().front().id);
+            untagged->type.enumType.clear();
+            const auto* found = ns::PinEnum(enumRegistry, *blend, *untagged);
+            if (found == nullptr || found->name != "BlendMode")
+                fail("PinEnum did not fall back to the node type's signature.");
+            std::cout << "NodeSystem enums: ok" << std::endl;
+        }
 
         return 0;
     }
