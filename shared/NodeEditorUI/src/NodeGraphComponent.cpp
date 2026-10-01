@@ -63,6 +63,8 @@ juce::Colour DataTypeColourFor(ce::node_system::DataType type) {
         case DataType::Material:      return juce::Colour(0xffc85ac8);
         case DataType::Model:         return juce::Colour(0xff5ac878);
         case DataType::Controller:    return juce::Colour(0xffc8785a);
+        case DataType::Drawing:       return juce::Colour(0xfff0f0f0); // white: lines on paper
+        case DataType::Brush:         return juce::Colour(0xffe8743a); // orange
     }
     return juce::Colour(0xff7fd0e8);
 }
