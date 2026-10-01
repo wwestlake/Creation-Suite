@@ -67,7 +67,12 @@ std::string DataTypeToString(DataType t) {
         case DataType::Entity: return "entity";
         case DataType::Drawing: return "drawing";
         case DataType::Brush: return "brush";
-        default: break;
+        // These were missing and silently saved as "float", so they came back as Float pins (FLOW.md's selector is Any).
+        case DataType::Any: return "any";
+        case DataType::Function: return "function";
+        case DataType::Material: return "material";
+        case DataType::Model: return "model";
+        case DataType::Controller: return "controller";
     }
     return "float";
 }
@@ -79,7 +84,9 @@ std::optional<DataType> DataTypeFromString(const std::string& s) {
         { "int", DataType::Int },         { "string", DataType::String },   { "transform", DataType::Transform },
         { "bonetransform", DataType::BoneTransform }, { "texture", DataType::Texture },
         { "audiosignal", DataType::AudioSignal }, { "entity", DataType::Entity },
-        { "drawing", DataType::Drawing }, { "brush", DataType::Brush },
+        { "drawing", DataType::Drawing }, { "brush", DataType::Brush }, { "any", DataType::Any },
+        { "function", DataType::Function }, { "material", DataType::Material }, { "model", DataType::Model },
+        { "controller", DataType::Controller },
     };
     const auto it = table.find(s);
     return it == table.end() ? std::nullopt : std::optional<DataType>(it->second);
