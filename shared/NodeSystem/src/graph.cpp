@@ -110,4 +110,34 @@ bool Graph::Disconnect(ConnectionId id) {
     return true;
 }
 
+const Symbol* Graph::FindSymbol(const std::string& id) const {
+    for (const auto& symbol : symbols_)
+        if (symbol.id == id)
+            return &symbol;
+    return nullptr;
+}
+
+Symbol* Graph::FindSymbol(const std::string& id) {
+    for (auto& symbol : symbols_)
+        if (symbol.id == id)
+            return &symbol;
+    return nullptr;
+}
+
+bool Graph::AddSymbol(Symbol symbol) {
+    if (symbol.id.empty() || symbol.id.find_first_of(" 	") != std::string::npos || FindSymbol(symbol.id) != nullptr)
+        return false;
+    symbols_.push_back(std::move(symbol));
+    return true;
+}
+
+bool Graph::RemoveSymbol(const std::string& id) {
+    for (auto it = symbols_.begin(); it != symbols_.end(); ++it)
+        if (it->id == id) {
+            symbols_.erase(it);
+            return true;
+        }
+    return false;
+}
+
 } // namespace ce::node_system

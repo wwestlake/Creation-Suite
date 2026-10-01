@@ -19,6 +19,39 @@ const NodeTypeDescriptor* NodeTypeRegistry::Find(const std::string& typeName) co
     return it == types_.end() ? nullptr : &it->second;
 }
 
+void NodeTypeRegistry::RegisterEnum(EnumDef def) {
+    for (auto& existing : enums_) {
+        if (existing.name == def.name) {
+            existing = std::move(def);
+            return;
+        }
+    }
+    enums_.push_back(std::move(def));
+}
+
+const EnumDef* NodeTypeRegistry::FindEnum(const std::string& name) const {
+    for (const auto& def : enums_) {
+        if (def.name == name) {
+            return &def;
+        }
+    }
+    return nullptr;
+}
+
+const EnumDef* PinEnum(const NodeTypeRegistry& registry, const Node& node, const Pin& pin) {
+    if (!pin.type.enumType.empty()) {
+        return registry.FindEnum(pin.type.enumType);
+    }
+    if (const auto* descriptor = registry.Find(node.TypeName())) {
+        for (const auto& sig : pin.isInput ? descriptor->inputs : descriptor->outputs) {
+            if (sig.name == pin.name) {
+                return sig.type.enumType.empty() ? nullptr : registry.FindEnum(sig.type.enumType);
+            }
+        }
+    }
+    return nullptr;
+}
+
 Node* AddRegisteredNode(Graph& graph, const NodeTypeRegistry& registry, const std::string& typeName,
                          std::string* errorOut) {
     const NodeTypeDescriptor* descriptor = registry.Find(typeName);
@@ -41,6 +74,13 @@ Node* AddRegisteredNode(Graph& graph, const NodeTypeRegistry& registry, const st
 
 namespace {
 
+// A pin matches its signature's type; a pin may carry an enum its signature leaves open (a Get node bound to a
+// Choice symbol), but never a different one.
+bool PinTypeMatchesSignature(const PinTypeDesc& pin, const PinTypeDesc& signature) {
+    return pin.kind == signature.kind && pin.dataType == signature.dataType && pin.monad == signature.monad
+        && (signature.enumType.empty() || signature.enumType == pin.enumType);
+}
+
 bool PinsMatchSignature(const std::vector<Pin>& pins, const std::vector<PinSignature>& signatures,
                          const std::string& nodeTypeName, const char* direction, std::vector<std::string>* errorsOut) {
     bool ok = true;
@@ -58,7 +98,7 @@ bool PinsMatchSignature(const std::vector<Pin>& pins, const std::vector<PinSigna
         // Name and type only -- NOT defaultValue, which a node instance
         // is free to override (see PinSignature/ValidateAgainstRegistry's
         // own comments on why).
-        if (pins[i].name != signatures[i].name || !(pins[i].type == signatures[i].type)) {
+        if (pins[i].name != signatures[i].name || !PinTypeMatchesSignature(pins[i].type, signatures[i].type)) {
             ok = false;
             if (errorsOut) {
                 std::ostringstream msg;
