@@ -38,6 +38,42 @@ const EnumDef* NodeTypeRegistry::FindEnum(const std::string& name) const {
     return nullptr;
 }
 
+bool AllowedInDiagram(const NodeTypeDescriptor& descriptor, const std::string& diagramType) {
+    return diagramType.empty() || descriptor.diagramTypes.empty()
+        || std::find(descriptor.diagramTypes.begin(), descriptor.diagramTypes.end(), diagramType) != descriptor.diagramTypes.end();
+}
+
+void NodeTypeRegistry::RegisterDiagramType(DiagramTypeDef def) {
+    for (auto& existing : diagramTypes_) {
+        if (existing.id == def.id) {
+            existing = std::move(def);
+            return;
+        }
+    }
+    diagramTypes_.push_back(std::move(def));
+}
+
+const DiagramTypeDef* NodeTypeRegistry::FindDiagramType(const std::string& id) const {
+    for (const auto& def : diagramTypes_) {
+        if (def.id == id) {
+            return &def;
+        }
+    }
+    return nullptr;
+}
+
+std::vector<NodeId> NodesNotAllowedIn(const Graph& graph, const NodeTypeRegistry& registry, const std::string& diagramType) {
+    std::vector<NodeId> blocked;
+    for (const auto& [id, node] : graph.Nodes()) {
+        const auto* descriptor = registry.Find(node->TypeName());
+        if (descriptor == nullptr || !AllowedInDiagram(*descriptor, diagramType)) {
+            blocked.push_back(id);
+        }
+    }
+    std::sort(blocked.begin(), blocked.end());
+    return blocked;
+}
+
 const EnumDef* PinEnum(const NodeTypeRegistry& registry, const Node& node, const Pin& pin) {
     if (!pin.type.enumType.empty()) {
         return registry.FindEnum(pin.type.enumType);

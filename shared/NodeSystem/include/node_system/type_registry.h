@@ -112,7 +112,21 @@ struct NodeTypeDescriptor {
     // (same convention every existing EngineFrustHost host function
     // already follows).
     bool isHostExtern = false;
+
+    // The graph types (Graph::DiagramType, GRAPH_TYPES.md) this node belongs in - "image", "material"... Empty: every
+    // type (shared nodes such as symbol Get nodes and plain values).
+    std::vector<std::string> diagramTypes;
 };
+
+// A kind of graph an app offers (GRAPH_TYPES.md): its id as saved in the graph, and how people see it.
+struct DiagramTypeDef {
+    std::string id;          // "image"
+    std::string displayName; // "Image"
+    std::string description;
+};
+
+// Whether a node type belongs in a graph of this type: it lists the type, lists none (shared), or the graph is untyped.
+bool AllowedInDiagram(const NodeTypeDescriptor& descriptor, const std::string& diagramType);
 
 class NodeTypeRegistry {
 public:
@@ -134,12 +148,18 @@ public:
 
     // The enums the registered node types use (enums.h), in registration order. Re-registering a name replaces it.
     void RegisterEnum(EnumDef def);
+
+    // The graph types the registered nodes are for, in registration order. Re-registering an id replaces it.
+    void RegisterDiagramType(DiagramTypeDef def);
+    const DiagramTypeDef* FindDiagramType(const std::string& id) const;
+    const std::vector<DiagramTypeDef>& DiagramTypes() const { return diagramTypes_; }
     const EnumDef* FindEnum(const std::string& name) const;
     const std::vector<EnumDef>& Enums() const { return enums_; }
 
 private:
     std::unordered_map<std::string, NodeTypeDescriptor> types_;
     std::vector<EnumDef> enums_;
+    std::vector<DiagramTypeDef> diagramTypes_;
 };
 
 // Constructs a node in `graph` from `registry`'s descriptor for
@@ -192,5 +212,9 @@ DataType ResolveEffectivePinType(const NodeTypeDescriptor& type, const Node& nod
 // The enum a pin's values are named by: the pin's own tag, else its registered signature's (a pin loaded from a
 // graph saved before its node type tagged it). Null for a plain pin or an unregistered enum.
 const EnumDef* PinEnum(const NodeTypeRegistry& registry, const Node& node, const Pin& pin);
+
+// The nodes of `graph` that do not belong in a graph of `diagramType` (or are not registered) - what stands in the
+// way of changing a graph's type.
+std::vector<NodeId> NodesNotAllowedIn(const Graph& graph, const NodeTypeRegistry& registry, const std::string& diagramType);
 
 } // namespace ce::node_system

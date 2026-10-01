@@ -533,6 +533,11 @@ void NodeGraphComponent::itemDropped(const SourceDetails& details) {
         if (const auto* symbol = graph_.FindSymbol(typeName.substr(std::string(kSymbolDragPrefix).size())))
             node = ce::node_system::AddSymbolGetNode(graph_, registry_, *symbol, &error);
     } else {
+        // A node type that belongs to another kind of graph is not added (GRAPH_TYPES.md).
+        const auto* descriptor = registry_.Find(typeName);
+        if (descriptor != nullptr && !ce::node_system::AllowedInDiagram(*descriptor, graph_.DiagramType())) {
+            return;
+        }
         node = ce::node_system::AddRegisteredNode(graph_, registry_, typeName, &error);
     }
     if (node == nullptr) {

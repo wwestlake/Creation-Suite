@@ -148,6 +148,10 @@ std::string SerializeGraph(const Graph& graph) {
     os << "frgraph 1\n";
     os << "graph " << graph.Name() << "\n";
     os << "target " << GraphTargetToString(graph.Target()) << "\n";
+    // The graph's type (GRAPH_TYPES.md), only when it has one, so untyped graphs serialise exactly as before.
+    if (!graph.DiagramType().empty()) {
+        os << "diagram " << graph.DiagramType() << "\n";
+    }
 
     // Graph symbols (symbols.h), in order. Absent entirely for a graph without any, so older graphs serialise
     // byte-for-byte as before.
@@ -257,6 +261,12 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
             if (graph) {
                 graph->SetTarget(target);
             }
+        } else if (keyword == "diagram") {
+            std::string type;
+            if (!graph || !(tok >> type)) {
+                return fail("malformed 'diagram' line (expected: diagram <type>)");
+            }
+            graph->SetDiagramType(type);
         } else if (keyword == "symbol") {
             if (!graph) {
                 return fail("'symbol' line before 'graph' line");
