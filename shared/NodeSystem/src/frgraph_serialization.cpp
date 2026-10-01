@@ -149,6 +149,95 @@ std::size_t FirstNonBlank(std::string& line) {
 
 } // namespace
 
+// Enum lines (TYPES.md): "enum <Name>", then its display name, values and descriptions.
+void WriteEnumLines(std::ostream& os, const std::vector<EnumDef>& enums) {
+    for (const EnumDef& def : enums) {
+        os << "enum " << def.name << "\n";
+        os << "enumname " << def.name << " " << def.displayName << "\n";
+        for (size_t i = 0; i < def.variants.size(); ++i) {
+            const auto& variant = def.variants[i];
+            os << "enumvariant " << def.name << " " << variant.name << "\n";
+            if (variant.colour != 0) {
+                os << "enumvariantcolour " << def.name << " " << i << " " << std::hex << variant.colour << std::dec << "\n";
+            }
+            if (!variant.description.empty()) {
+                os << "enumvariantdescription " << def.name << " " << i << " " << variant.description << "\n";
+            }
+        }
+        if (!def.description.empty()) {
+            os << "enumdescription " << def.name << " " << def.description << "\n";
+        }
+    }
+}
+
+// One enum line into `enums`; false with an error if it is malformed. Handles every "enum..." keyword.
+bool ReadEnumLine(const std::string& keyword, std::istringstream& tok, std::vector<EnumDef>& enums, TypeScope scope, std::string& error) {
+    auto find = [&enums](const std::string& name) -> EnumDef* {
+        for (auto& def : enums)
+            if (def.name == name)
+                return &def;
+        return nullptr;
+    };
+    std::string name;
+    if (!(tok >> name)) {
+        error = "malformed '" + keyword + "' line";
+        return false;
+    }
+    if (keyword == "enum") {
+        if (find(name) != nullptr || name.find_first_of(" \t") != std::string::npos) {
+            error = "duplicate enum '" + name + "'";
+            return false;
+        }
+        EnumDef def;
+        def.name = name;
+        def.displayName = name;
+        def.scope = scope;
+        enums.push_back(std::move(def));
+        return true;
+    }
+    EnumDef* def = find(name);
+    if (def == nullptr) {
+        error = "'" + keyword + "' for unknown enum '" + name + "'";
+        return false;
+    }
+    auto restOf = [&tok]() {
+        std::string rest;
+        std::getline(tok, rest);
+        if (!rest.empty() && rest.front() == ' ') {
+            rest.erase(0, 1);
+        }
+        return rest;
+    };
+    if (keyword == "enumname") {
+        def->displayName = restOf();
+    } else if (keyword == "enumvariant") {
+        def->variants.push_back(EnumVariant(restOf()));
+    } else if (keyword == "enumdescription") {
+        def->description = restOf();
+    } else if (keyword == "enumvariantcolour" || keyword == "enumvariantdescription") {
+        size_t index = 0;
+        if (!(tok >> index) || index >= def->variants.size()) {
+            error = "'" + keyword + "' for a value enum '" + name + "' does not have";
+            return false;
+        }
+        if (keyword == "enumvariantcolour") {
+            std::uint32_t colour = 0;
+            if (!(tok >> std::hex >> colour)) {
+                error = "malformed colour on '" + keyword + "'";
+                return false;
+            }
+            tok >> std::dec;
+            def->variants[index].colour = colour;
+        } else {
+            def->variants[index].description = restOf();
+        }
+    } else {
+        error = "unknown enum keyword '" + keyword + "'";
+        return false;
+    }
+    return true;
+}
+
 std::string SerializeGraph(const Graph& graph) {
     std::ostringstream os;
     os << std::setprecision(9);
@@ -159,6 +248,9 @@ std::string SerializeGraph(const Graph& graph) {
     if (!graph.DiagramType().empty()) {
         os << "diagram " << graph.DiagramType() << "\n";
     }
+
+    // The graph's own enums (TYPES.md), before the symbols that use them; absent for a graph without any.
+    WriteEnumLines(os, graph.Enums());
 
     // Graph symbols (symbols.h), in order. Absent entirely for a graph without any, so older graphs serialise
     // byte-for-byte as before.
@@ -218,6 +310,7 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
     int lineNo = 0;
     bool sawHeader = false;
     std::unique_ptr<Graph> graph;
+    std::vector<EnumDef> pendingEnums; // the graph's own enums, added when it is complete
     GraphTarget target = GraphTarget::Behavior;
 
     auto fail = [&](const std::string& msg) -> std::unique_ptr<Graph> {
@@ -274,6 +367,15 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
                 return fail("malformed 'diagram' line (expected: diagram <type>)");
             }
             graph->SetDiagramType(type);
+        } else if (keyword.rfind("enum", 0) == 0) {
+            // The graph's own enums are read into a list and added once the graph is complete (see below).
+            if (!graph) {
+                return fail("'" + keyword + "' line before 'graph' line");
+            }
+            std::string enumError;
+            if (!ReadEnumLine(keyword, tok, pendingEnums, TypeScope::graph, enumError)) {
+                return fail(enumError);
+            }
         } else if (keyword == "symbol") {
             if (!graph) {
                 return fail("'symbol' line before 'graph' line");
@@ -522,7 +624,55 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
     if (!graph) {
         return fail("missing 'graph' line");
     }
+    for (auto& def : pendingEnums) {
+        if (!graph->AddEnum(std::move(def))) {
+            return fail("duplicate enum");
+        }
+    }
     return graph;
+}
+
+std::string SerializeTypes(const std::vector<EnumDef>& enums) {
+    std::ostringstream os;
+    os << "frtypes 1\n";
+    WriteEnumLines(os, enums);
+    return os.str();
+}
+
+bool DeserializeTypes(const std::string& text, TypeScope scope, std::vector<EnumDef>& enums, std::string& error) {
+    enums.clear();
+    std::istringstream in(text);
+    std::string line;
+    bool header = false;
+    int lineNumber = 0;
+    while (std::getline(in, line)) {
+        ++lineNumber;
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.find_first_not_of(" \t") == std::string::npos || line.rfind("#", 0) == 0) {
+            continue;
+        }
+        std::istringstream tok(line);
+        std::string keyword;
+        tok >> keyword;
+        if (!header) {
+            if (keyword != "frtypes") {
+                error = "not a types file (expected 'frtypes 1')";
+                return false;
+            }
+            header = true;
+            continue;
+        }
+        if (keyword.rfind("enum", 0) != 0 || !ReadEnumLine(keyword, tok, enums, scope, error)) {
+            if (error.empty()) {
+                error = "unknown line '" + keyword + "'";
+            }
+            error = "line " + std::to_string(lineNumber) + ": " + error;
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace ce::node_system

@@ -29,6 +29,14 @@ void NodeTypeRegistry::RegisterEnum(EnumDef def) {
     enums_.push_back(std::move(def));
 }
 
+void NodeTypeRegistry::ReplaceEnums(TypeScope scope, std::vector<EnumDef> defs) {
+    enums_.erase(std::remove_if(enums_.begin(), enums_.end(), [scope](const EnumDef& e) { return e.scope == scope; }), enums_.end());
+    for (auto& def : defs) {
+        def.scope = scope;
+        RegisterEnum(std::move(def));
+    }
+}
+
 const EnumDef* NodeTypeRegistry::FindEnum(const std::string& name) const {
     for (const auto& def : enums_) {
         if (def.name == name) {
@@ -72,6 +80,23 @@ std::vector<NodeId> NodesNotAllowedIn(const Graph& graph, const NodeTypeRegistry
     }
     std::sort(blocked.begin(), blocked.end());
     return blocked;
+}
+
+const EnumDef* FindEnumFor(const Graph& graph, const NodeTypeRegistry& registry, const std::string& name) {
+    if (name.empty()) {
+        return nullptr;
+    }
+    if (const auto* own = graph.FindEnum(name)) {
+        return own;
+    }
+    return registry.FindEnum(name);
+}
+
+const EnumDef* PinEnum(const Graph& graph, const NodeTypeRegistry& registry, const Node& node, const Pin& pin) {
+    if (!pin.type.enumType.empty()) {
+        return FindEnumFor(graph, registry, pin.type.enumType);
+    }
+    return PinEnum(registry, node, pin);
 }
 
 const EnumDef* PinEnum(const NodeTypeRegistry& registry, const Node& node, const Pin& pin) {

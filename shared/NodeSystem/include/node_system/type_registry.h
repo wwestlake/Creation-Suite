@@ -166,6 +166,8 @@ public:
     const std::vector<DiagramTypeDef>& DiagramTypes() const { return diagramTypes_; }
     const EnumDef* FindEnum(const std::string& name) const;
     const std::vector<EnumDef>& Enums() const { return enums_; }
+    // Replaces every enum of one scope with these (an app reloading the project's types, TYPES.md); each gets that scope.
+    void ReplaceEnums(TypeScope scope, std::vector<EnumDef> defs);
 
 private:
     std::unordered_map<std::string, NodeTypeDescriptor> types_;
@@ -223,6 +225,11 @@ DataType ResolveEffectivePinType(const NodeTypeDescriptor& type, const Node& nod
 // The enum a pin's values are named by: the pin's own tag, else its registered signature's (a pin loaded from a
 // graph saved before its node type tagged it). Null for a plain pin or an unregistered enum.
 const EnumDef* PinEnum(const NodeTypeRegistry& registry, const Node& node, const Pin& pin);
+
+// An enum by name: the graph's own first (enums it defines), then the registry's.
+const EnumDef* FindEnumFor(const Graph& graph, const NodeTypeRegistry& registry, const std::string& name);
+// PinEnum that also knows the graph's own enums.
+const EnumDef* PinEnum(const Graph& graph, const NodeTypeRegistry& registry, const Node& node, const Pin& pin);
 
 // The nodes of `graph` that do not belong in a graph of `diagramType` (or are not registered) - what stands in the
 // way of changing a graph's type.

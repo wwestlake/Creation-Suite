@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "node_system/node.h"
+#include "node_system/enums.h"
 #include "node_system/symbols.h"
 
 namespace ce::node_system {
@@ -97,6 +98,15 @@ public:
     const std::string& DiagramType() const { return diagramType_; }
     void SetDiagramType(std::string type) { diagramType_ = std::move(type); }
 
+    // The graph's own enums (enums.h; research's schematic "enums"): created in the node system, saved with the graph,
+    // compiled to FRust enums. Choice params and enum settings use them like the registry's. Names are identifiers.
+    const std::vector<EnumDef>& Enums() const { return enums_; }
+    const EnumDef* FindEnum(const std::string& name) const;
+    EnumDef* FindEnum(const std::string& name);
+    // False if the name is empty, contains a space, or is already used.
+    bool AddEnum(EnumDef def);
+    bool RemoveEnum(const std::string& name);
+
     // Graph symbols (symbols.h): the params, constants and variables that belong to this graph, in the order they
     // were added. Get nodes refer to them by id.
     const std::vector<Symbol>& Symbols() const { return symbols_; }
@@ -115,6 +125,7 @@ private:
     std::unordered_map<NodeId, std::unique_ptr<Node>> nodes_;
     std::vector<Connection> connections_;
     std::vector<Symbol> symbols_;
+    std::vector<EnumDef> enums_;
     std::string diagramType_;
     NodeId nextNodeId_ = 1;
     ConnectionId nextConnectionId_ = 1;
