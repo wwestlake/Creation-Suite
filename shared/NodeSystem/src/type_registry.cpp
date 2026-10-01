@@ -118,9 +118,10 @@ bool PinTypeMatchesSignature(const PinTypeDesc& pin, const PinTypeDesc& signatur
 }
 
 bool PinsMatchSignature(const std::vector<Pin>& pins, const std::vector<PinSignature>& signatures,
-                         const std::string& nodeTypeName, const char* direction, std::vector<std::string>* errorsOut) {
+                         const std::string& nodeTypeName, const char* direction, std::vector<std::string>* errorsOut,
+                         bool dynamicPins = false) {
     bool ok = true;
-    if (pins.size() != signatures.size()) {
+    if (dynamicPins ? pins.size() < signatures.size() : pins.size() != signatures.size()) {
         ok = false;
         if (errorsOut) {
             std::ostringstream msg;
@@ -161,8 +162,8 @@ bool ValidateAgainstRegistry(const Graph& graph, const NodeTypeRegistry& registr
             }
             continue;
         }
-        ok = PinsMatchSignature(node->Inputs(), descriptor->inputs, node->TypeName(), "input", errorsOut) && ok;
-        ok = PinsMatchSignature(node->Outputs(), descriptor->outputs, node->TypeName(), "output", errorsOut) && ok;
+        ok = PinsMatchSignature(node->Inputs(), descriptor->inputs, node->TypeName(), "input", errorsOut, descriptor->dynamicPins) && ok;
+        ok = PinsMatchSignature(node->Outputs(), descriptor->outputs, node->TypeName(), "output", errorsOut, descriptor->dynamicPins) && ok;
     }
     return ok;
 }

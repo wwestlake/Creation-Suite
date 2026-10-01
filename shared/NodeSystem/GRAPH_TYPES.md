@@ -11,8 +11,8 @@ It follows the research node language's schematic (FrustLang `projects/10_node_c
 
 Built in phases. Djehuti Texture is the first user, as it was for Variables (SYMBOLS.md):
 
-1. **Graph types** - done (this document, below).
-2. Graph interface and the Graph node (a graph used inside a graph of the same type).
+1. **Graph types** - done.
+2. **Graph interface and the Graph node** - done (a graph used inside a graph of the same type).
 3. One graph editor in Texture for every type (Materials and Image Graph merge).
 4. Cross-type graph nodes (an Image graph as a texture source in a Material graph).
 5. Convert to Graph (collapse selected nodes into a new graph, boundary wires becoming its pins).
@@ -41,3 +41,41 @@ targets.
 1. Give each of its node types the graph types it belongs in (`diagramTypes`); leave shared nodes empty.
 2. Register its graph types (`RegisterDiagramType`).
 3. Set the type on every graph it makes or opens, and on its palette (`SetDiagramType`).
+
+## 2. Graph interfaces and the Graph node
+
+`node_system/graph_nodes.h`.
+
+- **A graph's interface** (`InterfaceOf(graph, registry)`):
+  - **Inputs:** its params (SYMBOLS.md), each named by its id, typed by the param (Choices keep their enum), with the
+    param's value as the default. Then its **graph-input nodes**.
+  - **Outputs:** its **graph-output nodes**.
+- **Graph-input and graph-output nodes** are ordinary node types whose descriptor sets `graphPort`
+  (`GraphPort::input` / `GraphPort::output`).
+  - Each names its port with a text pin called `name` (spaces become `_`).
+  - An input's type is its first output pin's type. An output's type is its first input pin's type other than `name`.
+  - On its own, a graph-input node should still work, with a value of its own, so the graph can be opened and
+    previewed by itself.
+- **The Graph node** `core.graph` (`RegisterGraphNode(registry, diagramTypes)`, category "Graphs") has one fixed input,
+  `graph`: which graph it uses, as a path the app resolves (a project asset). After that it has one pin per port.
+  - Its descriptor has `dynamicPins`, so validation checks only the fixed pin.
+  - `SyncGraphNodePins(host, node, interface)` brings its pins up to date. It keeps the ones that still match a port,
+    with their wires and typed-in values. It removes the others along with their wires, and adds new ones.
+  - Call it when the node's graph is chosen, and when a graph that uses others is opened, since those graphs may have
+    changed.
+- **Evaluating or compiling a Graph node is the app's job.** Run the used graph with its params set from the node's
+  inputs (a param's outside value, as in SYMBOLS.md) and its graph-input nodes fed from the node's wired inputs. Take
+  each wanted output from the graph-output node of that name.
+  - Refuse a graph that uses itself, directly or through others; a depth limit does it.
+  - A change to the used graph must change the result. Make the saved text of the used graph part of the node's cache
+    key.
+
+### What an app does (on top of section 1)
+
+1. Mark its input and output node types with `graphPort`; give inputs a value of their own.
+2. Register the Graph node for its graph types.
+3. In the Graph node's own Properties, offer the saved graphs it can use (never the graph itself), and sync the pins.
+4. Run a used graph in its evaluator or compiler as above.
+
+Djehuti Texture's Image Graph is the reference: Graph Input and Output nodes, the Graph node in Properties, and nested
+evaluation sharing one compiled FRust runtime (`image_graph::Evaluator`).

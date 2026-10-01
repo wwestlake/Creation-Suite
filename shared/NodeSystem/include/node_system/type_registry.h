@@ -71,6 +71,10 @@ struct PinSignature {
 // one type name; AddRegisteredNode (below) is what actually constructs
 // a node guaranteed to match it. Control-flow metadata identifies structured
 // Suite nodes without coupling this graph layer to FRust syntax.
+// A node that is one end of its graph's interface (graph_nodes.h): a graph-input node brings a value in from the
+// Graph node that uses the graph; a graph-output node hands one out.
+enum class GraphPort { none, input, output };
+
 struct NodeTypeDescriptor {
     std::string typeName;
     Domain domain = Domain::Core;
@@ -116,6 +120,13 @@ struct NodeTypeDescriptor {
     // The graph types (Graph::DiagramType, GRAPH_TYPES.md) this node belongs in - "image", "material"... Empty: every
     // type (shared nodes such as symbol Get nodes and plain values).
     std::vector<std::string> diagramTypes;
+
+    // A graph-input or graph-output node (graph_nodes.h).
+    GraphPort graphPort = GraphPort::none;
+
+    // The node's pins after the declared ones vary per instance (a Graph node's follow the graph it uses), so only
+    // the declared pins are checked against this descriptor.
+    bool dynamicPins = false;
 };
 
 // A kind of graph an app offers (GRAPH_TYPES.md): its id as saved in the graph, and how people see it.

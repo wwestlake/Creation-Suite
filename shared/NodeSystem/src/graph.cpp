@@ -100,6 +100,14 @@ std::optional<ConnectionId> Graph::ConnectInternal(std::optional<ConnectionId> e
     return id;
 }
 
+void Graph::DisconnectPin(NodeId node, PinId pin) {
+    connections_.erase(std::remove_if(connections_.begin(), connections_.end(),
+                                      [node, pin](const Connection& c) {
+                                          return (c.fromNode == node && c.fromPin == pin) || (c.toNode == node && c.toPin == pin);
+                                      }),
+                       connections_.end());
+}
+
 bool Graph::Disconnect(ConnectionId id) {
     auto it = std::find_if(connections_.begin(), connections_.end(),
                             [id](const Connection& c) { return c.id == id; });
