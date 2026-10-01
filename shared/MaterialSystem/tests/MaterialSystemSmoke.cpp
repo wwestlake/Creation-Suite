@@ -1,5 +1,6 @@
 #include <creation/material/material_compiler.h>
 #include <creation/material/material_nodes.h>
+#include <node_system/symbol_nodes.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -49,6 +50,47 @@ void RunSmoke()
         if (glsl.find("uniform sampler2D uMaterialTex0;") == std::string::npos
             || texturedCompiled.source.evaluateFunction.find("texture(uMaterialTex0, vUV).rgb") == std::string::npos)
             throw std::runtime_error("Texture sampler declaration or sample expression is missing:\n" + glsl);
+    }
+
+    // Graph types: every material node belongs in "material" graphs, and the type is registered.
+    {
+        const auto* constant = registry.Find("material.constant.color");
+        if (constant == nullptr || constant->diagramTypes != std::vector<std::string> { ce::material::kMaterialDiagram }
+            || registry.FindDiagramType(ce::material::kMaterialDiagram) == nullptr)
+            throw std::runtime_error("Material nodes are not typed as material graph nodes.");
+    }
+
+    // Variables (shared/NodeSystem/SYMBOLS.md): a colour param becomes the uniform uMaterial_tint with its value as the
+    // default; a number constant becomes the literal 0.25f.
+    {
+        namespace ns = ce::node_system;
+        ns::NodeTypeRegistry withSymbols;
+        ce::material::RegisterMaterialNodes(withSymbols);
+        ns::RegisterSymbolGetNodes(withSymbols);
+        ns::Graph symbolic("SymbolSmoke");
+        symbolic.AddSymbol({ "tint", "Tint", ns::SymbolKind::Param, ns::DataType::Color, ns::Vec3Default { 0.25f, 0.5f, 0.75f }, "public", false, "" });
+        symbolic.AddSymbol({ "rough", "Rough", ns::SymbolKind::Constant, ns::DataType::Float, 0.25f, "graph", false, "" });
+        auto* tint = ns::AddSymbolGetNode(symbolic, withSymbols, *symbolic.FindSymbol("tint"), &error);
+        auto* rough = ns::AddSymbolGetNode(symbolic, withSymbols, *symbolic.FindSymbol("rough"), &error);
+        auto* out = ns::AddRegisteredNode(symbolic, withSymbols, "material.surface.output", &error);
+        if (tint == nullptr || rough == nullptr || out == nullptr) throw std::runtime_error("Failed to build the Variables material.");
+        ns::PinId baseColor = 0, roughness = 0;
+        for (const auto& pin : out->Inputs()) {
+            if (pin.name == "baseColor") baseColor = pin.id;
+            if (pin.name == "roughness") roughness = pin.id;
+        }
+        if (baseColor == 0 || roughness == 0
+            || ! symbolic.Connect(tint->Id(), tint->Outputs().front().id, out->Id(), baseColor).has_value()
+            || ! symbolic.Connect(rough->Id(), rough->Outputs().front().id, out->Id(), roughness).has_value())
+            throw std::runtime_error("Failed to wire the Variables material.");
+        const auto compiledSymbols = ce::material::CompileMaterialGraph(symbolic, withSymbols);
+        if (! compiledSymbols.ok) throw std::runtime_error("The Variables material did not compile.");
+        bool param = false;
+        for (const auto& p : compiledSymbols.source.parameters)
+            param = param || (p.name == "tint" && p.type == ns::DataType::Color && p.defaultColor.y == 0.5f);
+        if (! param || compiledSymbols.source.evaluateFunction.find("uMaterial_tint") == std::string::npos
+            || compiledSymbols.source.evaluateFunction.find("0.25f") == std::string::npos)
+            throw std::runtime_error("Variables did not become a parameter and a literal:\n" + compiledSymbols.source.evaluateFunction);
     }
 
     std::cout << "MaterialSystem smoke passed.\n";

@@ -19,7 +19,8 @@ namespace ns = node_system;
 // them would just wall off the extremely common "wire a normal into
 // BaseColor to debug it" move for no real benefit; UE's own pin
 // compatibility doesn't distinguish them either.
-void RegisterMaterialNodes(ns::NodeTypeRegistry& registry)
+namespace {
+void RegisterMaterialNodeTypes(ns::NodeTypeRegistry& registry)
 {
     // --- Coordinates ---
     registry.Register({.typeName = "material.uv0", .domain = ns::Domain::Material,
@@ -223,5 +224,20 @@ void RegisterMaterialNodes(ns::NodeTypeRegistry& registry)
                        .displayName = "Material Output", .category = "Output"});
 }
 
-} // namespace ce::material
+} // namespace
 
+void RegisterMaterialNodes(ns::NodeTypeRegistry& registry)
+{
+    // Every material node belongs in material graphs (GRAPH_TYPES.md).
+    ns::NodeTypeRegistry own;
+    RegisterMaterialNodeTypes(own);
+    for (auto [name, descriptor] : own.Types()) {
+        descriptor.diagramTypes = { kMaterialDiagram };
+        registry.Register(std::move(descriptor));
+    }
+    for (const auto& def : own.Enums())
+        registry.RegisterEnum(def);
+    registry.RegisterDiagramType({ kMaterialDiagram, "Material", "A surface material: a shader with a lit 3D preview." });
+}
+
+} // namespace ce::material
