@@ -53,6 +53,8 @@ juce::String DataTypeName(DataType type) {
         case DataType::Material: return "Material";
         case DataType::Model: return "Model";
         case DataType::Controller: return "Controller";
+        case DataType::Drawing: return "Drawing";
+        case DataType::Brush: return "Brush";
         default: return "Any";
     }
 }

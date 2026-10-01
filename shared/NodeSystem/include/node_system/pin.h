@@ -53,6 +53,10 @@ enum class DataType {
     Material,
     Model,
     Controller,
+    // Drawing (owner, 2026-10-01): what an image-drawing graph draws - shapes and paths, before any paint - and the
+    // Brush it is painted with. Opaque to the node system; the host defines the data (Djehuti Texture's Image Graph).
+    Drawing,
+    Brush,
 };
 
 enum class MonadKind {
