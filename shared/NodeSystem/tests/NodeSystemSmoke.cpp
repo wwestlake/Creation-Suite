@@ -261,6 +261,48 @@ int main()
             std::cout << "NodeSystem enums: ok" << std::endl;
         }
 
+        // Graph types (GRAPH_TYPES.md): the graph's type picks the node types that belong in it.
+        {
+            namespace ns = ce::node_system;
+            ns::NodeTypeRegistry typed;
+            ns::RegisterSymbolGetNodes(typed); // shared: no diagram types listed
+            typed.RegisterDiagramType({ "image", "Image", "" });
+            typed.RegisterDiagramType({ "material", "Material", "" });
+            ns::NodeTypeDescriptor blur { "image.blur", ns::Domain::Core, {}, { { "image", { ns::PinKind::Data, ns::DataType::Texture }, {} } } };
+            blur.diagramTypes = { "image" };
+            ns::NodeTypeDescriptor albedo { "material.albedo", ns::Domain::Core, {}, { { "color", { ns::PinKind::Data, ns::DataType::Color }, {} } } };
+            albedo.diagramTypes = { "material" };
+            typed.Register(blur);
+            typed.Register(albedo);
+            const auto* get = typed.Find("core.symbol.get.float");
+            if (typed.DiagramTypes().size() != 2 || typed.FindDiagramType("material")->displayName != "Material")
+                fail("Diagram types did not register.");
+            if (!ns::AllowedInDiagram(blur, "image") || ns::AllowedInDiagram(blur, "material") || !ns::AllowedInDiagram(blur, "")
+                || get == nullptr || !ns::AllowedInDiagram(*get, "image") || !ns::AllowedInDiagram(*get, "material"))
+                fail("AllowedInDiagram gave the wrong answer.");
+
+            ns::Graph image("Typed", ns::GraphTarget::Dataflow);
+            const std::string untyped = ns::SerializeGraph(image);
+            if (untyped.find("diagram") != std::string::npos)
+                fail("An untyped graph wrote a diagram line.");
+            image.SetDiagramType("image");
+            auto* b = ns::AddRegisteredNode(image, typed, "image.blur", &error);
+            auto* a = ns::AddRegisteredNode(image, typed, "material.albedo", &error);
+            if (b == nullptr || a == nullptr)
+                fail("Could not build the typed graph.");
+            const auto blocked = ns::NodesNotAllowedIn(image, typed, "image");
+            if (blocked.size() != 1 || blocked[0] != a->Id())
+                fail("NodesNotAllowedIn did not single out the material node.");
+            const std::string text = ns::SerializeGraph(image);
+            if (text.find("target dataflow\ndiagram image\n") == std::string::npos)
+                fail("Unexpected diagram line:\n" + text);
+            std::string typedError;
+            auto reloaded = ns::DeserializeGraph(text, typedError);
+            if (reloaded == nullptr || reloaded->DiagramType() != "image" || ns::SerializeGraph(*reloaded) != text)
+                fail("A typed graph does not round-trip byte for byte.");
+            std::cout << "NodeSystem graph types: ok" << std::endl;
+        }
+
         return 0;
     }
     catch (const std::exception& exception)

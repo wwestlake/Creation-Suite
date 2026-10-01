@@ -18,10 +18,10 @@ namespace creation::node_editor_ui {
 // support (ListBoxModel::getDragSourceDescription returning non-void triggers it automatically
 // via the nearest ancestor juce::DragAndDropContainer).
 //
-// Pass a registry that ONLY contains the domain you want shown - this class has no per-domain
-// filtering of its own, it lists everything in `registry.Types()`. Each domain (Signal Lab, video
-// FX, Foley) is expected to own its own NodeTypeRegistry instance rather than sharing one, per
-// the suite's explicit "share editing machinery, never merge catalogs" stance.
+// It lists the registry's types that belong in the current graph type (SetDiagramType; owner
+// decision 2026-10-01, shared/NodeSystem/GRAPH_TYPES.md: one node system, the graph's type picks
+// the node list). An app may still keep a separate registry per domain; with no graph type set,
+// everything in `registry.Types()` is listed.
 //
 // Entries are grouped into collapsible-by-category sections (a single ListBox of synthesized
 // header + entry rows, rebuilt on expand/collapse or filter change) instead of a flat list with a
@@ -31,6 +31,9 @@ public:
     explicit NodePalette(const ce::node_system::NodeTypeRegistry& registry);
 
     void RefreshFromRegistry();
+
+    // Shows only the node types that belong in a graph of this type (GRAPH_TYPES.md); empty shows them all.
+    void SetDiagramType(std::string diagramType);
 
     void resized() override;
     void paint(juce::Graphics& g) override;
@@ -50,6 +53,7 @@ private:
     struct Entry { std::string typeName, displayName, category; };
     std::vector<Entry> entries_;
     const ce::node_system::NodeTypeRegistry& registry_;
+    std::string diagramType_;
 
     // One synthesized row, either a collapsible category header or a
     // reference back into entries_ -- rebuilt whenever a header is

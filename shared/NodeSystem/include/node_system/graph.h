@@ -90,6 +90,11 @@ public:
     GraphTarget Target() const { return target_; }
     void SetTarget(GraphTarget target) { target_ = target; }
 
+    // The graph's type - what kind of thing it makes ("image", "material"...): research's schematic `diagramType`
+    // (shared/NodeSystem/GRAPH_TYPES.md). It decides which node types belong in it. Empty: untyped, anything goes.
+    const std::string& DiagramType() const { return diagramType_; }
+    void SetDiagramType(std::string type) { diagramType_ = std::move(type); }
+
     // Graph symbols (symbols.h): the params, constants and variables that belong to this graph, in the order they
     // were added. Get nodes refer to them by id.
     const std::vector<Symbol>& Symbols() const { return symbols_; }
@@ -108,6 +113,7 @@ private:
     std::unordered_map<NodeId, std::unique_ptr<Node>> nodes_;
     std::vector<Connection> connections_;
     std::vector<Symbol> symbols_;
+    std::string diagramType_;
     NodeId nextNodeId_ = 1;
     ConnectionId nextConnectionId_ = 1;
 };

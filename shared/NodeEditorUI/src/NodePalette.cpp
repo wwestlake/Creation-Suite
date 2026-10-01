@@ -29,9 +29,17 @@ NodePalette::NodePalette(const ce::node_system::NodeTypeRegistry& registry) : re
     listBox_.updateContent();
 }
 
+void NodePalette::SetDiagramType(std::string diagramType) {
+    diagramType_ = std::move(diagramType);
+    RefreshFromRegistry();
+}
+
 void NodePalette::RefreshFromRegistry() {
     entries_.clear();
     for (const auto& [typeName, descriptor] : registry_.Types()) {
+        if (!ce::node_system::AllowedInDiagram(descriptor, diagramType_)) {
+            continue; // belongs to another kind of graph
+        }
         entries_.push_back({typeName, descriptor.displayName.empty() ? typeName : descriptor.displayName, descriptor.category});
     }
     std::sort(entries_.begin(), entries_.end(), [](const Entry& a, const Entry& b) {
