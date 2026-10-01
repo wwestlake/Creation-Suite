@@ -1,5 +1,7 @@
 #include "creation/material/material_compiler.h"
 
+#include <node_system/symbol_nodes.h>
+
 #include <algorithm>
 #include <cctype>
 #include <functional>
@@ -145,7 +147,30 @@ MaterialCompileResult CompileMaterialGraph(const ns::Graph& graph, const ns::Nod
         else if (type == "material.cameravector") expression = "cameraVector";
         else if (type == "material.reflectionvector") expression = "reflect(-cameraVector, worldNormal)";
         else if (type == "material.time") expression = "time";
-        else if (type == "material.constant.float") {
+        else if (ns::IsSymbolGetNode(type)) {
+            // The graph's Variables (shared/NodeSystem/SYMBOLS.md): a param is a material parameter - a uniform its
+            // users can set, its value the default; a constant or variable is a literal.
+            const auto* symbol = ns::SymbolForGetNode(graph, *node);
+            if (symbol == nullptr) {
+                result.errors.push_back("A Get node's symbol is missing - choose one in its Properties.");
+                expression = "0.0f";
+            } else if (symbol->type != ns::DataType::Float && symbol->type != ns::DataType::Color) {
+                result.errors.push_back("Material graphs use number and colour Variables only (" + symbol->name + ").");
+                expression = "0.0f";
+            } else if (symbol->kind == ns::SymbolKind::Param) {
+                MaterialParameter param;
+                param.name = Sanitize(symbol->id);
+                param.type = symbol->type;
+                if (const auto* color = std::get_if<ns::Vec3Default>(&symbol->value))
+                    param.defaultColor = *color;
+                if (const auto* number = std::get_if<float>(&symbol->value))
+                    param.defaultFloat = *number;
+                parameters[param.name] = param;
+                expression = "uMaterial_" + param.name;
+            } else {
+                expression = symbol->type == ns::DataType::Color ? ColorLiteral(symbol->value) : FloatLiteral(symbol->value, 0.0f);
+            }
+        } else if (type == "material.constant.float") {
             const auto* valuePin = Input(*node, "value");
             expression = FloatLiteral(valuePin != nullptr ? valuePin->defaultValue : ns::PinDefaultValue{}, 0.0f);
         } else if (type == "material.constant.color") {

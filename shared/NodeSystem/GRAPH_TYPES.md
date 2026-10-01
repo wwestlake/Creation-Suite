@@ -13,7 +13,7 @@ Built in phases. Djehuti Texture is the first user, as it was for Variables (SYM
 
 1. **Graph types** - done.
 2. **Graph interface and the Graph node** - done (a graph used inside a graph of the same type).
-3. One graph editor in Texture for every type (Materials and Image Graph merge).
+3. **One graph editor in Texture for every type** - done (Materials and Image Graph merged).
 4. Cross-type graph nodes (an Image graph as a texture source in a Material graph).
 5. Convert to Graph (collapse selected nodes into a new graph, boundary wires becoming its pins).
 
@@ -79,3 +79,19 @@ targets.
 
 Djehuti Texture's Image Graph is the reference: Graph Input and Output nodes, the Graph node in Properties, and nested
 evaluation sharing one compiled FRust runtime (`image_graph::Evaluator`).
+
+## 3. One editor for every type (Djehuti Texture)
+
+Texture has one Graph editor (Layout > Graph, with its Draw view) for every kind of graph it makes: `image` and
+`material`. Its single registry holds the image library, the material nodes (`ce::material::RegisterMaterialNodes`
+types them `material` and registers the type), the shared Get nodes and the Graph node. The graph's type picks:
+
+- **The node list:** `NodePalette::SetDiagramType`.
+- **The Variables types:** materials use numbers and colours, which compile to shader uniforms (params) or literals
+  (constants). `CompileMaterialGraph` handles symbol Get nodes.
+- **The engine and preview:** an image graph is evaluated on a background thread and shown on the 2D Preview. A
+  material is compiled to a shader and shown lit on the 3D Preview.
+- **How it saves:** an image graph as an `.imggraph.json` document. A material as a material asset (`.frgraph`),
+  the form other apps read. File > Open lists both kinds.
+
+The separate Materials work area is gone.
