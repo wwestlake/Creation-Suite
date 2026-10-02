@@ -62,4 +62,17 @@ bool Node::RemovePin(PinId pinId) {
     return false;
 }
 
+void Node::ArrangePins(bool inputs, const std::vector<PinId>& trailing) {
+    auto& pins = inputs ? inputs_ : outputs_;
+    std::vector<Pin> arranged;
+    for (const auto& pin : pins)
+        if (std::find(trailing.begin(), trailing.end(), pin.id) == trailing.end())
+            arranged.push_back(pin);
+    for (PinId id : trailing)
+        for (const auto& pin : pins)
+            if (pin.id == id)
+                arranged.push_back(pin);
+    pins = std::move(arranged);
+}
+
 } // namespace ce::node_system

@@ -148,6 +148,36 @@ bool Graph::RemoveEnum(const std::string& name) {
     return true;
 }
 
+const StructDef* Graph::FindStruct(const std::string& name) const {
+    for (const auto& def : structs_)
+        if (def.name == name)
+            return &def;
+    return nullptr;
+}
+
+StructDef* Graph::FindStruct(const std::string& name) {
+    for (auto& def : structs_)
+        if (def.name == name)
+            return &def;
+    return nullptr;
+}
+
+bool Graph::AddStruct(StructDef def) {
+    if (def.name.empty() || def.name.find_first_of(" \t") != std::string::npos || FindStruct(def.name) != nullptr || FindEnum(def.name) != nullptr)
+        return false;
+    def.scope = TypeScope::graph;
+    structs_.push_back(std::move(def));
+    return true;
+}
+
+bool Graph::RemoveStruct(const std::string& name) {
+    const auto it = std::find_if(structs_.begin(), structs_.end(), [&name](const StructDef& s) { return s.name == name; });
+    if (it == structs_.end())
+        return false;
+    structs_.erase(it);
+    return true;
+}
+
 const Symbol* Graph::FindSymbol(const std::string& id) const {
     for (const auto& symbol : symbols_)
         if (symbol.id == id)

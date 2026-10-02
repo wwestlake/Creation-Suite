@@ -65,6 +65,7 @@ juce::Colour DataTypeColourFor(ce::node_system::DataType type) {
         case DataType::Controller:    return juce::Colour(0xffc8785a);
         case DataType::Drawing:       return juce::Colour(0xfff0f0f0); // white: lines on paper
         case DataType::Brush:         return juce::Colour(0xffe8743a); // orange
+        case DataType::Struct:        return juce::Colour(0xff4f7cf0); // royal blue: a bundle of values
     }
     return juce::Colour(0xff7fd0e8);
 }

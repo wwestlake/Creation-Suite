@@ -16,6 +16,8 @@ add_library(creation_suite_node_system STATIC
     src/graph_nodes.cpp
     src/flow_nodes.cpp
     src/enums.cpp
+    src/structs.cpp
+    src/struct_nodes.cpp
 )
 
 if(NOT TARGET node_system)

@@ -9,6 +9,7 @@
 
 #include "node_system/node.h"
 #include "node_system/enums.h"
+#include "node_system/structs.h"
 #include "node_system/symbols.h"
 
 namespace ce::node_system {
@@ -107,6 +108,13 @@ public:
     bool AddEnum(EnumDef def);
     bool RemoveEnum(const std::string& name);
 
+    // The graph's own structs (structs.h, TYPES.md): made in the Struct Editor, saved with the graph.
+    const std::vector<StructDef>& Structs() const { return structs_; }
+    const StructDef* FindStruct(const std::string& name) const;
+    StructDef* FindStruct(const std::string& name);
+    bool AddStruct(StructDef def);
+    bool RemoveStruct(const std::string& name);
+
     // Graph symbols (symbols.h): the params, constants and variables that belong to this graph, in the order they
     // were added. Get nodes refer to them by id.
     const std::vector<Symbol>& Symbols() const { return symbols_; }
@@ -126,6 +134,7 @@ private:
     std::vector<Connection> connections_;
     std::vector<Symbol> symbols_;
     std::vector<EnumDef> enums_;
+    std::vector<StructDef> structs_;
     std::string diagramType_;
     NodeId nextNodeId_ = 1;
     ConnectionId nextConnectionId_ = 1;

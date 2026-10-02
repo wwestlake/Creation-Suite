@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "node_system/enums.h"
+#include "node_system/structs.h"
 #include "node_system/graph.h"
 #include "node_system/node.h"
 #include "node_system/pin.h"
@@ -169,9 +170,16 @@ public:
     // Replaces every enum of one scope with these (an app reloading the project's types, TYPES.md); each gets that scope.
     void ReplaceEnums(TypeScope scope, std::vector<EnumDef> defs);
 
+    // The structs in scope beyond a graph's own (structs.h), the same way.
+    void RegisterStruct(StructDef def);
+    const StructDef* FindStruct(const std::string& name) const;
+    const std::vector<StructDef>& Structs() const { return structs_; }
+    void ReplaceStructs(TypeScope scope, std::vector<StructDef> defs);
+
 private:
     std::unordered_map<std::string, NodeTypeDescriptor> types_;
     std::vector<EnumDef> enums_;
+    std::vector<StructDef> structs_;
     std::vector<DiagramTypeDef> diagramTypes_;
 };
 

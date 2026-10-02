@@ -1,4 +1,5 @@
 #include "node_system/enums.h"
+#include "node_system/structs.h"
 
 #include <algorithm>
 #include <cctype>
@@ -60,9 +61,25 @@ std::string MakeEnumName(const std::string& displayName, const std::vector<EnumD
 std::string FrustEnumDeclaration(const EnumDef& def) {
     std::string declaration = "enum " + FrustIdentifier(def.name) + " { ";
     for (size_t i = 0; i < def.variants.size(); ++i) {
-        declaration += (i == 0 ? "" : ", ") + FrustIdentifier(def.variants[i].name);
+        const auto& variant = def.variants[i];
+        declaration += (i == 0 ? "" : ", ") + FrustIdentifier(variant.name);
+        if (!variant.fields.empty()) {
+            declaration += "(";
+            for (size_t f = 0; f < variant.fields.size(); ++f) {
+                declaration += (f == 0 ? "" : ", ") + FrustMemberType(variant.fields[f].type);
+            }
+            declaration += ")";
+        }
     }
     return declaration + " }";
+}
+
+bool EnumCarriesValues(const EnumDef& def) {
+    return std::any_of(def.variants.begin(), def.variants.end(), [](const EnumVariant& v) { return !v.fields.empty(); });
+}
+
+bool EnumFieldNameReserved(const std::string& fieldName) {
+    return fieldName.empty() || fieldName == "type" || fieldName == "variant" || fieldName == "value";
 }
 
 } // namespace ce::node_system

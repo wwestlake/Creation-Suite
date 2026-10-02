@@ -55,6 +55,7 @@ juce::String DataTypeName(DataType type) {
         case DataType::Controller: return "Controller";
         case DataType::Drawing: return "Drawing";
         case DataType::Brush: return "Brush";
+        case DataType::Struct: return "Struct";
         default: return "Any";
     }
 }

@@ -58,6 +58,9 @@ public:
     // Removes one pin (for nodes whose pins vary, such as a Graph node). Wires to it are the graph's to remove first
     // (Graph::DisconnectPin). False if there is no such pin.
     bool RemovePin(PinId pinId);
+    // Puts pins in order: those not listed keep their places at the front, then the listed ones in the listed order
+    // (a Switch's cases, a struct node's members, following their type's order).
+    void ArrangePins(bool inputs, const std::vector<PinId>& trailing);
 
     // GS8: canvas position for the node editor (GS10) -- purely
     // presentational, never consulted by graph structure/validation/
