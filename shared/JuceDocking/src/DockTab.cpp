@@ -2,12 +2,15 @@
 #include "CreationDock/DockZone.h"
 #include "CreationDock/DockPanel.h"
 
+#include <utility>
+
 namespace CreationDock {
 
 DockTab::DockTab(DockZone& ownerZone, DockPanel& ownedPanel)
     : zone(ownerZone), panel(ownedPanel)
 {
-    setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+    // Hovering: a tab can be clicked or picked up. The "holding" cursor belongs to the drag itself (mouseDrag).
+    setMouseCursor(juce::MouseCursor::PointingHandCursor);
 }
 
 void DockTab::paint(juce::Graphics& g)
@@ -58,6 +61,14 @@ void DockTab::mouseDown(const juce::MouseEvent& e)
 
 void DockTab::mouseDrag(const juce::MouseEvent& e)
 {
+    // The panel is picked up: the cursor says so for as long as the drag lasts, wherever the mouse goes (other
+    // panels, the drop overlay, outside the window) - set on every drag event, so nothing under the mouse can take
+    // it back while the panel is held.
+    if (e.mouseWasDraggedSinceMouseDown()) {
+        showingDragCursor = true;
+        auto source = e.source; // the event is const; a copy is the same mouse
+        source.showMouseCursor(juce::MouseCursor::DraggingHandCursor);
+    }
     if (panel.onTitleBarDragged) panel.onTitleBarDragged(&panel, e);
 }
 
@@ -66,7 +77,14 @@ void DockTab::mouseUp(const juce::MouseEvent& e)
     isBeingDragged = false;
     repaint();
 
+    // Let go: the cursor goes back to whatever is under the mouse - once the drop has moved the panel, since this
+    // tab may be somewhere else (or gone) by then.
+    auto source = e.source;
+    const bool restoreCursor = std::exchange(showingDragCursor, false);
+    if (restoreCursor) source.showMouseCursor(juce::MouseCursor::NormalCursor);
+
     if (panel.onTitleBarDragEnded) panel.onTitleBarDragEnded(&panel, e);
+    if (restoreCursor) source.forceMouseCursorUpdate();
 }
 
 void DockTab::mouseDoubleClick(const juce::MouseEvent& e)

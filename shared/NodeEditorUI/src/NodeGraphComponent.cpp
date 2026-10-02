@@ -65,6 +65,7 @@ juce::Colour DataTypeColourFor(ce::node_system::DataType type) {
         case DataType::Controller:    return juce::Colour(0xffc8785a);
         case DataType::Drawing:       return juce::Colour(0xfff0f0f0); // white: lines on paper
         case DataType::Brush:         return juce::Colour(0xffe8743a); // orange
+        case DataType::Struct:        return juce::Colour(0xff4f7cf0); // royal blue: a bundle of values
     }
     return juce::Colour(0xff7fd0e8);
 }
@@ -525,7 +526,14 @@ bool NodeGraphComponent::isInterestedInDragSource(const SourceDetails& details) 
 }
 
 void NodeGraphComponent::itemDropped(const SourceDetails& details) {
-    const auto typeName = details.description.toString().toStdString();
+    AddNodeAt(details.description.toString().toStdString(), details.localPosition.toFloat());
+}
+
+bool NodeGraphComponent::AddNodeAtCentre(const std::string& typeName) {
+    return AddNodeAt(typeName, getLocalBounds().getCentre().toFloat());
+}
+
+bool NodeGraphComponent::AddNodeAt(const std::string& typeName, juce::Point<float> screenPosition) {
     std::string error;
     Node* node = nullptr;
     // "symbol:<id>" (dragged from a SymbolsPanel) adds a Get node bound to that symbol; anything else is a node type.
@@ -533,18 +541,24 @@ void NodeGraphComponent::itemDropped(const SourceDetails& details) {
         if (const auto* symbol = graph_.FindSymbol(typeName.substr(std::string(kSymbolDragPrefix).size())))
             node = ce::node_system::AddSymbolGetNode(graph_, registry_, *symbol, &error);
     } else {
+        // A node type that belongs to another kind of graph is not added (GRAPH_TYPES.md).
+        const auto* descriptor = registry_.Find(typeName);
+        if (descriptor != nullptr && !ce::node_system::AllowedInDiagram(*descriptor, graph_.DiagramType())) {
+            return false;
+        }
         node = ce::node_system::AddRegisteredNode(graph_, registry_, typeName, &error);
     }
     if (node == nullptr) {
-        return;
+        return false;
     }
-    const auto world = ScreenToWorld(details.localPosition.toFloat());
+    const auto world = ScreenToWorld(screenPosition);
     node->SetEditorPosition(world.x, world.y);
     SelectNode(node->Id());
     if (onGraphChanged) {
         onGraphChanged();
     }
     repaint();
+    return true;
 }
 
 } // namespace creation::node_editor_ui

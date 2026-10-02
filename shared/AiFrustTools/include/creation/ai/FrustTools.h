@@ -27,6 +27,14 @@ std::shared_ptr<Tool> makeFrustApiReferenceTool(const creation::frust::ScriptApi
 // write something, instead of guessing.
 std::shared_ptr<Tool> makeFrustLookupTool(std::function<std::string(const std::string& query)> search);
 
+// `frate_registry`: what pods (FRust packages) the Frate registry has. The registry is a web service (by default
+// https://lagdaemon.com/djehuti/api/frate); this asks its public, read-only list call and reports each pod's name,
+// latest version, license, description and exports, so the agent knows what exists instead of guessing. The application supplies
+// `httpGet` (the URL in, the response body out, empty on any failure), which keeps this free of networking code and testable.
+// What the registry returns is written by the pods' authors, so it is cleaned and reported only as data.
+std::shared_ptr<Tool> makeFrateRegistryTool(std::function<std::string(const std::string& url)> httpGet,
+                                            std::string baseUrl = "https://lagdaemon.com/djehuti/api/frate");
+
 // The text of a script result as the model should read it.
 std::string describeScriptResult(const creation::frust::ScriptResult& result);
 }

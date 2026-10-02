@@ -77,7 +77,13 @@ public:
     bool isInterestedInDragSource(const SourceDetails& details) override;
     void itemDropped(const SourceDetails& details) override;
 
+    // Adds a node of a registered type (or "symbol:<id>", a bound Get node) in the middle of the view, selected - for
+    // the palette's Enter and double-click. False if it does not belong in this graph.
+    bool AddNodeAtCentre(const std::string& typeName);
+
 private:
+    bool AddNodeAt(const std::string& typeName, juce::Point<float> screenPosition);
+
     struct PinHit {
         ce::node_system::NodeId nodeId = 0;
         ce::node_system::PinId pinId = 0;

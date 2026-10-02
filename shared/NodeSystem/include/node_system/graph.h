@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "node_system/node.h"
+#include "node_system/enums.h"
+#include "node_system/structs.h"
 #include "node_system/symbols.h"
 
 namespace ce::node_system {
@@ -84,11 +86,34 @@ public:
                                                PinId toPin, ConnectError* outError = nullptr);
 
     bool Disconnect(ConnectionId id);
+    // Removes every wire to or from one pin of one node.
+    void DisconnectPin(NodeId node, PinId pin);
 
     const std::vector<Connection>& Connections() const { return connections_; }
     const std::string& Name() const { return name_; }
     GraphTarget Target() const { return target_; }
     void SetTarget(GraphTarget target) { target_ = target; }
+
+    // The graph's type - what kind of thing it makes ("image", "material"...): research's schematic `diagramType`
+    // (shared/NodeSystem/GRAPH_TYPES.md). It decides which node types belong in it. Empty: untyped, anything goes.
+    const std::string& DiagramType() const { return diagramType_; }
+    void SetDiagramType(std::string type) { diagramType_ = std::move(type); }
+
+    // The graph's own enums (enums.h; research's schematic "enums"): created in the node system, saved with the graph,
+    // compiled to FRust enums. Choice params and enum settings use them like the registry's. Names are identifiers.
+    const std::vector<EnumDef>& Enums() const { return enums_; }
+    const EnumDef* FindEnum(const std::string& name) const;
+    EnumDef* FindEnum(const std::string& name);
+    // False if the name is empty, contains a space, or is already used.
+    bool AddEnum(EnumDef def);
+    bool RemoveEnum(const std::string& name);
+
+    // The graph's own structs (structs.h, TYPES.md): made in the Struct Editor, saved with the graph.
+    const std::vector<StructDef>& Structs() const { return structs_; }
+    const StructDef* FindStruct(const std::string& name) const;
+    StructDef* FindStruct(const std::string& name);
+    bool AddStruct(StructDef def);
+    bool RemoveStruct(const std::string& name);
 
     // Graph symbols (symbols.h): the params, constants and variables that belong to this graph, in the order they
     // were added. Get nodes refer to them by id.
@@ -108,6 +133,9 @@ private:
     std::unordered_map<NodeId, std::unique_ptr<Node>> nodes_;
     std::vector<Connection> connections_;
     std::vector<Symbol> symbols_;
+    std::vector<EnumDef> enums_;
+    std::vector<StructDef> structs_;
+    std::string diagramType_;
     NodeId nextNodeId_ = 1;
     ConnectionId nextConnectionId_ = 1;
 };

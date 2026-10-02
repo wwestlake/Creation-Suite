@@ -1,5 +1,8 @@
 #include "creation/material/material_compiler.h"
 
+#include <node_system/symbol_nodes.h>
+#include <node_system/flow_nodes.h>
+
 #include <algorithm>
 #include <cctype>
 #include <functional>
@@ -145,7 +148,68 @@ MaterialCompileResult CompileMaterialGraph(const ns::Graph& graph, const ns::Nod
         else if (type == "material.cameravector") expression = "cameraVector";
         else if (type == "material.reflectionvector") expression = "reflect(-cameraVector, worldNormal)";
         else if (type == "material.time") expression = "time";
-        else if (type == "material.constant.float") {
+        else if (const auto flow = ns::FlowKindOf(*node); flow != ns::FlowKind::none) {
+            // Decisions (shared/NodeSystem/FLOW.md). A shader computes every branch anyway, so a Switch is a select
+            // over its cases by the selector (case i where i <= selector < i + 1, clamped), and a Route passes its
+            // input to every output - the Switch where the branches meet picks the live one.
+            auto literalFor = [&](const ns::Pin& pin) {
+                return pin.type.dataType == ns::DataType::Color ? ColorLiteral(pin.defaultValue) : FloatLiteral(pin.defaultValue, 0.0f);
+            };
+            auto pinExpression = [&](const ns::Pin& pin) {
+                if (const auto* connection = Incoming(graph, nodeId, pin.id)) return emit(connection->fromNode, connection->fromPin);
+                return literalFor(pin);
+            };
+            if (flow == ns::FlowKind::route) {
+                const auto* value = Input(*node, ns::kFlowValuePin);
+                expression = value != nullptr ? pinExpression(*value) : "0.0f";
+            } else {
+                const auto cases = ns::FlowCasePins(*node);
+                const auto* selectorPin = Input(*node, ns::kFlowSelectorPin);
+                std::string selector = "0.0f";
+                if (selectorPin != nullptr) {
+                    if (const auto* connection = Incoming(graph, nodeId, selectorPin->id))
+                        selector = "float(" + emit(connection->fromNode, connection->fromPin) + ")";
+                    else if (const auto* i = std::get_if<std::int64_t>(&selectorPin->defaultValue))
+                        selector = FloatLiteral(static_cast<float>(*i), 0.0f);
+                    else if (const auto* b = std::get_if<bool>(&selectorPin->defaultValue))
+                        selector = *b ? "1.0f" : "0.0f";
+                    else
+                        selector = FloatLiteral(selectorPin->defaultValue, 0.0f);
+                }
+                if (cases.empty()) {
+                    result.errors.push_back("A Switch has no cases.");
+                    expression = "0.0f";
+                } else {
+                    expression = pinExpression(*cases.back());
+                    for (size_t i = cases.size() - 1; i-- > 0;)
+                        expression = "(" + selector + " < " + FloatLiteral(static_cast<float>(i + 1), 0.0f) + " ? " + pinExpression(*cases[i]) + " : "
+                                   + expression + ")";
+                }
+            }
+        } else if (ns::IsSymbolGetNode(type)) {
+            // The graph's Variables (shared/NodeSystem/SYMBOLS.md): a param is a material parameter - a uniform its
+            // users can set, its value the default; a constant or variable is a literal.
+            const auto* symbol = ns::SymbolForGetNode(graph, *node);
+            if (symbol == nullptr) {
+                result.errors.push_back("A Get node's symbol is missing - choose one in its Properties.");
+                expression = "0.0f";
+            } else if (symbol->type != ns::DataType::Float && symbol->type != ns::DataType::Color) {
+                result.errors.push_back("Material graphs use number and colour Variables only (" + symbol->name + ").");
+                expression = "0.0f";
+            } else if (symbol->kind == ns::SymbolKind::Param) {
+                MaterialParameter param;
+                param.name = Sanitize(symbol->id);
+                param.type = symbol->type;
+                if (const auto* color = std::get_if<ns::Vec3Default>(&symbol->value))
+                    param.defaultColor = *color;
+                if (const auto* number = std::get_if<float>(&symbol->value))
+                    param.defaultFloat = *number;
+                parameters[param.name] = param;
+                expression = "uMaterial_" + param.name;
+            } else {
+                expression = symbol->type == ns::DataType::Color ? ColorLiteral(symbol->value) : FloatLiteral(symbol->value, 0.0f);
+            }
+        } else if (type == "material.constant.float") {
             const auto* valuePin = Input(*node, "value");
             expression = FloatLiteral(valuePin != nullptr ? valuePin->defaultValue : ns::PinDefaultValue{}, 0.0f);
         } else if (type == "material.constant.color") {

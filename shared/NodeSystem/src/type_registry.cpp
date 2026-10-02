@@ -29,6 +29,41 @@ void NodeTypeRegistry::RegisterEnum(EnumDef def) {
     enums_.push_back(std::move(def));
 }
 
+void NodeTypeRegistry::ReplaceEnums(TypeScope scope, std::vector<EnumDef> defs) {
+    enums_.erase(std::remove_if(enums_.begin(), enums_.end(), [scope](const EnumDef& e) { return e.scope == scope; }), enums_.end());
+    for (auto& def : defs) {
+        def.scope = scope;
+        RegisterEnum(std::move(def));
+    }
+}
+
+void NodeTypeRegistry::RegisterStruct(StructDef def) {
+    for (auto& existing : structs_) {
+        if (existing.name == def.name) {
+            existing = std::move(def);
+            return;
+        }
+    }
+    structs_.push_back(std::move(def));
+}
+
+const StructDef* NodeTypeRegistry::FindStruct(const std::string& name) const {
+    for (const auto& def : structs_) {
+        if (def.name == name) {
+            return &def;
+        }
+    }
+    return nullptr;
+}
+
+void NodeTypeRegistry::ReplaceStructs(TypeScope scope, std::vector<StructDef> defs) {
+    structs_.erase(std::remove_if(structs_.begin(), structs_.end(), [scope](const StructDef& s) { return s.scope == scope; }), structs_.end());
+    for (auto& def : defs) {
+        def.scope = scope;
+        RegisterStruct(std::move(def));
+    }
+}
+
 const EnumDef* NodeTypeRegistry::FindEnum(const std::string& name) const {
     for (const auto& def : enums_) {
         if (def.name == name) {
@@ -36,6 +71,59 @@ const EnumDef* NodeTypeRegistry::FindEnum(const std::string& name) const {
         }
     }
     return nullptr;
+}
+
+bool AllowedInDiagram(const NodeTypeDescriptor& descriptor, const std::string& diagramType) {
+    return diagramType.empty() || descriptor.diagramTypes.empty()
+        || std::find(descriptor.diagramTypes.begin(), descriptor.diagramTypes.end(), diagramType) != descriptor.diagramTypes.end();
+}
+
+void NodeTypeRegistry::RegisterDiagramType(DiagramTypeDef def) {
+    for (auto& existing : diagramTypes_) {
+        if (existing.id == def.id) {
+            existing = std::move(def);
+            return;
+        }
+    }
+    diagramTypes_.push_back(std::move(def));
+}
+
+const DiagramTypeDef* NodeTypeRegistry::FindDiagramType(const std::string& id) const {
+    for (const auto& def : diagramTypes_) {
+        if (def.id == id) {
+            return &def;
+        }
+    }
+    return nullptr;
+}
+
+std::vector<NodeId> NodesNotAllowedIn(const Graph& graph, const NodeTypeRegistry& registry, const std::string& diagramType) {
+    std::vector<NodeId> blocked;
+    for (const auto& [id, node] : graph.Nodes()) {
+        const auto* descriptor = registry.Find(node->TypeName());
+        if (descriptor == nullptr || !AllowedInDiagram(*descriptor, diagramType)) {
+            blocked.push_back(id);
+        }
+    }
+    std::sort(blocked.begin(), blocked.end());
+    return blocked;
+}
+
+const EnumDef* FindEnumFor(const Graph& graph, const NodeTypeRegistry& registry, const std::string& name) {
+    if (name.empty()) {
+        return nullptr;
+    }
+    if (const auto* own = graph.FindEnum(name)) {
+        return own;
+    }
+    return registry.FindEnum(name);
+}
+
+const EnumDef* PinEnum(const Graph& graph, const NodeTypeRegistry& registry, const Node& node, const Pin& pin) {
+    if (!pin.type.enumType.empty()) {
+        return FindEnumFor(graph, registry, pin.type.enumType);
+    }
+    return PinEnum(registry, node, pin);
 }
 
 const EnumDef* PinEnum(const NodeTypeRegistry& registry, const Node& node, const Pin& pin) {
@@ -82,9 +170,10 @@ bool PinTypeMatchesSignature(const PinTypeDesc& pin, const PinTypeDesc& signatur
 }
 
 bool PinsMatchSignature(const std::vector<Pin>& pins, const std::vector<PinSignature>& signatures,
-                         const std::string& nodeTypeName, const char* direction, std::vector<std::string>* errorsOut) {
+                         const std::string& nodeTypeName, const char* direction, std::vector<std::string>* errorsOut,
+                         bool dynamicPins = false) {
     bool ok = true;
-    if (pins.size() != signatures.size()) {
+    if (dynamicPins ? pins.size() < signatures.size() : pins.size() != signatures.size()) {
         ok = false;
         if (errorsOut) {
             std::ostringstream msg;
@@ -125,8 +214,8 @@ bool ValidateAgainstRegistry(const Graph& graph, const NodeTypeRegistry& registr
             }
             continue;
         }
-        ok = PinsMatchSignature(node->Inputs(), descriptor->inputs, node->TypeName(), "input", errorsOut) && ok;
-        ok = PinsMatchSignature(node->Outputs(), descriptor->outputs, node->TypeName(), "output", errorsOut) && ok;
+        ok = PinsMatchSignature(node->Inputs(), descriptor->inputs, node->TypeName(), "input", errorsOut, descriptor->dynamicPins) && ok;
+        ok = PinsMatchSignature(node->Outputs(), descriptor->outputs, node->TypeName(), "output", errorsOut, descriptor->dynamicPins) && ok;
     }
     return ok;
 }

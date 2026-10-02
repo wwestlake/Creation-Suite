@@ -100,6 +100,14 @@ std::optional<ConnectionId> Graph::ConnectInternal(std::optional<ConnectionId> e
     return id;
 }
 
+void Graph::DisconnectPin(NodeId node, PinId pin) {
+    connections_.erase(std::remove_if(connections_.begin(), connections_.end(),
+                                      [node, pin](const Connection& c) {
+                                          return (c.fromNode == node && c.fromPin == pin) || (c.toNode == node && c.toPin == pin);
+                                      }),
+                       connections_.end());
+}
+
 bool Graph::Disconnect(ConnectionId id) {
     auto it = std::find_if(connections_.begin(), connections_.end(),
                             [id](const Connection& c) { return c.id == id; });
@@ -107,6 +115,66 @@ bool Graph::Disconnect(ConnectionId id) {
         return false;
     }
     connections_.erase(it);
+    return true;
+}
+
+const EnumDef* Graph::FindEnum(const std::string& name) const {
+    for (const auto& def : enums_)
+        if (def.name == name)
+            return &def;
+    return nullptr;
+}
+
+EnumDef* Graph::FindEnum(const std::string& name) {
+    for (auto& def : enums_)
+        if (def.name == name)
+            return &def;
+    return nullptr;
+}
+
+bool Graph::AddEnum(EnumDef def) {
+    if (def.name.empty() || def.name.find_first_of(" \t") != std::string::npos || FindEnum(def.name) != nullptr)
+        return false;
+    def.scope = TypeScope::graph; // a graph's own enums are in its scope
+    enums_.push_back(std::move(def));
+    return true;
+}
+
+bool Graph::RemoveEnum(const std::string& name) {
+    const auto it = std::find_if(enums_.begin(), enums_.end(), [&name](const EnumDef& e) { return e.name == name; });
+    if (it == enums_.end())
+        return false;
+    enums_.erase(it);
+    return true;
+}
+
+const StructDef* Graph::FindStruct(const std::string& name) const {
+    for (const auto& def : structs_)
+        if (def.name == name)
+            return &def;
+    return nullptr;
+}
+
+StructDef* Graph::FindStruct(const std::string& name) {
+    for (auto& def : structs_)
+        if (def.name == name)
+            return &def;
+    return nullptr;
+}
+
+bool Graph::AddStruct(StructDef def) {
+    if (def.name.empty() || def.name.find_first_of(" \t") != std::string::npos || FindStruct(def.name) != nullptr || FindEnum(def.name) != nullptr)
+        return false;
+    def.scope = TypeScope::graph;
+    structs_.push_back(std::move(def));
+    return true;
+}
+
+bool Graph::RemoveStruct(const std::string& name) {
+    const auto it = std::find_if(structs_.begin(), structs_.end(), [&name](const StructDef& s) { return s.name == name; });
+    if (it == structs_.end())
+        return false;
+    structs_.erase(it);
     return true;
 }
 

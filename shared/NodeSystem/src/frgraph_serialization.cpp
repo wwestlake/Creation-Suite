@@ -67,7 +67,13 @@ std::string DataTypeToString(DataType t) {
         case DataType::Entity: return "entity";
         case DataType::Drawing: return "drawing";
         case DataType::Brush: return "brush";
-        default: break;
+        // These were missing and silently saved as "float", so they came back as Float pins (FLOW.md's selector is Any).
+        case DataType::Any: return "any";
+        case DataType::Function: return "function";
+        case DataType::Material: return "material";
+        case DataType::Model: return "model";
+        case DataType::Controller: return "controller";
+        case DataType::Struct: return "struct";
     }
     return "float";
 }
@@ -79,7 +85,9 @@ std::optional<DataType> DataTypeFromString(const std::string& s) {
         { "int", DataType::Int },         { "string", DataType::String },   { "transform", DataType::Transform },
         { "bonetransform", DataType::BoneTransform }, { "texture", DataType::Texture },
         { "audiosignal", DataType::AudioSignal }, { "entity", DataType::Entity },
-        { "drawing", DataType::Drawing }, { "brush", DataType::Brush },
+        { "drawing", DataType::Drawing }, { "brush", DataType::Brush }, { "any", DataType::Any },
+        { "function", DataType::Function }, { "material", DataType::Material }, { "model", DataType::Model },
+        { "controller", DataType::Controller }, { "struct", DataType::Struct },
     };
     const auto it = table.find(s);
     return it == table.end() ? std::nullopt : std::optional<DataType>(it->second);
@@ -125,6 +133,9 @@ std::string SerializePinLine(NodeId nodeId, const Pin& pin) {
         if (!pin.type.enumType.empty()) {
             os << " enum " << pin.type.enumType;
         }
+        if (!pin.type.structType.empty()) {
+            os << " struct " << pin.type.structType;
+        }
     }
     os << SerializeDefaultValue(pin.defaultValue);
     return os.str();
@@ -142,12 +153,270 @@ std::size_t FirstNonBlank(std::string& line) {
 
 } // namespace
 
+// A default value after the word "default": "<kind> <value>" (float, int, bool, vec3, string to the end of the line).
+bool ReadDefaultAfterKeyword(std::istringstream& tok, PinDefaultValue& value, std::string& error) {
+    std::string kind;
+    if (!(tok >> kind)) {
+        error = "'default' missing its value kind";
+        return false;
+    }
+    if (kind == "float") {
+        float v = 0.0f;
+        if (!(tok >> v)) { error = "malformed float value"; return false; }
+        value = v;
+    } else if (kind == "int") {
+        std::int64_t v = 0;
+        if (!(tok >> v)) { error = "malformed int value"; return false; }
+        value = v;
+    } else if (kind == "bool") {
+        std::string b;
+        if (!(tok >> b) || (b != "true" && b != "false")) { error = "bool value must be 'true' or 'false'"; return false; }
+        value = (b == "true");
+    } else if (kind == "vec3") {
+        Vec3Default v;
+        if (!(tok >> v.x >> v.y >> v.z)) { error = "malformed vec3 value"; return false; }
+        value = v;
+    } else if (kind == "string") {
+        std::string rest;
+        std::getline(tok, rest);
+        if (!rest.empty() && rest.front() == ' ') rest.erase(0, 1);
+        value = rest;
+    } else {
+        error = "unknown value kind '" + kind + "'";
+        return false;
+    }
+    return true;
+}
+
+// Struct lines (TYPES.md): "struct <Name>", its display name and description, then per member (in order) its type
+// line - "structmember <Name> <dataType> [enum <E>] [struct <S>] [default ...]" - and the lines naming, describing and
+// ranging it by index.
+void WriteStructLines(std::ostream& os, const std::vector<StructDef>& structs) {
+    for (const StructDef& def : structs) {
+        os << "struct " << def.name << "\n";
+        os << "structname " << def.name << " " << def.displayName << "\n";
+        for (size_t i = 0; i < def.members.size(); ++i) {
+            const auto& m = def.members[i];
+            os << "structmember " << def.name << " " << DataTypeToString(m.type.dataType);
+            if (!m.type.enumType.empty()) os << " enum " << m.type.enumType;
+            if (!m.type.structType.empty()) os << " struct " << m.type.structType;
+            os << SerializeDefaultValue(m.defaultValue) << "\n";
+            os << "structmembername " << def.name << " " << i << " " << m.name << "\n";
+            if (!m.description.empty()) os << "structmemberdescription " << def.name << " " << i << " " << m.description << "\n";
+            if (m.hasRange) os << "structmemberrange " << def.name << " " << i << " " << m.minimum << " " << m.maximum << "\n";
+        }
+        if (!def.description.empty()) {
+            os << "structdescription " << def.name << " " << def.description << "\n";
+        }
+    }
+}
+
+bool ReadStructLine(const std::string& keyword, std::istringstream& tok, std::vector<StructDef>& structs, TypeScope scope, std::string& error) {
+    std::string name;
+    if (!(tok >> name)) {
+        error = "malformed '" + keyword + "' line";
+        return false;
+    }
+    auto find = [&structs](const std::string& n) -> StructDef* {
+        for (auto& s : structs)
+            if (s.name == n)
+                return &s;
+        return nullptr;
+    };
+    if (keyword == "struct") {
+        if (find(name) != nullptr) { error = "duplicate struct '" + name + "'"; return false; }
+        StructDef def;
+        def.name = name;
+        def.displayName = name;
+        def.scope = scope;
+        structs.push_back(std::move(def));
+        return true;
+    }
+    StructDef* def = find(name);
+    if (def == nullptr) { error = "'" + keyword + "' for unknown struct '" + name + "'"; return false; }
+    auto restOf = [&tok]() {
+        std::string rest;
+        std::getline(tok, rest);
+        if (!rest.empty() && rest.front() == ' ') rest.erase(0, 1);
+        return rest;
+    };
+    if (keyword == "structname") { def->displayName = restOf(); return true; }
+    if (keyword == "structdescription") { def->description = restOf(); return true; }
+    if (keyword == "structmember") {
+        StructMember member;
+        std::string dataTypeText;
+        if (!(tok >> dataTypeText)) { error = "malformed 'structmember' line"; return false; }
+        const auto dataType = DataTypeFromString(dataTypeText);
+        if (!dataType) { error = "unknown data type '" + dataTypeText + "'"; return false; }
+        member.type = { PinKind::Data, *dataType };
+        std::string word;
+        while (tok >> word) {
+            if (word == "enum") { tok >> member.type.enumType; }
+            else if (word == "struct") { tok >> member.type.structType; }
+            else if (word == "default") { if (!ReadDefaultAfterKeyword(tok, member.defaultValue, error)) return false; break; }
+            else { error = "unexpected '" + word + "' on 'structmember'"; return false; }
+        }
+        def->members.push_back(std::move(member));
+        return true;
+    }
+    size_t index = 0;
+    if (!(tok >> index) || index >= def->members.size()) { error = "'" + keyword + "' for a member '" + name + "' does not have"; return false; }
+    auto& member = def->members[index];
+    if (keyword == "structmembername") { member.name = restOf(); return true; }
+    if (keyword == "structmemberdescription") { member.description = restOf(); return true; }
+    if (keyword == "structmemberrange") {
+        if (!(tok >> member.minimum >> member.maximum)) { error = "malformed 'structmemberrange'"; return false; }
+        member.hasRange = true;
+        return true;
+    }
+    error = "unknown struct keyword '" + keyword + "'";
+    return false;
+}
+
+// Enum lines (TYPES.md): "enum <Name>", then its display name, values and descriptions, and what each value carries:
+// "enumfield <Name> <variant> <dataType> [enum <E>] [struct <S>]" then "enumfieldname <Name> <variant> <field> <name>".
+void WriteEnumLines(std::ostream& os, const std::vector<EnumDef>& enums) {
+    for (const EnumDef& def : enums) {
+        os << "enum " << def.name << "\n";
+        os << "enumname " << def.name << " " << def.displayName << "\n";
+        for (size_t i = 0; i < def.variants.size(); ++i) {
+            const auto& variant = def.variants[i];
+            os << "enumvariant " << def.name << " " << variant.name << "\n";
+            if (variant.colour != 0) {
+                os << "enumvariantcolour " << def.name << " " << i << " " << std::hex << variant.colour << std::dec << "\n";
+            }
+            if (!variant.description.empty()) {
+                os << "enumvariantdescription " << def.name << " " << i << " " << variant.description << "\n";
+            }
+            for (size_t f = 0; f < variant.fields.size(); ++f) {
+                const auto& field = variant.fields[f];
+                os << "enumfield " << def.name << " " << i << " " << DataTypeToString(field.type.dataType);
+                if (!field.type.enumType.empty()) os << " enum " << field.type.enumType;
+                if (!field.type.structType.empty()) os << " struct " << field.type.structType;
+                os << "\n";
+                os << "enumfieldname " << def.name << " " << i << " " << f << " " << field.name << "\n";
+                if (!field.description.empty()) {
+                    os << "enumfielddescription " << def.name << " " << i << " " << f << " " << field.description << "\n";
+                }
+            }
+        }
+        if (!def.description.empty()) {
+            os << "enumdescription " << def.name << " " << def.description << "\n";
+        }
+    }
+}
+
+// One enum line into `enums`; false with an error if it is malformed. Handles every "enum..." keyword.
+bool ReadEnumLine(const std::string& keyword, std::istringstream& tok, std::vector<EnumDef>& enums, TypeScope scope, std::string& error) {
+    auto find = [&enums](const std::string& name) -> EnumDef* {
+        for (auto& def : enums)
+            if (def.name == name)
+                return &def;
+        return nullptr;
+    };
+    std::string name;
+    if (!(tok >> name)) {
+        error = "malformed '" + keyword + "' line";
+        return false;
+    }
+    if (keyword == "enum") {
+        if (find(name) != nullptr || name.find_first_of(" \t") != std::string::npos) {
+            error = "duplicate enum '" + name + "'";
+            return false;
+        }
+        EnumDef def;
+        def.name = name;
+        def.displayName = name;
+        def.scope = scope;
+        enums.push_back(std::move(def));
+        return true;
+    }
+    EnumDef* def = find(name);
+    if (def == nullptr) {
+        error = "'" + keyword + "' for unknown enum '" + name + "'";
+        return false;
+    }
+    auto restOf = [&tok]() {
+        std::string rest;
+        std::getline(tok, rest);
+        if (!rest.empty() && rest.front() == ' ') {
+            rest.erase(0, 1);
+        }
+        return rest;
+    };
+    if (keyword == "enumname") {
+        def->displayName = restOf();
+    } else if (keyword == "enumvariant") {
+        def->variants.push_back(EnumVariant(restOf()));
+    } else if (keyword == "enumdescription") {
+        def->description = restOf();
+    } else if (keyword == "enumfield" || keyword == "enumfieldname" || keyword == "enumfielddescription") {
+        size_t index = 0;
+        if (!(tok >> index) || index >= def->variants.size()) {
+            error = "'" + keyword + "' for a value enum '" + name + "' does not have";
+            return false;
+        }
+        auto& fields = def->variants[index].fields;
+        if (keyword == "enumfield") {
+            std::string dataTypeText;
+            if (!(tok >> dataTypeText)) { error = "malformed 'enumfield' line"; return false; }
+            const auto dataType = DataTypeFromString(dataTypeText);
+            if (!dataType) { error = "unknown data type '" + dataTypeText + "'"; return false; }
+            EnumField field;
+            field.type = { PinKind::Data, *dataType };
+            std::string word;
+            while (tok >> word) {
+                if (word == "enum") { tok >> field.type.enumType; }
+                else if (word == "struct") { tok >> field.type.structType; }
+                else { error = "unexpected '" + word + "' on 'enumfield'"; return false; }
+            }
+            fields.push_back(std::move(field));
+        } else {
+            size_t f = 0;
+            if (!(tok >> f) || f >= fields.size()) {
+                error = "'" + keyword + "' for a field the value does not have";
+                return false;
+            }
+            (keyword == "enumfieldname" ? fields[f].name : fields[f].description) = restOf();
+        }
+    } else if (keyword == "enumvariantcolour" || keyword == "enumvariantdescription") {
+        size_t index = 0;
+        if (!(tok >> index) || index >= def->variants.size()) {
+            error = "'" + keyword + "' for a value enum '" + name + "' does not have";
+            return false;
+        }
+        if (keyword == "enumvariantcolour") {
+            std::uint32_t colour = 0;
+            if (!(tok >> std::hex >> colour)) {
+                error = "malformed colour on '" + keyword + "'";
+                return false;
+            }
+            tok >> std::dec;
+            def->variants[index].colour = colour;
+        } else {
+            def->variants[index].description = restOf();
+        }
+    } else {
+        error = "unknown enum keyword '" + keyword + "'";
+        return false;
+    }
+    return true;
+}
+
 std::string SerializeGraph(const Graph& graph) {
     std::ostringstream os;
     os << std::setprecision(9);
     os << "frgraph 1\n";
     os << "graph " << graph.Name() << "\n";
     os << "target " << GraphTargetToString(graph.Target()) << "\n";
+    // The graph's type (GRAPH_TYPES.md), only when it has one, so untyped graphs serialise exactly as before.
+    if (!graph.DiagramType().empty()) {
+        os << "diagram " << graph.DiagramType() << "\n";
+    }
+
+    // The graph's own enums (TYPES.md), before the symbols that use them; absent for a graph without any.
+    WriteEnumLines(os, graph.Enums());
+    WriteStructLines(os, graph.Structs());
 
     // Graph symbols (symbols.h), in order. Absent entirely for a graph without any, so older graphs serialise
     // byte-for-byte as before.
@@ -157,6 +426,13 @@ std::string SerializeGraph(const Graph& graph) {
         os << "symbolname " << symbol.id << " " << symbol.name << "\n";
         if (!symbol.enumType.empty()) {
             os << "symbolenum " << symbol.id << " " << symbol.enumType << "\n";
+        }
+        if (!symbol.structType.empty()) {
+            os << "symbolstruct " << symbol.id << " " << symbol.structType << "\n";
+        }
+        // A struct's member values, or the values the chosen variant of an enum carries.
+        for (size_t i = 0; i < symbol.memberValues.size(); ++i) {
+            os << "symbolmember " << symbol.id << " " << i << SerializeDefaultValue(symbol.memberValues[i]) << "\n";
         }
         if (!symbol.description.empty()) {
             os << "symboldescription " << symbol.id << " " << symbol.description << "\n";
@@ -207,6 +483,8 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
     int lineNo = 0;
     bool sawHeader = false;
     std::unique_ptr<Graph> graph;
+    std::vector<EnumDef> pendingEnums; // the graph's own enums, added when it is complete
+    std::vector<StructDef> pendingStructs; // and structs
     GraphTarget target = GraphTarget::Behavior;
 
     auto fail = [&](const std::string& msg) -> std::unique_ptr<Graph> {
@@ -256,6 +534,55 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
             target = *parsedTarget;
             if (graph) {
                 graph->SetTarget(target);
+            }
+        } else if (keyword == "diagram") {
+            std::string type;
+            if (!graph || !(tok >> type)) {
+                return fail("malformed 'diagram' line (expected: diagram <type>)");
+            }
+            graph->SetDiagramType(type);
+        } else if (keyword.rfind("struct", 0) == 0) {
+            if (!graph) {
+                return fail("'" + keyword + "' line before 'graph' line");
+            }
+            std::string structError;
+            if (!ReadStructLine(keyword, tok, pendingStructs, TypeScope::graph, structError)) {
+                return fail(structError);
+            }
+        } else if (keyword == "symbolstruct" || keyword == "symbolmember") {
+            std::string id;
+            if (!graph || !(tok >> id)) {
+                return fail("malformed '" + keyword + "' line");
+            }
+            Symbol* symbol = graph->FindSymbol(id);
+            if (symbol == nullptr) {
+                return fail("'" + keyword + "' for unknown symbol '" + id + "'");
+            }
+            if (keyword == "symbolstruct") {
+                tok >> symbol->structType;
+            } else {
+                size_t index = 0;
+                std::string word, valueError;
+                PinDefaultValue value;
+                if (!(tok >> index)) {
+                    return fail("malformed 'symbolmember' line");
+                }
+                if (tok >> word && word == "default" && !ReadDefaultAfterKeyword(tok, value, valueError)) {
+                    return fail(valueError);
+                }
+                if (symbol->memberValues.size() <= index) {
+                    symbol->memberValues.resize(index + 1);
+                }
+                symbol->memberValues[index] = value;
+            }
+        } else if (keyword.rfind("enum", 0) == 0) {
+            // The graph's own enums are read into a list and added once the graph is complete (see below).
+            if (!graph) {
+                return fail("'" + keyword + "' line before 'graph' line");
+            }
+            std::string enumError;
+            if (!ReadEnumLine(keyword, tok, pendingEnums, TypeScope::graph, enumError)) {
+                return fail(enumError);
             }
         } else if (keyword == "symbol") {
             if (!graph) {
@@ -418,6 +745,12 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
                 }
                 haveKeyword = static_cast<bool>(tok >> maybeDefaultKeyword);
             }
+            if (haveKeyword && maybeDefaultKeyword == "struct") {
+                if (type.kind != PinKind::Data || !(tok >> type.structType)) {
+                    return fail("malformed 'struct' on 'pin' line (expected: data struct struct <StructName>)");
+                }
+                haveKeyword = static_cast<bool>(tok >> maybeDefaultKeyword);
+            }
             if (haveKeyword) {
                 if (maybeDefaultKeyword != "default") {
                     return fail("unexpected trailing token '" + maybeDefaultKeyword + "' on 'pin' line");
@@ -505,7 +838,70 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
     if (!graph) {
         return fail("missing 'graph' line");
     }
+    for (auto& def : pendingEnums) {
+        if (!graph->AddEnum(std::move(def))) {
+            return fail("duplicate enum");
+        }
+    }
+    for (auto& def : pendingStructs) {
+        if (!graph->AddStruct(std::move(def))) {
+            return fail("duplicate struct");
+        }
+    }
     return graph;
+}
+
+std::string SerializeTypes(const std::vector<EnumDef>& enums, const std::vector<StructDef>& structs) {
+    std::ostringstream os;
+    os << std::setprecision(9);
+    os << "frtypes 1\n";
+    WriteEnumLines(os, enums);
+    WriteStructLines(os, structs);
+    return os.str();
+}
+
+bool DeserializeTypes(const std::string& text, TypeScope scope, std::vector<EnumDef>& enums, std::string& error) {
+    std::vector<StructDef> structs;
+    return DeserializeTypes(text, scope, enums, structs, error);
+}
+
+bool DeserializeTypes(const std::string& text, TypeScope scope, std::vector<EnumDef>& enums, std::vector<StructDef>& structs, std::string& error) {
+    enums.clear();
+    structs.clear();
+    std::istringstream in(text);
+    std::string line;
+    bool header = false;
+    int lineNumber = 0;
+    while (std::getline(in, line)) {
+        ++lineNumber;
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.find_first_not_of(" \t") == std::string::npos || line.rfind("#", 0) == 0) {
+            continue;
+        }
+        std::istringstream tok(line);
+        std::string keyword;
+        tok >> keyword;
+        if (!header) {
+            if (keyword != "frtypes") {
+                error = "not a types file (expected 'frtypes 1')";
+                return false;
+            }
+            header = true;
+            continue;
+        }
+        const bool ok = keyword.rfind("struct", 0) == 0 ? ReadStructLine(keyword, tok, structs, scope, error)
+                      : keyword.rfind("enum", 0) == 0 ? ReadEnumLine(keyword, tok, enums, scope, error) : false;
+        if (!ok) {
+            if (error.empty()) {
+                error = "unknown line '" + keyword + "'";
+            }
+            error = "line " + std::to_string(lineNumber) + ": " + error;
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace ce::node_system

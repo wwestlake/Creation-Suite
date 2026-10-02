@@ -11,28 +11,52 @@ NodePalette::NodePalette(const ce::node_system::NodeTypeRegistry& registry) : re
     titleLabel_.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(titleLabel_);
 
-    filterBox_.setTextToShowWhenEmpty("Filter...", juce::Colour(0xff6b7a8c));
     filterBox_.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff20262f));
     filterBox_.setColour(juce::TextEditor::textColourId, juce::Colours::white);
+    filterBox_.setTextToShowWhenEmpty("Search nodes - name, category or what they do", juce::Colour(0xff6b7a8c));
     filterBox_.onTextChange = [this] {
         RebuildRows();
         listBox_.updateContent();
+        // Results start at the top, the best one selected (Enter adds it).
+        listBox_.scrollToEnsureRowIsOnscreen(0);
+        if (filterBox_.getText().trim().isNotEmpty() && !rows_.empty())
+            listBox_.selectRow(0);
+        else
+            listBox_.deselectAllRows();
         repaint();
     };
+    filterBox_.onReturnKey = [this] {
+        const int selected = listBox_.getSelectedRow();
+        AddRow(selected >= 0 ? selected : 0);
+    };
+    filterBox_.onEscapeKey = [this] { filterBox_.clear(); };
     addAndMakeVisible(filterBox_);
 
     listBox_.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff181c22));
     listBox_.setRowHeight(24);
     addAndMakeVisible(listBox_);
+    noMatches_.setColour(juce::Label::textColourId, juce::Colour(0xff8a94a3));
+    noMatches_.setJustificationType(juce::Justification::centredTop);
+    noMatches_.setInterceptsMouseClicks(false, false);
+    addChildComponent(noMatches_);
 
     RebuildRows();
     listBox_.updateContent();
 }
 
+void NodePalette::SetDiagramType(std::string diagramType) {
+    diagramType_ = std::move(diagramType);
+    RefreshFromRegistry();
+}
+
 void NodePalette::RefreshFromRegistry() {
     entries_.clear();
     for (const auto& [typeName, descriptor] : registry_.Types()) {
-        entries_.push_back({typeName, descriptor.displayName.empty() ? typeName : descriptor.displayName, descriptor.category});
+        if (!ce::node_system::AllowedInDiagram(descriptor, diagramType_)) {
+            continue; // belongs to another kind of graph
+        }
+        entries_.push_back({typeName, descriptor.displayName.empty() ? typeName : descriptor.displayName, descriptor.category,
+                            descriptor.description});
     }
     std::sort(entries_.begin(), entries_.end(), [](const Entry& a, const Entry& b) {
         return a.category != b.category ? a.category < b.category : a.displayName < b.displayName;
@@ -46,43 +70,101 @@ void NodePalette::RefreshFromRegistry() {
     repaint();
 }
 
+namespace {
+// How well an entry matches the search, lower is better; -1 if it does not. Every word must be found somewhere: the
+// name (a word of it starting with the search word is best), the category, the type id or the description.
+int MatchScore(const juce::StringArray& words, const juce::String& name, const juce::String& category, const juce::String& typeName,
+               const juce::String& description) {
+    int score = 0;
+    juce::StringArray nameWords;
+    nameWords.addTokens(name.toLowerCase(), " ()-_.", "");
+    for (const auto& word : words) {
+        bool startsNameWord = false;
+        for (const auto& w : nameWords)
+            startsNameWord = startsNameWord || w.startsWith(word);
+        if (name.startsWithIgnoreCase(word)) score += 0;
+        else if (startsNameWord) score += 1;
+        else if (name.containsIgnoreCase(word)) score += 2;
+        else if (category.containsIgnoreCase(word)) score += 4;
+        else if (typeName.containsIgnoreCase(word)) score += 6;
+        else if (description.containsIgnoreCase(word)) score += 8;
+        else return -1;
+    }
+    return score;
+}
+} // namespace
+
 void NodePalette::RebuildRows() {
     rows_.clear();
     const juce::String filter = filterBox_.getText().trim();
-    const bool filtering = filter.isNotEmpty();
 
+    // Searching: one list, best matches first, each with its category beside it.
+    if (filter.isNotEmpty()) {
+        juce::StringArray words;
+        words.addTokens(filter.toLowerCase(), " ", "\"");
+        words.removeEmptyStrings();
+        std::vector<std::pair<int, std::size_t>> found;
+        for (std::size_t i = 0; i < entries_.size(); ++i) {
+            const auto& e = entries_[i];
+            const int score = MatchScore(words, juce::String(e.displayName), juce::String(e.category), juce::String(e.typeName),
+                                         juce::String(e.description));
+            if (score >= 0)
+                found.push_back({ score, i });
+        }
+        std::stable_sort(found.begin(), found.end(), [this](const auto& a, const auto& b) {
+            return a.first != b.first ? a.first < b.first : entries_[a.second].displayName < entries_[b.second].displayName;
+        });
+        for (const auto& [score, index] : found) {
+            Row row;
+            row.entryIndex = static_cast<int>(index);
+            rows_.push_back(row);
+        }
+        noMatches_.setText("No nodes match \"" + filter + "\".", juce::dontSendNotification);
+        noMatches_.setVisible(rows_.empty());
+        return;
+    }
+    noMatches_.setVisible(false);
+
+    // Browsing: by category, each section folding open and shut.
     std::size_t i = 0;
     while (i < entries_.size()) {
         const std::string category = entries_[i].category;
-        std::vector<std::size_t> matchingIndices;
+        std::vector<std::size_t> indices;
         std::size_t j = i;
         while (j < entries_.size() && entries_[j].category == category) {
-            const Entry& entry = entries_[j];
-            const bool matches = !filtering || juce::String(entry.displayName).containsIgnoreCase(filter) ||
-                                  juce::String(entry.typeName).containsIgnoreCase(filter);
-            if (matches) {
-                matchingIndices.push_back(j);
-            }
+            indices.push_back(j);
             ++j;
         }
-        if (!matchingIndices.empty()) {
-            Row header;
-            header.isHeader = true;
-            header.category = category;
-            header.count = static_cast<int>(matchingIndices.size());
-            rows_.push_back(header);
-
-            const bool expanded = categoryExpanded_[category] || filtering;
-            if (expanded) {
-                for (const auto idx : matchingIndices) {
-                    Row row;
-                    row.entryIndex = static_cast<int>(idx);
-                    rows_.push_back(row);
-                }
+        Row header;
+        header.isHeader = true;
+        header.category = category;
+        header.count = static_cast<int>(indices.size());
+        rows_.push_back(header);
+        if (categoryExpanded_[category]) {
+            for (const auto idx : indices) {
+                Row row;
+                row.entryIndex = static_cast<int>(idx);
+                rows_.push_back(row);
             }
         }
         i = j;
     }
+}
+
+void NodePalette::AddRow(int row) {
+    if (row < 0 || row >= static_cast<int>(rows_.size()) || rows_[static_cast<std::size_t>(row)].isHeader || !onAddRequested)
+        return;
+    const auto index = rows_[static_cast<std::size_t>(row)].entryIndex;
+    if (index >= 0 && index < static_cast<int>(entries_.size()))
+        onAddRequested(entries_[static_cast<std::size_t>(index)].typeName);
+}
+
+void NodePalette::listBoxItemDoubleClicked(int row, const juce::MouseEvent&) {
+    AddRow(row);
+}
+
+void NodePalette::returnKeyPressed(int lastRowSelected) {
+    AddRow(lastRowSelected);
 }
 
 int NodePalette::getNumRows() {
@@ -114,9 +196,17 @@ void NodePalette::paintListBoxItem(int rowNumber, juce::Graphics& g, int width, 
         g.fillAll(juce::Colour(0xff2a3644));
     }
     const auto& entry = entries_[static_cast<std::size_t>(row.entryIndex)];
+    const bool searching = filterBox_.getText().trim().isNotEmpty();
     g.setColour(juce::Colour(0xffb8c4d5));
     g.setFont(juce::Font(juce::FontOptions(13.0f)));
-    g.drawText(entry.displayName, 20, 0, width - 20, height, juce::Justification::centredLeft, true);
+    g.drawText(entry.displayName, searching ? 8 : 20, 0, width - 20, height, juce::Justification::centredLeft, true);
+    if (searching) {
+        // Where it lives, for when you browse.
+        g.setColour(juce::Colour(0xff6b7a8c));
+        g.setFont(juce::Font(juce::FontOptions(11.0f)));
+        g.drawText(entry.category.empty() ? juce::String("Other") : juce::String(entry.category), 8, 0, width - 16, height,
+                   juce::Justification::centredRight, true);
+    }
 }
 
 void NodePalette::listBoxItemClicked(int row, const juce::MouseEvent&) {
@@ -154,6 +244,7 @@ void NodePalette::resized() {
     titleLabel_.setBounds(bounds.removeFromTop(24));
     filterBox_.setBounds(bounds.removeFromTop(26).reduced(4, 2));
     listBox_.setBounds(bounds);
+    noMatches_.setBounds(bounds.reduced(8).removeFromTop(40));
 }
 
 void NodePalette::paint(juce::Graphics& g) {
