@@ -273,7 +273,8 @@ bool ReadStructLine(const std::string& keyword, std::istringstream& tok, std::ve
     return false;
 }
 
-// Enum lines (TYPES.md): "enum <Name>", then its display name, values and descriptions.
+// Enum lines (TYPES.md): "enum <Name>", then its display name, values and descriptions, and what each value carries:
+// "enumfield <Name> <variant> <dataType> [enum <E>] [struct <S>]" then "enumfieldname <Name> <variant> <field> <name>".
 void WriteEnumLines(std::ostream& os, const std::vector<EnumDef>& enums) {
     for (const EnumDef& def : enums) {
         os << "enum " << def.name << "\n";
@@ -286,6 +287,17 @@ void WriteEnumLines(std::ostream& os, const std::vector<EnumDef>& enums) {
             }
             if (!variant.description.empty()) {
                 os << "enumvariantdescription " << def.name << " " << i << " " << variant.description << "\n";
+            }
+            for (size_t f = 0; f < variant.fields.size(); ++f) {
+                const auto& field = variant.fields[f];
+                os << "enumfield " << def.name << " " << i << " " << DataTypeToString(field.type.dataType);
+                if (!field.type.enumType.empty()) os << " enum " << field.type.enumType;
+                if (!field.type.structType.empty()) os << " struct " << field.type.structType;
+                os << "\n";
+                os << "enumfieldname " << def.name << " " << i << " " << f << " " << field.name << "\n";
+                if (!field.description.empty()) {
+                    os << "enumfielddescription " << def.name << " " << i << " " << f << " " << field.description << "\n";
+                }
             }
         }
         if (!def.description.empty()) {
@@ -338,6 +350,35 @@ bool ReadEnumLine(const std::string& keyword, std::istringstream& tok, std::vect
         def->variants.push_back(EnumVariant(restOf()));
     } else if (keyword == "enumdescription") {
         def->description = restOf();
+    } else if (keyword == "enumfield" || keyword == "enumfieldname" || keyword == "enumfielddescription") {
+        size_t index = 0;
+        if (!(tok >> index) || index >= def->variants.size()) {
+            error = "'" + keyword + "' for a value enum '" + name + "' does not have";
+            return false;
+        }
+        auto& fields = def->variants[index].fields;
+        if (keyword == "enumfield") {
+            std::string dataTypeText;
+            if (!(tok >> dataTypeText)) { error = "malformed 'enumfield' line"; return false; }
+            const auto dataType = DataTypeFromString(dataTypeText);
+            if (!dataType) { error = "unknown data type '" + dataTypeText + "'"; return false; }
+            EnumField field;
+            field.type = { PinKind::Data, *dataType };
+            std::string word;
+            while (tok >> word) {
+                if (word == "enum") { tok >> field.type.enumType; }
+                else if (word == "struct") { tok >> field.type.structType; }
+                else { error = "unexpected '" + word + "' on 'enumfield'"; return false; }
+            }
+            fields.push_back(std::move(field));
+        } else {
+            size_t f = 0;
+            if (!(tok >> f) || f >= fields.size()) {
+                error = "'" + keyword + "' for a field the value does not have";
+                return false;
+            }
+            (keyword == "enumfieldname" ? fields[f].name : fields[f].description) = restOf();
+        }
     } else if (keyword == "enumvariantcolour" || keyword == "enumvariantdescription") {
         size_t index = 0;
         if (!(tok >> index) || index >= def->variants.size()) {
@@ -388,9 +429,10 @@ std::string SerializeGraph(const Graph& graph) {
         }
         if (!symbol.structType.empty()) {
             os << "symbolstruct " << symbol.id << " " << symbol.structType << "\n";
-            for (size_t i = 0; i < symbol.memberValues.size(); ++i) {
-                os << "symbolmember " << symbol.id << " " << i << SerializeDefaultValue(symbol.memberValues[i]) << "\n";
-            }
+        }
+        // A struct's member values, or the values the chosen variant of an enum carries.
+        for (size_t i = 0; i < symbol.memberValues.size(); ++i) {
+            os << "symbolmember " << symbol.id << " " << i << SerializeDefaultValue(symbol.memberValues[i]) << "\n";
         }
         if (!symbol.description.empty()) {
             os << "symboldescription " << symbol.id << " " << symbol.description << "\n";

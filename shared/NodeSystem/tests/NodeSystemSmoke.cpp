@@ -625,6 +625,113 @@ int main()
             std::cout << "NodeSystem structs: ok" << std::endl;
         }
 
+        // Enums whose values carry data (TYPES.md): sum types in full - a value carries none, one or several values of
+        // any type, a struct, or the enum itself (recursion); Make Variant and Match follow the enum.
+        {
+            namespace ns = ce::node_system;
+            ns::NodeTypeRegistry reg;
+            ns::RegisterSymbolGetNodes(reg);
+            ns::RegisterEnumNodes(reg);
+            ns::Graph g("Enums", ns::GraphTarget::Dataflow);
+
+            ns::StructDef company;
+            company.name = "Company";
+            company.displayName = "Company";
+            company.members = { { "year", { ns::PinKind::Data, ns::DataType::Int }, std::int64_t { 2026 }, "", false, 0.0, 1.0 } };
+            g.AddStruct(company);
+            auto field = [](const char* name, ns::DataType type, const char* enumType = "", const char* structType = "") {
+                ns::EnumField f;
+                f.name = name;
+                f.type = { ns::PinKind::Data, type };
+                f.type.enumType = enumType;
+                f.type.structType = structType;
+                return f;
+            };
+            ns::EnumDef fill { "Fill", "Fill", { "Nothing", "Solid", "Picture", "Styled" }, "", ns::TypeScope::graph };
+            fill.variants[1].fields = { field("colour", ns::DataType::Color), field("amount", ns::DataType::Float) };
+            fill.variants[2].fields = { field("image", ns::DataType::Texture) };
+            fill.variants[3].fields = { field("company", ns::DataType::Struct, "", "Company") };
+            ns::EnumDef list { "List", "List", { "Nil", "Cons" }, "", ns::TypeScope::graph };
+            list.variants[1].fields = { field("head", ns::DataType::Float), field("tail", ns::DataType::Int, "List") }; // itself
+            g.AddEnum(fill);
+            g.AddEnum(list);
+
+            if (ns::FrustEnumDeclaration(fill) != "enum Fill { Nothing, Solid(Array<f64, 3>, f64), Picture(i64), Styled(Company) }"
+                || ns::FrustEnumDeclaration(list) != "enum List { Nil, Cons(f64, List) }")
+                fail("Unexpected FRust enums: " + ns::FrustEnumDeclaration(fill) + " / " + ns::FrustEnumDeclaration(list));
+            if (! ns::EnumCarriesValues(fill) || ns::EnumCarriesValues(ns::EnumDef { "Plain", "Plain", { "A", "B" }, "", ns::TypeScope::graph })
+                || ! ns::EnumFieldNameReserved("variant") || ns::EnumFieldNameReserved("amount"))
+                fail("EnumCarriesValues or the reserved field names are wrong.");
+
+            auto pinOf = [](ns::Node* n, const std::string& name, bool input) -> ns::PinId {
+                for (const auto& p : input ? n->Inputs() : n->Outputs()) if (p.name == name) return p.id;
+                return 0;
+            };
+            auto setText = [](ns::Node* n, const char* pin, const char* text) {
+                for (const auto& p : n->Inputs()) if (p.name == pin) n->FindPin(p.id)->defaultValue = std::string(text);
+            };
+            // Make Variant: Fill, Solid -> inputs type, variant, colour, amount; out a Fill.
+            auto* make = ns::AddRegisteredNode(g, reg, ns::kMakeVariantType, &error);
+            setText(make, ns::kEnumTypePin, "Fill");
+            setText(make, ns::kEnumVariantPin, "Solid");
+            ns::SyncEnumNodePins(g, reg, make->Id());
+            // Match: Fill -> out Solid_colour, Solid_amount, Picture_image, Styled_company; in a Fill.
+            auto* match = ns::AddRegisteredNode(g, reg, ns::kMatchType, &error);
+            setText(match, ns::kEnumTypePin, "Fill");
+            ns::SyncEnumNodePins(g, reg, match->Id());
+            if (make->Inputs().size() != 4 || pinOf(make, "amount", true) == 0 || make->Outputs().front().type.enumType != "Fill"
+                || match->Outputs().size() != 4 || match->Outputs()[0].name != "Solid_colour" || match->Outputs()[3].name != "Styled_company"
+                || match->Outputs()[3].type.structType != "Company" || match->Inputs()[1].type.enumType != "Fill")
+                fail("Make Variant's or Match's pins do not follow the enum.");
+            if (! g.Connect(make->Id(), pinOf(make, "value", false), match->Id(), pinOf(match, "value", true)))
+                fail("A Fill did not wire from Make Variant into Match.");
+
+            // Renaming a field renames the pins in place: the wire into Make's "amount" stays, Match's pin follows.
+            auto* feed = ns::AddRegisteredNode(g, reg, "core.symbol.get.float", &error);
+            g.Connect(feed->Id(), feed->Outputs().front().id, make->Id(), pinOf(make, "amount", true));
+            const auto before = g.Connections().size();
+            g.FindEnum("Fill")->variants[1].fields[1].name = "strength";
+            ns::SyncEnumNodePins(g, reg, make->Id());
+            ns::SyncEnumNodePins(g, reg, match->Id());
+            if (pinOf(make, "strength", true) == 0 || pinOf(match, "Solid_strength", false) == 0 || g.Connections().size() != before)
+                fail("Renaming a field lost its pin or its wire.");
+            // Another value: Make Variant's inputs become that value's fields (Picture: image).
+            setText(make, ns::kEnumVariantPin, "Picture");
+            ns::SyncEnumNodePins(g, reg, make->Id());
+            if (make->Inputs().size() != 3 || pinOf(make, "image", true) == 0 || make->Inputs()[2].type.dataType != ns::DataType::Texture)
+                fail("Make Variant's inputs did not follow its value.");
+
+            // A Choice param of Fill set to Solid, with what Solid carries.
+            ns::Symbol look { "look", "Look", ns::SymbolKind::Param, ns::DataType::Int, std::int64_t { 1 }, "agent", false, "", "Fill", "",
+                              { ns::Vec3Default { 0.0f, 1.0f, 0.0f }, 0.25f } };
+            g.AddSymbol(look);
+
+            std::vector<std::string> enumErrors;
+            if (! ns::ValidateAgainstRegistry(g, reg, &enumErrors))
+                fail("Enum nodes do not validate: " + (enumErrors.empty() ? std::string() : enumErrors.front()));
+            const std::string text = ns::SerializeGraph(g);
+            std::string enumError;
+            auto reloaded = ns::DeserializeGraph(text, enumError);
+            if (text.find("enumvariant Fill Solid\nenumfield Fill 1 color\nenumfieldname Fill 1 0 colour\nenumfield Fill 1 float\n"
+                          "enumfieldname Fill 1 1 strength\n") == std::string::npos
+                || text.find("enumfield Fill 3 struct struct Company\nenumfieldname Fill 3 0 company\n") == std::string::npos
+                || text.find("enumfield List 1 int enum List\nenumfieldname List 1 1 tail\n") == std::string::npos
+                || text.find("symbolenum look Fill\nsymbolmember look 0 default vec3 0 1 0\nsymbolmember look 1 default float 0.25\n") == std::string::npos)
+                fail("Unexpected enum lines:\n" + text);
+            if (reloaded == nullptr || ns::SerializeGraph(*reloaded) != text || reloaded->FindEnum("List")->variants[1].fields[1].type.enumType != "List"
+                || reloaded->FindSymbol("look")->memberValues.size() != 2)
+                fail("A graph with enums carrying values does not round-trip: " + enumError);
+
+            // A types file keeps what values carry.
+            std::vector<ns::EnumDef> fileEnums;
+            std::vector<ns::StructDef> fileStructs;
+            std::string fileError;
+            if (! ns::DeserializeTypes(ns::SerializeTypes({ fill }, {}), ns::TypeScope::project, fileEnums, fileStructs, fileError)
+                || fileEnums.size() != 1 || fileEnums[0].variants[1].fields.size() != 2 || fileEnums[0].variants[3].fields[0].type.structType != "Company")
+                fail("A types file with enums carrying values did not read back: " + fileError);
+            std::cout << "NodeSystem enums carrying values: ok" << std::endl;
+        }
+
         return 0;
     }
     catch (const std::exception& exception)

@@ -1,4 +1,5 @@
 #include <creation/node_editor_ui/SymbolsPanel.h>
+#include <creation/node_editor_ui/Fields.h>
 #include <creation/node_editor_ui/NodeGraphComponent.h>
 #include <node_system/symbol_nodes.h>
 
@@ -213,6 +214,90 @@ private:
         y += height + 6;
     }
 
+    // A member of a struct, or something an enum's value carries: its name, type and default.
+    struct MemberSpec
+    {
+        std::string name;
+        ns::PinTypeDesc type;
+        ns::PinDefaultValue defaultValue;
+    };
+
+    // One row per member, each edited like a setting of its type; values are kept in the symbol's memberValues, in
+    // order (a missing one shows the default). Images, drawings, brushes and structs inside have no editor here.
+    void memberRows(const std::vector<MemberSpec>& specs, const std::vector<ns::PinDefaultValue>& values, const juce::String& otherwise)
+    {
+        for (size_t m = 0; m < specs.size(); ++m)
+        {
+            const auto& member = specs[m];
+            const auto current = m < values.size() && ! std::holds_alternative<std::monostate>(values[m]) ? values[m] : member.defaultValue;
+            auto setMember = [this, m](ns::PinDefaultValue value) {
+                if (auto* s = symbol_())
+                {
+                    if (s->memberValues.size() <= m)
+                        s->memberValues.resize(m + 1);
+                    s->memberValues[m] = std::move(value);
+                    panel.changed();
+                }
+            };
+            std::unique_ptr<juce::Component> edit;
+            if (! member.type.enumType.empty())
+            {
+                auto box = std::make_unique<juce::ComboBox>();
+                if (const auto* e = panel.enumSource != nullptr ? ns::FindEnumFor(panel.graph, *panel.enumSource, member.type.enumType)
+                                                                : panel.graph.FindEnum(member.type.enumType))
+                    for (size_t k = 0; k < e->variants.size(); ++k)
+                        box->addItem(e->variants[k].name, static_cast<int>(k) + 1);
+                if (const auto* i = std::get_if<std::int64_t>(&current))
+                    box->setSelectedId(static_cast<int>(*i) + 1, juce::dontSendNotification);
+                box->onChange = [setMember, b = box.get()]() { setMember(static_cast<std::int64_t>(b->getSelectedId() - 1)); };
+                edit = std::move(box);
+            }
+            else if (member.type.dataType == ns::DataType::Bool)
+            {
+                auto t = std::make_unique<juce::ToggleButton>();
+                t->setToggleState(std::holds_alternative<bool>(current) && std::get<bool>(current), juce::dontSendNotification);
+                t->onClick = [setMember, b = t.get()]() { setMember(b->getToggleState()); };
+                edit = std::move(t);
+            }
+            else if (member.type.dataType == ns::DataType::Float || member.type.dataType == ns::DataType::Int
+                     || member.type.dataType == ns::DataType::String || member.type.dataType == ns::DataType::Color
+                     || member.type.dataType == ns::DataType::Vec3)
+            {
+                auto e = std::make_unique<juce::TextEditor>();
+                juce::String shown;
+                if (const auto* f = std::get_if<float>(&current)) shown = juce::String(*f, 4);
+                if (const auto* i = std::get_if<std::int64_t>(&current)) shown = juce::String(*i);
+                if (const auto* t = std::get_if<std::string>(&current)) shown = juce::String(*t);
+                if (const auto* c = std::get_if<ns::Vec3Default>(&current))
+                    shown = juce::String(c->x, 3) + ", " + juce::String(c->y, 3) + ", " + juce::String(c->z, 3);
+                e->setText(shown, juce::dontSendNotification);
+                const auto dataType = member.type.dataType;
+                e->onReturnKey = e->onFocusLost = [setMember, dataType, ed = e.get()]() {
+                    const auto text = ed->getText().trim();
+                    if (dataType == ns::DataType::Float) setMember(text.getFloatValue());
+                    else if (dataType == ns::DataType::Int) setMember(static_cast<std::int64_t>(text.getLargeIntValue()));
+                    else if (dataType == ns::DataType::String) setMember(text.toStdString());
+                    else
+                    {
+                        juce::StringArray parts;
+                        parts.addTokens(text, ",", "");
+                        setMember(ns::Vec3Default { parts[0].getFloatValue(), parts[1].getFloatValue(), parts[2].getFloatValue() });
+                    }
+                };
+                edit = std::move(e);
+            }
+            else
+            {
+                auto none = std::make_unique<juce::Label>();
+                none->setText(otherwise, juce::dontSendNotification);
+                none->setColour(juce::Label::textColourId, juce::Colours::grey);
+                edit = std::move(none);
+            }
+            row(juce::String(member.name), *edit);
+            memberEditors.push_back(std::move(edit));
+        }
+    }
+
     void buildValueEditor(const ns::Symbol& symbol)
     {
         auto setValue = [this](ns::PinDefaultValue v) {
@@ -231,75 +316,10 @@ private:
         if (const auto* def = panel.structOf(symbol))
         {
             // A struct: each member's value, edited like a setting of its type.
-            for (size_t m = 0; m < def->members.size(); ++m)
-            {
-                const auto& member = def->members[m];
-                const auto current = m < symbol.memberValues.size() ? symbol.memberValues[m] : member.defaultValue;
-                auto setMember = [this, m](ns::PinDefaultValue value) {
-                    if (auto* s = symbol_())
-                    {
-                        if (s->memberValues.size() <= m)
-                            s->memberValues.resize(m + 1);
-                        s->memberValues[m] = std::move(value);
-                        panel.changed();
-                    }
-                };
-                std::unique_ptr<juce::Component> edit;
-                if (! member.type.enumType.empty())
-                {
-                    auto box = std::make_unique<juce::ComboBox>();
-                    if (const auto* e = panel.enumSource != nullptr ? ns::FindEnumFor(panel.graph, *panel.enumSource, member.type.enumType) : panel.graph.FindEnum(member.type.enumType))
-                        for (size_t k = 0; k < e->variants.size(); ++k)
-                            box->addItem(e->variants[k].name, static_cast<int>(k) + 1);
-                    if (const auto* i = std::get_if<std::int64_t>(&current))
-                        box->setSelectedId(static_cast<int>(*i) + 1, juce::dontSendNotification);
-                    box->onChange = [setMember, b = box.get()]() { setMember(static_cast<std::int64_t>(b->getSelectedId() - 1)); };
-                    edit = std::move(box);
-                }
-                else if (member.type.dataType == ns::DataType::Bool)
-                {
-                    auto t = std::make_unique<juce::ToggleButton>();
-                    t->setToggleState(std::holds_alternative<bool>(current) && std::get<bool>(current), juce::dontSendNotification);
-                    t->onClick = [setMember, b = t.get()]() { setMember(b->getToggleState()); };
-                    edit = std::move(t);
-                }
-                else if (member.type.dataType == ns::DataType::Float || member.type.dataType == ns::DataType::Int
-                         || member.type.dataType == ns::DataType::String || member.type.dataType == ns::DataType::Color
-                         || member.type.dataType == ns::DataType::Vec3)
-                {
-                    auto e = std::make_unique<juce::TextEditor>();
-                    juce::String shown;
-                    if (const auto* f = std::get_if<float>(&current)) shown = juce::String(*f, 4);
-                    if (const auto* i = std::get_if<std::int64_t>(&current)) shown = juce::String(*i);
-                    if (const auto* t = std::get_if<std::string>(&current)) shown = juce::String(*t);
-                    if (const auto* c = std::get_if<ns::Vec3Default>(&current))
-                        shown = juce::String(c->x, 3) + ", " + juce::String(c->y, 3) + ", " + juce::String(c->z, 3);
-                    e->setText(shown, juce::dontSendNotification);
-                    const auto dataType = member.type.dataType;
-                    e->onReturnKey = e->onFocusLost = [setMember, dataType, ed = e.get()]() {
-                        const auto text = ed->getText().trim();
-                        if (dataType == ns::DataType::Float) setMember(text.getFloatValue());
-                        else if (dataType == ns::DataType::Int) setMember(static_cast<std::int64_t>(text.getLargeIntValue()));
-                        else if (dataType == ns::DataType::String) setMember(text.toStdString());
-                        else
-                        {
-                            juce::StringArray parts;
-                            parts.addTokens(text, ",", "");
-                            setMember(ns::Vec3Default { parts[0].getFloatValue(), parts[1].getFloatValue(), parts[2].getFloatValue() });
-                        }
-                    };
-                    edit = std::move(e);
-                }
-                else
-                {
-                    auto none = std::make_unique<juce::Label>();
-                    none->setText("wired in, or set by Make Struct", juce::dontSendNotification);
-                    none->setColour(juce::Label::textColourId, juce::Colours::grey);
-                    edit = std::move(none);
-                }
-                row(juce::String(member.name), *edit);
-                memberEditors.push_back(std::move(edit));
-            }
+            std::vector<MemberSpec> specs;
+            for (const auto& member : def->members)
+                specs.push_back({ member.name, member.type, member.defaultValue });
+            memberRows(specs, symbol.memberValues, "wired in, or set by Make Struct");
         }
         else if (const auto* def = panel.enumOf(symbol))
         {
@@ -307,8 +327,26 @@ private:
                 choice.addItem(def->variants[i].name, static_cast<int>(i) + 1);
             if (const auto* i = std::get_if<std::int64_t>(&v))
                 choice.setSelectedId(static_cast<int>(*i) + 1, juce::dontSendNotification);
-            choice.onChange = [this, setValue]() { setValue(static_cast<std::int64_t>(choice.getSelectedId() - 1)); };
+            const bool carries = ns::EnumCarriesValues(*def);
+            choice.onChange = [this, carries]() {
+                if (auto* s = symbol_())
+                {
+                    s->value = static_cast<std::int64_t>(choice.getSelectedId() - 1);
+                    s->memberValues.clear(); // another value carries other things
+                    panel.changed();
+                    if (carries)
+                        rebuildSoon(); // show what the new value carries
+                }
+            };
             row("Value", choice);
+            // What the chosen value carries (a sum type in full, TYPES.md), edited like struct members.
+            if (const auto* i = std::get_if<std::int64_t>(&v); i != nullptr && *i >= 0 && *i < static_cast<std::int64_t>(def->variants.size()))
+            {
+                std::vector<MemberSpec> specs;
+                for (const auto& field : def->variants[static_cast<size_t>(*i)].fields)
+                    specs.push_back({ field.name, field.type, ns::DefaultValueFor(field.type.dataType) });
+                memberRows(specs, symbol.memberValues, "wired in, or set by Make Variant");
+            }
         }
         else if (symbol.type == ns::DataType::Bool)
         {
@@ -486,6 +524,7 @@ void SymbolsPanel::refresh()
     if (selectedId.isNotEmpty())
     {
         editor = std::make_unique<Editor>(*this, selectedId.toStdString());
+        selectAllWhenFocused(*editor); // clicking a name or value selects it: typing replaces it
         addAndMakeVisible(*editor);
     }
     resized();

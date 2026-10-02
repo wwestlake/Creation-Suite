@@ -40,7 +40,7 @@ struct Symbol {
     // A Choice: an Int symbol whose value is one of a registered enum's variants (enums.h). Empty otherwise.
     std::string enumType;
     // A struct symbol (type Struct): which struct, and its members' values in the struct's member order (a missing one
-    // takes the member's default).
+    // takes the member's default). For a Choice of an enum whose values carry data: what the chosen value carries.
     std::string structType;
     std::vector<PinDefaultValue> memberValues;
 

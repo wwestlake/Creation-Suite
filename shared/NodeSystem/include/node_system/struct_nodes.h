@@ -6,8 +6,10 @@
 #include "node_system/graph.h"
 #include "node_system/type_registry.h"
 
-// Nodes that use structs (TYPES.md) - they never create one; structs are made in the Struct Editor. Modelled on
-// UE4's struct nodes, all pure data flow:
+// Nodes that use the types made in the editors (TYPES.md) - they never create one. Structs (the product type) and
+// enums that carry values (the sum type). Modelled on UE4's struct nodes and FRust's `match`, all pure data flow.
+//
+// Structs:
 //
 //   Make Struct   members in, the struct out.
 //   Break Struct  the struct in, every member out.
@@ -19,6 +21,15 @@
 // with these. Every one has a fixed "type" input naming the struct (chosen in Properties); Set Members also has
 // "members" (the ticked names, comma separated) and Get Member "member". SyncStructNodePins keeps the member pins in
 // line with the struct: renamed or retyped members keep their pins in place (and wires, where the type still fits).
+//
+// Enums whose values carry data:
+//
+//   Make Variant  the variant chosen in Properties ("variant"), what it carries in, the enum value out.
+//   Match         the enum value in; out, what every variant carries, as "<Variant>_<field>" pins. Only the chosen
+//                 variant's pins carry anything (like a Route's unchosen outputs). To branch on the variant, wire the
+//                 enum value into a Switch: its cases are the variants.
+//
+// Both have a fixed "type" input naming the enum. SyncEnumNodePins keeps their pins in line with it, the same way.
 namespace ce::node_system {
 
 inline constexpr const char* kMakeStructType = "core.struct.make";
@@ -29,6 +40,12 @@ inline constexpr const char* kStructTypePin = "type";       // the struct's name
 inline constexpr const char* kStructValuePin = "value";     // the struct going in or out
 inline constexpr const char* kStructMembersPin = "members"; // Set Members: which members, comma separated
 inline constexpr const char* kStructMemberPin = "member";   // Get Member: which member
+
+inline constexpr const char* kMakeVariantType = "core.enum.make";
+inline constexpr const char* kMatchType = "core.enum.match";
+inline constexpr const char* kEnumTypePin = "type";       // the enum's name
+inline constexpr const char* kEnumVariantPin = "variant"; // Make Variant: which variant
+inline constexpr const char* kEnumValuePin = "value";     // the enum value going in or out
 
 void RegisterStructNodes(NodeTypeRegistry& registry, std::vector<std::string> diagramTypes = {});
 
@@ -48,5 +65,13 @@ bool SyncStructNodePins(Graph& graph, const NodeTypeRegistry& registry, NodeId n
 
 // A struct by name: the graph's own first, then the registry's (project, pods, built-in).
 const StructDef* FindStructFor(const Graph& graph, const NodeTypeRegistry& registry, const std::string& name);
+
+void RegisterEnumNodes(NodeTypeRegistry& registry, std::vector<std::string> diagramTypes = {});
+enum class EnumNodeKind { none, makeVariant, match };
+EnumNodeKind EnumNodeKindOf(const Node& node);
+// The pin a Match gives a variant's field: "<Variant>_<field>", spaces as _.
+std::string MatchPinName(const std::string& variantName, const std::string& fieldName);
+// Make Variant's and Match's pins follow their enum (and Make Variant's variant). True if anything changed.
+bool SyncEnumNodePins(Graph& graph, const NodeTypeRegistry& registry, NodeId node);
 
 } // namespace ce::node_system

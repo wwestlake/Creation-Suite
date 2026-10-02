@@ -55,6 +55,87 @@ std::vector<std::string> SplitNames(const std::string& text) {
     return names;
 }
 
+// A pin a struct or enum node should have for one member or field: its name, type and (for an input) typed-in value.
+struct MemberPin {
+    std::string name;
+    PinTypeDesc type;
+    PinDefaultValue defaultValue;
+};
+
+// Gives a node exactly the `wanted` member pins (inputs or outputs), after its fixed pins and in the wanted order.
+// Pins match by name, so reordering keeps each wire with its member; of the rest, as many pins as there are new names
+// are renamed (a member renamed: the wire stays); spare pins go, missing ones are added. A pin whose type changed
+// takes the new type and loses only the wires that no longer fit. True if anything changed.
+template <typename IsFixed>
+bool SyncMemberPins(Graph& graph, NodeId id, bool asInputs, IsFixed isFixed, const std::vector<MemberPin>& wanted) {
+    Node* node = graph.FindNode(id);
+    bool changed = false;
+    std::vector<PinId> current;
+    for (const auto& pin : asInputs ? node->Inputs() : node->Outputs())
+        if (!isFixed(pin)) current.push_back(pin.id);
+
+    std::vector<PinId> unmatched;
+    std::vector<std::string> currentNames;
+    for (PinId pinId : current) {
+        const auto& name = node->FindPin(pinId)->name;
+        currentNames.push_back(name);
+        if (std::none_of(wanted.begin(), wanted.end(), [&name](const MemberPin& w) { return w.name == name; })) {
+            unmatched.push_back(pinId);
+        }
+    }
+    std::vector<const MemberPin*> missing;
+    for (const auto& w : wanted) {
+        if (std::find(currentNames.begin(), currentNames.end(), w.name) == currentNames.end()) {
+            missing.push_back(&w);
+        }
+    }
+    size_t renamed = 0;
+    for (; renamed < unmatched.size() && renamed < missing.size(); ++renamed) {
+        node->FindPin(unmatched[renamed])->name = missing[renamed]->name;
+        changed = true;
+    }
+    for (size_t i = renamed; i < unmatched.size(); ++i) {
+        graph.DisconnectPin(id, unmatched[i]);
+        node->RemovePin(unmatched[i]);
+        changed = true;
+    }
+    for (size_t i = renamed; i < missing.size(); ++i) {
+        if (asInputs) {
+            node->AddInput(missing[i]->name, missing[i]->type, missing[i]->defaultValue);
+        } else {
+            node->AddOutput(missing[i]->name, missing[i]->type, {});
+        }
+        changed = true;
+    }
+
+    std::vector<PinId> order;
+    for (const auto& w : wanted) {
+        for (const auto& pin : asInputs ? node->Inputs() : node->Outputs()) {
+            if (isFixed(pin) || pin.name != w.name) {
+                continue;
+            }
+            if (!(pin.type == w.type)) {
+                Pin* p = node->FindPin(pin.id);
+                p->type = w.type;
+                if (asInputs) {
+                    p->defaultValue = w.defaultValue;
+                }
+                DropMisfitWires(graph, id, pin.id);
+                changed = true;
+            }
+            order.push_back(pin.id);
+        }
+    }
+    std::vector<PinId> before;
+    for (const auto& pin : asInputs ? node->Inputs() : node->Outputs())
+        if (!isFixed(pin)) before.push_back(pin.id);
+    if (before != order) {
+        node->ArrangePins(asInputs, order);
+        changed = true;
+    }
+    return changed;
+}
+
 // The node's own pins, not members: "type", the struct pin ("value", in or out), and the member choices. Member names
 // cannot be these (the Struct Editor refuses them - StructMemberNameReserved).
 bool IsFixedPin(StructNodeKind kind, const Pin& pin) {
@@ -180,76 +261,109 @@ bool SyncStructNodePins(Graph& graph, const NodeTypeRegistry& registry, NodeId i
     }
     const bool asInputs = kind == StructNodeKind::make || kind == StructNodeKind::setMembers;
 
-    std::vector<PinId> current;
-    for (const auto& pin : asInputs ? node->Inputs() : node->Outputs())
-        if (!IsFixedPin(kind, pin)) current.push_back(pin.id);
-    std::vector<std::string> wanted;
+    std::vector<MemberPin> wanted;
     for (const auto* m : members) {
-        wanted.push_back(StructMemberPinName(m->name));
+        wanted.push_back({ StructMemberPinName(m->name), m->type, MemberDefault(*m) });
+    }
+    changed = SyncMemberPins(graph, id, asInputs, [kind](const Pin& pin) { return IsFixedPin(kind, pin); }, wanted) || changed;
+    return changed;
+}
+
+// ---- Enums whose values carry data --------------------------------------------------------------------------------
+
+namespace {
+PinDefaultValue FieldDefault(const PinTypeDesc& type) {
+    if (type.dataType == DataType::Texture) {
+        return std::string();
+    }
+    if (type.dataType == DataType::Struct || type.dataType == DataType::Drawing || type.dataType == DataType::Brush) {
+        return {};
+    }
+    return DefaultValueFor(type.dataType);
+}
+
+bool IsFixedEnumPin(EnumNodeKind kind, const Pin& pin) {
+    if (pin.name == kEnumTypePin && pin.isInput) return true;
+    if (pin.name == kEnumValuePin) return (kind == EnumNodeKind::match) == pin.isInput;
+    if (pin.name == kEnumVariantPin && kind == EnumNodeKind::makeVariant && pin.isInput) return true;
+    return false;
+}
+} // namespace
+
+std::string MatchPinName(const std::string& variantName, const std::string& fieldName) {
+    return StructMemberPinName(variantName) + "_" + StructMemberPinName(fieldName);
+}
+
+void RegisterEnumNodes(NodeTypeRegistry& registry, std::vector<std::string> diagramTypes) {
+    const PinTypeDesc text { PinKind::Data, DataType::String };
+    const PinTypeDesc number { PinKind::Data, DataType::Int };
+    auto add = [&](const char* typeName, const char* displayName, const char* description, std::vector<PinSignature> inputs,
+                   std::vector<PinSignature> outputs) {
+        NodeTypeDescriptor d;
+        d.typeName = typeName;
+        d.domain = Domain::Core;
+        d.inputs = std::move(inputs);
+        d.outputs = std::move(outputs);
+        d.displayName = displayName;
+        d.category = "Enums";
+        d.description = description;
+        d.diagramTypes = diagramTypes;
+        d.dynamicPins = true;
+        registry.Register(std::move(d));
+    };
+    add(kMakeVariantType, "Make Variant",
+        "One value of an enum, with what it carries. Choose the enum and the value in Properties - enums are made in the Types panel.",
+        { { kEnumTypePin, text, std::string() }, { kEnumVariantPin, text, std::string() } }, { { kEnumValuePin, number, {} } });
+    add(kMatchType, "Match",
+        "Takes an enum value apart: what each value carries comes out of its own pins, and only the chosen value's pins carry "
+        "anything. Wire the enum into a Switch to branch on it.",
+        { { kEnumTypePin, text, std::string() }, { kEnumValuePin, number, std::int64_t { 0 } } }, {});
+}
+
+EnumNodeKind EnumNodeKindOf(const Node& node) {
+    if (node.TypeName() == kMakeVariantType) return EnumNodeKind::makeVariant;
+    if (node.TypeName() == kMatchType) return EnumNodeKind::match;
+    return EnumNodeKind::none;
+}
+
+bool SyncEnumNodePins(Graph& graph, const NodeTypeRegistry& registry, NodeId id) {
+    Node* node = graph.FindNode(id);
+    if (node == nullptr) {
+        return false;
+    }
+    const EnumNodeKind kind = EnumNodeKindOf(*node);
+    if (kind == EnumNodeKind::none) {
+        return false;
+    }
+    const std::string enumName = StructNodeText(*node, kEnumTypePin);
+    const EnumDef* def = enumName.empty() ? nullptr : FindEnumFor(graph, registry, enumName);
+    const std::string carried = def != nullptr ? enumName : std::string();
+    bool changed = false;
+
+    // The value pin is this enum's.
+    for (const auto& pin : kind == EnumNodeKind::match ? node->Inputs() : node->Outputs()) {
+        if (pin.name == kEnumValuePin && pin.type.enumType != carried) {
+            node->FindPin(pin.id)->type.enumType = carried;
+            DropMisfitWires(graph, id, pin.id);
+            changed = true;
+            break;
+        }
     }
 
-    // Members match by name, so reordering a struct keeps each wire with its member. Of the rest, as many pins as
-    // there are new names are renamed (a member renamed: the wire stays); spare pins go, missing members get pins.
-    std::vector<PinId> unmatched;
-    std::vector<std::string> currentNames;
-    for (PinId pinId : current) {
-        const auto& name = node->FindPin(pinId)->name;
-        currentNames.push_back(name);
-        if (std::find(wanted.begin(), wanted.end(), name) == wanted.end()) {
-            unmatched.push_back(pinId);
-        }
-    }
-    std::vector<const StructMember*> missing;
-    for (const auto* m : members) {
-        if (std::find(currentNames.begin(), currentNames.end(), StructMemberPinName(m->name)) == currentNames.end()) {
-            missing.push_back(m);
-        }
-    }
-    size_t renamed = 0;
-    for (; renamed < unmatched.size() && renamed < missing.size(); ++renamed) {
-        node->FindPin(unmatched[renamed])->name = StructMemberPinName(missing[renamed]->name);
-        changed = true;
-    }
-    for (size_t i = renamed; i < unmatched.size(); ++i) {
-        graph.DisconnectPin(id, unmatched[i]);
-        node->RemovePin(unmatched[i]);
-        changed = true;
-    }
-    for (size_t i = renamed; i < missing.size(); ++i) {
-        if (asInputs) {
-            node->AddInput(StructMemberPinName(missing[i]->name), missing[i]->type, MemberDefault(*missing[i]));
-        } else {
-            node->AddOutput(StructMemberPinName(missing[i]->name), missing[i]->type, {});
-        }
-        changed = true;
-    }
-
-    // Each member pin takes its member's type (a retyped member: wires that no longer fit go), in the struct's order.
-    std::vector<PinId> order;
-    for (const auto* m : members) {
-        for (const auto& pin : asInputs ? node->Inputs() : node->Outputs()) {
-            if (IsFixedPin(kind, pin) || pin.name != StructMemberPinName(m->name)) {
-                continue;
+    // Make Variant: the chosen variant's fields in. Match: every variant's fields out.
+    std::vector<MemberPin> wanted;
+    if (def != nullptr) {
+        const std::string chosen = StructNodeText(*node, kEnumVariantPin);
+        for (const auto& variant : def->variants) {
+            if (kind == EnumNodeKind::makeVariant && variant.name != chosen) continue;
+            for (const auto& field : variant.fields) {
+                wanted.push_back({ kind == EnumNodeKind::match ? MatchPinName(variant.name, field.name) : StructMemberPinName(field.name),
+                                   field.type, FieldDefault(field.type) });
             }
-            if (!(pin.type == m->type)) {
-                Pin* p = node->FindPin(pin.id);
-                p->type = m->type;
-                if (asInputs) {
-                    p->defaultValue = MemberDefault(*m);
-                }
-                DropMisfitWires(graph, id, pin.id);
-                changed = true;
-            }
-            order.push_back(pin.id);
         }
     }
-    std::vector<PinId> before;
-    for (const auto& pin : asInputs ? node->Inputs() : node->Outputs())
-        if (!IsFixedPin(kind, pin)) before.push_back(pin.id);
-    if (before != order) {
-        node->ArrangePins(asInputs, order);
-        changed = true;
-    }
+    const bool asInputs = kind == EnumNodeKind::makeVariant;
+    changed = SyncMemberPins(graph, id, asInputs, [kind](const Pin& pin) { return IsFixedEnumPin(kind, pin); }, wanted) || changed;
     return changed;
 }
 

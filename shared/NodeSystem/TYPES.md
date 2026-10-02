@@ -50,6 +50,41 @@ changes them.
   identifiers by `FrustIdentifier`. The graph code generator emits a graph's own enums at the top of its source
   (`FrustEnumDeclarations`).
 
+### Values that carry data (sum types)
+
+Enums are full sum types, the way FRust's are (FRUST_LANG_SPEC.md 5.2). A value can carry values of its own:
+none, one or several, each with a name and any type (a number, an image, a struct, another enum, or the enum
+itself, so recursive types like a List or a Tree work).
+
+- **Model:** `EnumVariant::fields`, each an `EnumField { name, type, description }`. `EnumCarriesValues(def)`
+  says whether any value carries something.
+- **FRust:** `enum Fill { Nothing, Solid(Array<f64, 3>, f64), Picture(i64) }`. Payloads are positional in
+  FRust; the names are for people and pins.
+- **frgraph** (after each value's own lines):
+
+  ```
+  enumvariant Fill Solid
+  enumfield Fill 1 color
+  enumfieldname Fill 1 0 colour
+  enumfield Fill 1 float
+  enumfieldname Fill 1 1 amount
+  ```
+- **On a wire, the value is still its number,** so it drives a Switch, compares and reads as an integer like any
+  enum. What it carries travels alongside the number, so nothing is lost passing through a Switch, a struct
+  member or a param.
+- **A Choice param** of such an enum keeps what its chosen value carries in `memberValues` (`symbolmember`
+  lines). Choosing another value starts those afresh.
+- **Nodes:**
+  - **Make Variant:** choose the enum and the value in Properties. What that value carries comes in as inputs;
+    the enum value goes out.
+  - **Match:** the enum value in; what every value carries out, as `<Value>_<field>` pins. Only the chosen
+    value's pins carry anything, like a Route's unchosen outputs; asking another value's pin says which value
+    was chosen. To branch on the value, wire it into a Switch: its cases are the values.
+  - `SyncEnumNodePins` keeps their pins in line with the enum, matching by name like the struct nodes (renaming
+    a field keeps its wires). Renaming a value updates Make Variant nodes set to it.
+- **The Enum Editor:** "+" on a value adds something it carries; each one has a name and a type.
+- A field can't be called `type`, `variant` or `value`, because Make Variant and Match use those names.
+
 ## Structs
 
 - `StructDef`: **`name`** (stable), **`displayName`**, **`description`**, and **`members`**, each with a **name**, a
@@ -128,8 +163,8 @@ When a struct node's input isn't wired, it starts from the struct's defaults.
 2. Load and save the project's types (`project.frtypes`). Hand them to the panel (`setProjectTypes`) and to the
    registry (`ReplaceEnums` / `ReplaceStructs(project, ...)`), and save on `onProjectTypesChanged`.
 3. Look types up through the graph (`PinEnum(graph, ...)`, `FindEnumFor`, `FindStructFor`).
-4. Register the struct nodes (`RegisterStructNodes`) for its graph types, and call `SyncStructNodePins` after each
-   edit (as for `SyncFlowNodeCases`). Its evaluator carries struct values; Texture's image graph keeps a
+4. Register the struct and enum nodes (`RegisterStructNodes`, `RegisterEnumNodes`) for its graph types, and call
+   `SyncStructNodePins` / `SyncEnumNodePins` after each edit (as for `SyncFlowNodeCases`). Its evaluator carries struct values; Texture's image graph keeps a
    `StructValue` per wire.
 
 ## Better than UE4's user-defined enums and structs

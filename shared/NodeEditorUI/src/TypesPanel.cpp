@@ -1,4 +1,5 @@
 #include <creation/node_editor_ui/TypesPanel.h>
+#include <creation/node_editor_ui/Fields.h>
 
 #include <node_system/symbol_nodes.h>
 #include <node_system/struct_nodes.h>
@@ -42,6 +43,43 @@ class TypesPanel::TypeEditor : public juce::Component
 {
 public:
     virtual int preferredHeight() const = 0;
+
+    // A type a struct member or an enum's carried value can have, as the type list shows it.
+    struct TypeOption
+    {
+        juce::String label;
+        ns::PinTypeDesc type;
+    };
+
+    // Every type in scope: the value types, images, drawings, brushes, then each enum and struct. A struct cannot hold
+    // itself (it would have no end), so `notStruct` is left out; an enum may carry itself (a list, a tree), because
+    // one of its values can carry nothing and end it.
+    static std::vector<TypeOption> typeOptionsInScope(const TypesPanel& panel, const std::string& notStruct)
+    {
+        std::vector<TypeOption> options;
+        const std::pair<const char*, ns::DataType> plain[] = {
+            { "Number", ns::DataType::Float }, { "Integer", ns::DataType::Int }, { "Toggle", ns::DataType::Bool },
+            { "Colour", ns::DataType::Color }, { "Vector", ns::DataType::Vec3 }, { "Text", ns::DataType::String },
+            { "Image", ns::DataType::Texture }, { "Drawing", ns::DataType::Drawing }, { "Brush", ns::DataType::Brush },
+        };
+        for (const auto& [label, type] : plain)
+            options.push_back({ label, { ns::PinKind::Data, type } });
+        for (const auto* e : panel.enumsInScope())
+        {
+            ns::PinTypeDesc t { ns::PinKind::Data, ns::DataType::Int };
+            t.enumType = e->name;
+            options.push_back({ "Enum: " + juce::String(e->displayName.empty() ? e->name : e->displayName), t });
+        }
+        for (const auto* st : panel.structsInScope())
+        {
+            if (st->name == notStruct)
+                continue;
+            ns::PinTypeDesc t { ns::PinKind::Data, ns::DataType::Struct };
+            t.structType = st->name;
+            options.push_back({ "Struct: " + juce::String(st->displayName.empty() ? st->name : st->displayName), t });
+        }
+        return options;
+    }
 };
 
 //==============================================================================
@@ -55,7 +93,8 @@ public:
         const auto* def = panel.findEnum(scope, name);
         if (def == nullptr)
             return;
-        const bool editable = scope == ns::TypeScope::graph || (scope == ns::TypeScope::project && panel.projectEditable);
+        editable = scope == ns::TypeScope::graph || (scope == ns::TypeScope::project && panel.projectEditable);
+        typeOptions = TypeEditor::typeOptionsInScope(panel, {});
 
         displayName.setText(def->displayName, juce::dontSendNotification);
         displayName.setReadOnly(! editable);
@@ -86,7 +125,7 @@ public:
         };
         addLabelled("Description", description);
 
-        valuesTitle.setText("Values - each is its position: the first is 0", juce::dontSendNotification);
+        valuesTitle.setText("Values - each is its position (the first is 0); + adds a value it carries", juce::dontSendNotification);
         valuesTitle.setColour(juce::Label::textColourId, juce::Colour(0xff9aa8ba));
         addAndMakeVisible(valuesTitle);
 
@@ -95,6 +134,9 @@ public:
                                                         static_cast<int>(def->variants.size())));
         for (auto& row : values)
             addAndMakeVisible(*row);
+
+        problem.setColour(juce::Label::textColourId, juce::Colour(0xffff8a80));
+        addAndMakeVisible(problem);
 
         addValue.setEnabled(editable);
         addValue.onClick = [this]() {
@@ -117,6 +159,7 @@ public:
         frust.setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 12.0f, juce::Font::plain));
         frust.setColour(juce::Label::textColourId, juce::Colour(0xff7fffd4));
         frust.setTooltip("What this enum compiles to in FRust");
+        frust.setMinimumHorizontalScale(0.5f);
         addAndMakeVisible(frust);
 
         remove.setEnabled(editable);
@@ -127,7 +170,10 @@ public:
 
     int preferredHeight() const override
     {
-        return 30 + 22 + 50 + 24 + static_cast<int>(values.size()) * 30 + 34 + 24 + 24 + 36;
+        int rows = 0;
+        for (const auto& row : values)
+            rows += row->preferredHeight() + 4;
+        return 30 + 22 + 50 + 24 + rows + 22 + 34 + 24 + 36 + 36;
     }
 
     void resized() override
@@ -139,19 +185,79 @@ public:
         layoutLabelled(line(46), descriptionLabel, description);
         valuesTitle.setBounds(line(20));
         for (auto& row : values)
-            row->setBounds(line(26));
+            row->setBounds(line(row->preferredHeight()));
+        problem.setBounds(line(18));
         addValue.setBounds(line(28).removeFromLeft(110));
         usedBy.setBounds(line(20));
-        frust.setBounds(line(20));
+        frust.setBounds(line(32));
         remove.setBounds(line(28).removeFromRight(130));
     }
 
-    // A value row: colour, name, description, up, down, remove.
+    // One value a variant carries: name, type, remove.
+    class FieldRow final : public juce::Component
+    {
+    public:
+        FieldRow(EnumEditor& e, int v, int f, const ns::EnumField& field) : editor(e), variant(v), index(f)
+        {
+            fieldName.setText(field.name, juce::dontSendNotification);
+            fieldName.setReadOnly(! editor.editable);
+            fieldName.setTooltip("What this value carries - its name on Make Variant and Match");
+            fieldName.onReturnKey = fieldName.onFocusLost = [this]() { editor.renameField(variant, index, fieldName.getText().trim().toStdString()); };
+            addAndMakeVisible(fieldName);
+
+            int selected = 0;
+            for (size_t k = 0; k < editor.typeOptions.size(); ++k)
+            {
+                typeBox.addItem(editor.typeOptions[k].label, static_cast<int>(k) + 1);
+                if (editor.typeOptions[k].type == field.type)
+                    selected = static_cast<int>(k) + 1;
+            }
+            typeBox.setSelectedId(selected, juce::dontSendNotification);
+            typeBox.setEnabled(editor.editable);
+            typeBox.onChange = [this]() { editor.retypeField(variant, index, typeBox.getSelectedId() - 1); };
+            addAndMakeVisible(typeBox);
+
+            cross.setEnabled(editor.editable);
+            cross.setTooltip("This value no longer carries it");
+            cross.onClick = [this]() { editor.removeField(variant, index); };
+            addAndMakeVisible(cross);
+        }
+
+        void resized() override
+        {
+            auto area = getLocalBounds();
+            area.removeFromLeft(26); // under the value's name, indented past its colour
+            cross.setBounds(area.removeFromRight(24));
+            area.removeFromRight(4);
+            fieldName.setBounds(area.removeFromLeft(area.getWidth() / 2 - 2));
+            area.removeFromLeft(4);
+            typeBox.setBounds(area);
+        }
+
+    private:
+        EnumEditor& editor;
+        int variant, index;
+        juce::TextEditor fieldName;
+        juce::ComboBox typeBox;
+        juce::TextButton cross { "x" };
+    };
+
+    // A value row: colour, name, description, carries +, up, down, remove; then what it carries, a line each.
     class ValueRow final : public juce::Component
     {
     public:
         ValueRow(EnumEditor& e, int i, const ns::EnumVariant& variant, bool editable, int count) : editor(e), index(i)
         {
+            for (size_t f = 0; f < variant.fields.size(); ++f)
+            {
+                fields.push_back(std::make_unique<FieldRow>(editor, index, static_cast<int>(f), variant.fields[f]));
+                addAndMakeVisible(*fields.back());
+            }
+            carries.setEnabled(editable);
+            carries.setTooltip("Add a value this one carries (any type - a number, an image, a struct, an enum)");
+            carries.onClick = [this]() { editor.addField(index); };
+            addAndMakeVisible(carries);
+
             swatch.setColour(juce::TextButton::buttonColourId, variant.colour != 0 ? juce::Colour(variant.colour) : juce::Colour(0xff2a313b));
             swatch.setTooltip("The value's colour - shown on Switch cases and dropdowns");
             swatch.setEnabled(editable);
@@ -166,6 +272,7 @@ public:
                 if (auto* d = editor.mutableDef(); d != nullptr && index < static_cast<int>(d->variants.size()) && ! text.empty()
                                                     && d->variants[static_cast<size_t>(index)].name != text)
                 {
+                    editor.panel.renameVariantInNodes(editor.name, d->variants[static_cast<size_t>(index)].name, text);
                     d->variants[static_cast<size_t>(index)].name = text;
                     editor.changedText();
                 }
@@ -199,12 +306,18 @@ public:
             cross.onClick = [this]() { editor.removeValue(index); };
         }
 
+        int preferredHeight() const { return 26 + static_cast<int>(fields.size()) * 26; }
+
         void resized() override
         {
-            auto area = getLocalBounds();
+            auto all = getLocalBounds();
+            auto area = all.removeFromTop(26);
+            for (auto& field : fields)
+                field->setBounds(all.removeFromTop(26).reduced(0, 1));
             swatch.setBounds(area.removeFromLeft(22).reduced(2));
             area.removeFromLeft(4);
             cross.setBounds(area.removeFromRight(24));
+            carries.setBounds(area.removeFromRight(24));
             down.setBounds(area.removeFromRight(24));
             up.setBounds(area.removeFromRight(24));
             area.removeFromRight(4);
@@ -233,12 +346,14 @@ public:
 
         EnumEditor& editor;
         int index;
-        juce::TextButton swatch, up { "^" }, down { "v" }, cross { "x" };
+        juce::TextButton swatch, up { "^" }, down { "v" }, cross { "x" }, carries { "+" };
         juce::TextEditor valueName, valueDescription;
+        std::vector<std::unique_ptr<FieldRow>> fields;
     };
 
 private:
     friend class ValueRow;
+    friend class FieldRow;
 
     ns::EnumDef* mutableDef() { return panel.editableEnum(scope, name); }
 
@@ -285,6 +400,89 @@ private:
         changedShape();
     }
 
+    // What a value carries: add, rename, retype, remove. Choice params of this enum keep what their value carries in
+    // step (TypesPanel::reshapeFields).
+    void addField(int variant)
+    {
+        auto* d = mutableDef();
+        if (d == nullptr || variant < 0 || variant >= static_cast<int>(d->variants.size()))
+            return;
+        auto& fields = d->variants[static_cast<size_t>(variant)].fields;
+        int n = static_cast<int>(fields.size()) + 1;
+        auto taken = [&fields](const std::string& candidate) {
+            return std::any_of(fields.begin(), fields.end(), [&candidate](const ns::EnumField& f) { return f.name == candidate; });
+        };
+        while (taken("field " + std::to_string(n)))
+            ++n;
+        ns::EnumField field;
+        field.name = "field " + std::to_string(n);
+        field.type = { ns::PinKind::Data, ns::DataType::Float };
+        fields.push_back(field);
+        std::vector<int> mapping;
+        for (int i = 0; i + 1 < static_cast<int>(fields.size()); ++i)
+            mapping.push_back(i);
+        panel.reshapeFields(name, variant, mapping, static_cast<int>(fields.size()));
+        changedShape();
+    }
+
+    void renameField(int variant, int at, const std::string& newName)
+    {
+        auto* d = mutableDef();
+        if (d == nullptr || variant < 0 || variant >= static_cast<int>(d->variants.size()))
+            return;
+        auto& fields = d->variants[static_cast<size_t>(variant)].fields;
+        if (at < 0 || at >= static_cast<int>(fields.size()) || fields[static_cast<size_t>(at)].name == newName)
+            return;
+        if (ns::EnumFieldNameReserved(ns::StructMemberPinName(newName)))
+        {
+            problem.setText("\"" + juce::String(newName) + "\" is used by Make Variant and Match themselves - choose another name.",
+                            juce::dontSendNotification);
+            return;
+        }
+        for (size_t k = 0; k < fields.size(); ++k)
+            if (static_cast<int>(k) != at && ns::StructMemberPinName(fields[k].name) == ns::StructMemberPinName(newName))
+            {
+                problem.setText("This value already carries one called \"" + juce::String(newName) + "\".", juce::dontSendNotification);
+                return;
+            }
+        problem.setText({}, juce::dontSendNotification);
+        fields[static_cast<size_t>(at)].name = newName;
+        changedText();
+    }
+
+    void retypeField(int variant, int at, int option)
+    {
+        auto* d = mutableDef();
+        if (d == nullptr || variant < 0 || variant >= static_cast<int>(d->variants.size()) || option < 0
+            || option >= static_cast<int>(typeOptions.size()))
+            return;
+        auto& fields = d->variants[static_cast<size_t>(variant)].fields;
+        if (at < 0 || at >= static_cast<int>(fields.size()))
+            return;
+        fields[static_cast<size_t>(at)].type = typeOptions[static_cast<size_t>(option)].type;
+        std::vector<int> mapping;
+        for (int i = 0; i < static_cast<int>(fields.size()); ++i)
+            mapping.push_back(i == at ? -1 : i); // its old value no longer fits
+        panel.reshapeFields(name, variant, mapping, static_cast<int>(fields.size()));
+        changedShape();
+    }
+
+    void removeField(int variant, int at)
+    {
+        auto* d = mutableDef();
+        if (d == nullptr || variant < 0 || variant >= static_cast<int>(d->variants.size()))
+            return;
+        auto& fields = d->variants[static_cast<size_t>(variant)].fields;
+        if (at < 0 || at >= static_cast<int>(fields.size()))
+            return;
+        std::vector<int> mapping;
+        for (int i = 0; i < static_cast<int>(fields.size()); ++i)
+            mapping.push_back(i < at ? i : (i == at ? -1 : i - 1));
+        fields.erase(fields.begin() + at);
+        panel.reshapeFields(name, variant, mapping, static_cast<int>(fields.size()));
+        changedShape();
+    }
+
     void addLabelled(const juce::String& text, juce::Component& component)
     {
         auto& label = labels.emplace_back(std::make_unique<juce::Label>());
@@ -306,11 +504,13 @@ private:
     TypesPanel& panel;
     ns::TypeScope scope;
     std::string name;
+    bool editable = false;
+    std::vector<TypeOption> typeOptions;
     std::vector<std::unique_ptr<juce::Label>> labels;
     juce::Label* displayLabel = nullptr;
     juce::Label* descriptionLabel = nullptr;
     juce::TextEditor displayName, description;
-    juce::Label identity, valuesTitle, usedBy, frust;
+    juce::Label identity, valuesTitle, usedBy, frust, problem;
     std::vector<std::unique_ptr<ValueRow>> values;
     juce::TextButton addValue { "+ Add value" }, remove { "Remove type" };
 };
@@ -322,13 +522,6 @@ private:
 class TypesPanel::StructEditor final : public TypeEditor
 {
 public:
-    // A type a member can have, as the type list shows it.
-    struct TypeOption
-    {
-        juce::String label;
-        ns::PinTypeDesc type;
-    };
-
     StructEditor(TypesPanel& p, ns::TypeScope s, std::string n) : panel(p), scope(s), name(std::move(n))
     {
         const auto* def = panel.findStruct(scope, name);
@@ -605,30 +798,7 @@ private:
 
     ns::StructDef* mutableDef() { return panel.editableStruct(scope, name); }
 
-    void buildTypeOptions()
-    {
-        const std::pair<const char*, ns::DataType> plain[] = {
-            { "Number", ns::DataType::Float }, { "Integer", ns::DataType::Int }, { "Toggle", ns::DataType::Bool },
-            { "Colour", ns::DataType::Color }, { "Vector", ns::DataType::Vec3 }, { "Text", ns::DataType::String },
-            { "Image", ns::DataType::Texture }, { "Drawing", ns::DataType::Drawing }, { "Brush", ns::DataType::Brush },
-        };
-        for (const auto& [label, type] : plain)
-            typeOptions.push_back({ label, { ns::PinKind::Data, type } });
-        for (const auto* e : panel.enumsInScope())
-        {
-            ns::PinTypeDesc t { ns::PinKind::Data, ns::DataType::Int };
-            t.enumType = e->name;
-            typeOptions.push_back({ "Enum: " + juce::String(e->displayName.empty() ? e->name : e->displayName), t });
-        }
-        for (const auto* st : panel.structsInScope())
-        {
-            if (st->name == name)
-                continue; // a struct cannot hold itself
-            ns::PinTypeDesc t { ns::PinKind::Data, ns::DataType::Struct };
-            t.structType = st->name;
-            typeOptions.push_back({ "Struct: " + juce::String(st->displayName.empty() ? st->name : st->displayName), t });
-        }
-    }
+    void buildTypeOptions() { typeOptions = TypeEditor::typeOptionsInScope(panel, name); }
 
     void changedText()
     {
@@ -907,6 +1077,39 @@ void TypesPanel::renameMemberInNodes(const std::string& structName, const std::s
     }
 }
 
+void TypesPanel::renameVariantInNodes(const std::string& enumName, const std::string& from, const std::string& to)
+{
+    // Make Variant names its value: it follows the rename, so its pins (and wires) stay.
+    for (const auto& [id, node] : graph.Nodes())
+    {
+        if (ns::EnumNodeKindOf(*node) != ns::EnumNodeKind::makeVariant || ns::StructNodeText(*node, ns::kEnumTypePin) != enumName)
+            continue;
+        for (const auto& pin : node->Inputs())
+            if (pin.name == ns::kEnumVariantPin)
+                if (const auto* text = std::get_if<std::string>(&pin.defaultValue); text != nullptr && *text == from)
+                    node->FindPin(pin.id)->defaultValue = to;
+    }
+}
+
+void TypesPanel::reshapeFields(const std::string& enumName, int variant, const std::vector<int>& mapping, int count)
+{
+    // A Choice param of this enum set to this value keeps what it carries where the field is still there.
+    for (const auto& symbol : graph.Symbols())
+    {
+        if (symbol.enumType != enumName)
+            continue;
+        const auto* chosen = std::get_if<std::int64_t>(&symbol.value);
+        if (chosen == nullptr || *chosen != variant)
+            continue;
+        auto& values = graph.FindSymbol(symbol.id)->memberValues;
+        std::vector<ns::PinDefaultValue> reshaped(static_cast<size_t>(count));
+        for (size_t i = 0; i < mapping.size() && i < values.size(); ++i)
+            if (mapping[i] >= 0 && mapping[i] < count)
+                reshaped[static_cast<size_t>(mapping[i])] = values[i];
+        values = std::move(reshaped);
+    }
+}
+
 void TypesPanel::forgetStruct(const std::string& name)
 {
     // Struct params of it become plain numbers; struct nodes set to it lose their pins.
@@ -958,7 +1161,14 @@ void TypesPanel::remapValues(const std::string& name, const std::vector<int>& ma
     };
     for (const auto& symbol : graph.Symbols())
         if (symbol.enumType == name)
-            remap(graph.FindSymbol(symbol.id)->value);
+        {
+            auto* s = graph.FindSymbol(symbol.id);
+            // A param whose value was removed falls back to the first, which carries other things: start those afresh.
+            if (const auto* v = std::get_if<std::int64_t>(&s->value);
+                v != nullptr && *v >= 0 && *v < static_cast<std::int64_t>(mapping.size()) && mapping[static_cast<size_t>(*v)] < 0)
+                s->memberValues.clear();
+            remap(s->value);
+        }
     for (const auto& [id, node] : graph.Nodes())
         for (const auto& pin : node->Inputs())
             if (const auto* def = ns::PinEnum(graph, registry, *node, pin); def != nullptr && def->name == name)
@@ -1131,7 +1341,10 @@ void TypesPanel::refresh()
     else if (! selectedName.empty() && ! selectedIsStruct && findEnum(selectedScope, selectedName) != nullptr)
         editor = std::make_unique<EnumEditor>(*this, selectedScope, selectedName);
     if (editor != nullptr)
+    {
+        selectAllWhenFocused(*editor); // clicking a name selects it: typing replaces it
         editorView.setViewedComponent(editor.get(), false);
+    }
     resized();
     repaint();
 }

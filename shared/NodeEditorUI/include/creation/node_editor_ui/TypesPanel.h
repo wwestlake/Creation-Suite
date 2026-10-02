@@ -78,6 +78,11 @@ private:
     ce::node_system::StructDef* editableStruct(ce::node_system::TypeScope scope, const std::string& name);
     int structUsesInGraph(const std::string& name) const;
     // Members moved or removed: struct params' member values follow (mapping[old] = new, -1 = removed).
+    // A value of an enum renamed: Make Variant nodes naming it follow.
+    void renameVariantInNodes(const std::string& enumName, const std::string& from, const std::string& to);
+    // What a value carries changed (mapping: old field -> new field or -1; count: how many now): Choice params of the enum
+    // set to that value keep their carried values in step.
+    void reshapeFields(const std::string& enumName, int variant, const std::vector<int>& mapping, int count);
     // A member renamed: Set Members / Get Member nodes naming it follow.
     void renameMemberInNodes(const std::string& structName, const std::string& from, const std::string& to);
     void remapMembers(const std::string& name, const std::vector<int>& mapping);
