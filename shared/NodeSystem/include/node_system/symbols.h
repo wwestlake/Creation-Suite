@@ -39,6 +39,10 @@ struct Symbol {
     std::string description;
     // A Choice: an Int symbol whose value is one of a registered enum's variants (enums.h). Empty otherwise.
     std::string enumType;
+    // A struct symbol (type Struct): which struct, and its members' values in the struct's member order (a missing one
+    // takes the member's default).
+    std::string structType;
+    std::vector<PinDefaultValue> memberValues;
 
     bool operator==(const Symbol&) const = default;
 };

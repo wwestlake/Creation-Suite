@@ -39,8 +39,9 @@ std::unique_ptr<Graph> DeserializeGraph(const std::string& text, std::string& er
 
 // A set of types on their own (TYPES.md) - the project's types, a pod's - in the same text form a graph uses for its
 // own: "frtypes 1", then the enum lines.
-std::string SerializeTypes(const std::vector<EnumDef>& enums);
+std::string SerializeTypes(const std::vector<EnumDef>& enums, const std::vector<StructDef>& structs = {});
 // The enums in `text`, in the given scope. False with an error if it cannot be read.
 bool DeserializeTypes(const std::string& text, TypeScope scope, std::vector<EnumDef>& enums, std::string& error);
+bool DeserializeTypes(const std::string& text, TypeScope scope, std::vector<EnumDef>& enums, std::vector<StructDef>& structs, std::string& error);
 
 } // namespace ce::node_system

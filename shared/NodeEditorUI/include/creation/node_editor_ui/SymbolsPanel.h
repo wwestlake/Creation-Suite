@@ -47,8 +47,11 @@ private:
         ce::node_system::DataType type;
         std::string enumType;
         juce::String label;
+        std::string structType;
     };
     std::vector<TypeChoice> typeChoices() const;
+    // A struct symbol's struct, wherever it is in scope (TYPES.md).
+    const ce::node_system::StructDef* structOf(const ce::node_system::Symbol& symbol) const;
     const ce::node_system::EnumDef* enumOf(const ce::node_system::Symbol& symbol) const;
     juce::String typeLabel(const ce::node_system::Symbol& symbol) const;
 

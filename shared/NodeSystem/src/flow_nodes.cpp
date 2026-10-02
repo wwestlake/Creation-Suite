@@ -166,41 +166,51 @@ bool SyncFlowNodeCases(Graph& graph, const NodeTypeRegistry& registry, NodeId id
         return false;
     }
 
-    // The same number of cases under new names (an enum's variant renamed): rename in place, so wires stay.
-    if (current.size() == names.size()) {
-        const auto pins = FlowCasePins(*node);
-        for (size_t i = 0; i < pins.size(); ++i) {
-            node->FindPin(pins[i]->id)->name = names[i];
-        }
-        return true;
-    }
-
-    // Remove the case pins whose names are gone, then add the missing ones; matching pins keep their wires.
-    std::vector<PinId> remove;
+    // Cases match by name, so a reordered enum keeps each wire with its value. Of the rest, as many pins as there are
+    // new names are renamed (an enum's value renamed: the wire stays); spare pins go, missing names get pins.
+    std::vector<const Pin*> unmatched;
     for (const Pin* pin : FlowCasePins(*node)) {
         if (std::find(names.begin(), names.end(), pin->name) == names.end()) {
-            remove.push_back(pin->id);
+            unmatched.push_back(pin);
         }
     }
-    for (PinId pin : remove) {
+    std::vector<std::string> missing;
+    for (const auto& name : names) {
+        if (std::find(current.begin(), current.end(), name) == current.end()) {
+            missing.push_back(name);
+        }
+    }
+    size_t renamed = 0;
+    for (; renamed < unmatched.size() && renamed < missing.size(); ++renamed) {
+        node->FindPin(unmatched[renamed]->id)->name = missing[renamed];
+    }
+    std::vector<PinId> spare;
+    for (size_t i = renamed; i < unmatched.size(); ++i) {
+        spare.push_back(unmatched[i]->id);
+    }
+    for (PinId pin : spare) {
         graph.DisconnectPin(id, pin);
         node->RemovePin(pin);
     }
-    std::vector<std::string> kept;
-    for (const Pin* pin : FlowCasePins(*node)) {
-        kept.push_back(pin->name);
-    }
-    for (const auto& name : names) {
-        if (std::find(kept.begin(), kept.end(), name) != kept.end()) {
-            continue;
-        }
+    for (size_t i = renamed; i < missing.size(); ++i) {
         if (kind == FlowKind::switchNode) {
-            node->AddInput(name, caseType, caseType.dataType == DataType::Texture ? PinDefaultValue { std::string() }
-                                                                                 : DefaultValueFor(caseType.dataType));
+            node->AddInput(missing[i], caseType, caseType.dataType == DataType::Texture ? PinDefaultValue { std::string() }
+                                                                                       : DefaultValueFor(caseType.dataType));
         } else {
-            node->AddOutput(name, caseType, {});
+            node->AddOutput(missing[i], caseType, {});
         }
     }
+
+    // In the selector's order: case i is the i-th case pin.
+    std::vector<PinId> order;
+    for (const auto& name : names) {
+        for (const Pin* pin : FlowCasePins(*node)) {
+            if (pin->name == name) {
+                order.push_back(pin->id);
+            }
+        }
+    }
+    node->ArrangePins(kind == FlowKind::switchNode, order);
     return true;
 }
 

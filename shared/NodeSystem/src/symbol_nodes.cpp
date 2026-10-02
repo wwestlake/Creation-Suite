@@ -16,6 +16,7 @@ const GetType kGetTypes[] = {
     { DataType::Color, "color", "Get Color" },
     { DataType::Vec3, "vec3", "Get Vector" },
     { DataType::String, "string", "Get Text" },
+    { DataType::Struct, "struct", "Get Struct" },
 };
 
 constexpr const char* kPrefix = "core.symbol.get.";
@@ -61,8 +62,10 @@ void BindSymbolGetNode(Node& node, const Symbol& symbol) {
         if (pin.name == kSymbolIdPin)
             node.FindPin(pin.id)->defaultValue = symbol.id;
     for (const auto& pin : node.Outputs())
-        if (pin.name == kSymbolValuePin)
+        if (pin.name == kSymbolValuePin) {
             node.FindPin(pin.id)->type.enumType = symbol.enumType;
+            node.FindPin(pin.id)->type.structType = symbol.structType;
+        }
 }
 
 Node* AddSymbolGetNode(Graph& graph, const NodeTypeRegistry& registry, const Symbol& symbol, std::string* errorOut) {

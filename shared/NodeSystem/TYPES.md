@@ -50,10 +50,56 @@ changes them.
   identifiers by `FrustIdentifier`. The graph code generator emits a graph's own enums at the top of its source
   (`FrustEnumDeclarations`).
 
+## Structs
+
+- `StructDef`: **`name`** (stable), **`displayName`**, **`description`**, and **`members`**, each with a **name**, a
+  **type** (any value type, an image, a drawing, a brush, an enum or another struct), a **default**, a
+  **description** and an optional **range**.
+- A struct can't hold itself. A member can't be called `type`, `value`, `members` or `member`, because the struct
+  nodes use those names for their own pins.
+- **frgraph** (a graph's own structs, after its enums):
+
+  ```
+  struct SurfaceSettings
+  structname SurfaceSettings Surface Settings
+  structmember SurfaceSettings float default float 0.5
+  structmembername SurfaceSettings 0 amount
+  structmember SurfaceSettings int enum BlendMode default int 0
+  structmembername SurfaceSettings 1 mode
+  ```
+- **A struct param** stores its members' values in member order:
+
+  ```
+  symbolstruct look SurfaceSettings
+  symbolmember look 0 default float 0.25
+  ```
+- **FRust:** `FrustStructDeclaration(def)` gives `struct SurfaceSettings { amount: f64, mode: BlendMode }`. Images,
+  drawings and brushes become `i64` handles.
+
+### Struct nodes (modelled on UE4)
+
+Struct nodes only use a struct; they never make the type. Each one has a fixed **type** pin naming the struct,
+chosen in Properties.
+
+- **Make Struct:** members in, the struct out.
+- **Break Struct:** the struct in, every member out.
+- **Set Members:** the struct in, plus only the members ticked in Properties; the struct out with those changed and
+  the rest passed through.
+- **Get Member:** the struct in, one member (chosen in Properties) out.
+
+A struct param's Get node gives the whole struct. It can go along one wire, or be taken apart with the nodes above.
+`SyncStructNodePins` keeps the member pins in line with the struct, matching members by name:
+- reordering a struct keeps every wire;
+- a renamed member keeps its pin and wire (the Types panel also updates Set Members' ticks and Get Member's choice);
+- a retyped member drops only the wires that no longer fit.
+
+When a struct node's input isn't wired, it starts from the struct's defaults.
+
 ## Where they show
 
 - **Variables panel:** every enum in scope is a **Choice** type. A Choice param's value is a dropdown.
 - **Enum settings:** a dropdown in Properties.
+- **Variables panel:** every struct in scope is a **Struct** type. A struct param shows one editor per member.
 - **Switch and Route:** an enum driving the selector names the cases, and renaming a value renames the case in place
   without losing its wire (FLOW.md).
 
@@ -68,15 +114,23 @@ changes them.
   - how often this graph uses it;
   - a live FRust preview;
   - Remove: whatever used it in this graph becomes a plain integer.
-- **Struct Editor:** phase 2.
+- **Struct Editor:**
+  - display name, FRust name, scope and description, as for enums;
+  - members: name, type, default and description, moved up or down, removed, added;
+  - how often this graph uses it;
+  - a live FRust preview;
+  - Remove: struct params of it become plain numbers, and struct nodes set to it lose their pins.
 
 ### What an app does
 
 1. Host a `TypesPanel` on its graph. On `onGraphTypesChanged`, mark the document edited and refresh what shows types
    (Variables, Properties).
 2. Load and save the project's types (`project.frtypes`). Hand them to the panel (`setProjectTypes`) and to the
-   registry (`ReplaceEnums(project, ...)`), and save on `onProjectTypesChanged`.
-3. Look enums up through the graph (`PinEnum(graph, ...)`, `FindEnumFor`).
+   registry (`ReplaceEnums` / `ReplaceStructs(project, ...)`), and save on `onProjectTypesChanged`.
+3. Look types up through the graph (`PinEnum(graph, ...)`, `FindEnumFor`, `FindStructFor`).
+4. Register the struct nodes (`RegisterStructNodes`) for its graph types, and call `SyncStructNodePins` after each
+   edit (as for `SyncFlowNodeCases`). Its evaluator carries struct values; Texture's image graph keeps a
+   `StructValue` per wire.
 
 ## Better than UE4's user-defined enums and structs
 

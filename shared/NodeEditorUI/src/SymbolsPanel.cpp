@@ -94,12 +94,18 @@ public:
         row("Kind", kind);
 
         const auto choices = panel.typeChoices();
+        bool structHeading = false;
         for (size_t i = 0; i < choices.size(); ++i)
         {
             if (i == panel.allowedTypes.size())
                 type.addSectionHeading("Choice");
+            if (! choices[i].structType.empty() && ! structHeading)
+            {
+                type.addSectionHeading("Struct");
+                structHeading = true;
+            }
             type.addItem(choices[i].label, static_cast<int>(i) + 1);
-            if (choices[i].type == symbol->type && choices[i].enumType == symbol->enumType)
+            if (choices[i].type == symbol->type && choices[i].enumType == symbol->enumType && choices[i].structType == symbol->structType)
                 type.setSelectedId(static_cast<int>(i) + 1, juce::dontSendNotification);
         }
         type.onChange = [this]() {
@@ -110,7 +116,12 @@ public:
                 return;
             s->type = all[static_cast<size_t>(index)].type;
             s->enumType = all[static_cast<size_t>(index)].enumType;
+            s->structType = all[static_cast<size_t>(index)].structType;
             s->value = ns::DefaultValueFor(s->type);
+            s->memberValues.clear();
+            if (const auto* def = panel.structOf(*s))
+                for (const auto& m : def->members)
+                    s->memberValues.push_back(m.defaultValue);
             panel.changed();
             rebuildSoon();
         };
@@ -217,7 +228,80 @@ private:
         };
 
         const auto& v = symbol.value;
-        if (const auto* def = panel.enumOf(symbol))
+        if (const auto* def = panel.structOf(symbol))
+        {
+            // A struct: each member's value, edited like a setting of its type.
+            for (size_t m = 0; m < def->members.size(); ++m)
+            {
+                const auto& member = def->members[m];
+                const auto current = m < symbol.memberValues.size() ? symbol.memberValues[m] : member.defaultValue;
+                auto setMember = [this, m](ns::PinDefaultValue value) {
+                    if (auto* s = symbol_())
+                    {
+                        if (s->memberValues.size() <= m)
+                            s->memberValues.resize(m + 1);
+                        s->memberValues[m] = std::move(value);
+                        panel.changed();
+                    }
+                };
+                std::unique_ptr<juce::Component> edit;
+                if (! member.type.enumType.empty())
+                {
+                    auto box = std::make_unique<juce::ComboBox>();
+                    if (const auto* e = panel.enumSource != nullptr ? ns::FindEnumFor(panel.graph, *panel.enumSource, member.type.enumType) : panel.graph.FindEnum(member.type.enumType))
+                        for (size_t k = 0; k < e->variants.size(); ++k)
+                            box->addItem(e->variants[k].name, static_cast<int>(k) + 1);
+                    if (const auto* i = std::get_if<std::int64_t>(&current))
+                        box->setSelectedId(static_cast<int>(*i) + 1, juce::dontSendNotification);
+                    box->onChange = [setMember, b = box.get()]() { setMember(static_cast<std::int64_t>(b->getSelectedId() - 1)); };
+                    edit = std::move(box);
+                }
+                else if (member.type.dataType == ns::DataType::Bool)
+                {
+                    auto t = std::make_unique<juce::ToggleButton>();
+                    t->setToggleState(std::holds_alternative<bool>(current) && std::get<bool>(current), juce::dontSendNotification);
+                    t->onClick = [setMember, b = t.get()]() { setMember(b->getToggleState()); };
+                    edit = std::move(t);
+                }
+                else if (member.type.dataType == ns::DataType::Float || member.type.dataType == ns::DataType::Int
+                         || member.type.dataType == ns::DataType::String || member.type.dataType == ns::DataType::Color
+                         || member.type.dataType == ns::DataType::Vec3)
+                {
+                    auto e = std::make_unique<juce::TextEditor>();
+                    juce::String shown;
+                    if (const auto* f = std::get_if<float>(&current)) shown = juce::String(*f, 4);
+                    if (const auto* i = std::get_if<std::int64_t>(&current)) shown = juce::String(*i);
+                    if (const auto* t = std::get_if<std::string>(&current)) shown = juce::String(*t);
+                    if (const auto* c = std::get_if<ns::Vec3Default>(&current))
+                        shown = juce::String(c->x, 3) + ", " + juce::String(c->y, 3) + ", " + juce::String(c->z, 3);
+                    e->setText(shown, juce::dontSendNotification);
+                    const auto dataType = member.type.dataType;
+                    e->onReturnKey = e->onFocusLost = [setMember, dataType, ed = e.get()]() {
+                        const auto text = ed->getText().trim();
+                        if (dataType == ns::DataType::Float) setMember(text.getFloatValue());
+                        else if (dataType == ns::DataType::Int) setMember(static_cast<std::int64_t>(text.getLargeIntValue()));
+                        else if (dataType == ns::DataType::String) setMember(text.toStdString());
+                        else
+                        {
+                            juce::StringArray parts;
+                            parts.addTokens(text, ",", "");
+                            setMember(ns::Vec3Default { parts[0].getFloatValue(), parts[1].getFloatValue(), parts[2].getFloatValue() });
+                        }
+                    };
+                    edit = std::move(e);
+                }
+                else
+                {
+                    auto none = std::make_unique<juce::Label>();
+                    none->setText("wired in, or set by Make Struct", juce::dontSendNotification);
+                    none->setColour(juce::Label::textColourId, juce::Colours::grey);
+                    edit = std::move(none);
+                }
+                row(juce::String(member.name), *edit);
+                memberEditors.push_back(std::move(edit));
+            }
+        }
+        else if (const auto* def = panel.enumOf(symbol))
         {
             for (size_t i = 0; i < def->variants.size(); ++i)
                 choice.addItem(def->variants[i].name, static_cast<int>(i) + 1);
@@ -291,6 +375,7 @@ private:
     int y = 0;
     juce::TextEditor name, number, text, description, x, y3, z;
     juce::ComboBox kind, type, access, choice;
+    std::vector<std::unique_ptr<juce::Component>> memberEditors; // a struct's members
     juce::ToggleButton toggle, persistent;
     Row3 vector;
     juce::Label usesLabel;
@@ -346,8 +431,27 @@ std::vector<SymbolsPanel::TypeChoice> SymbolsPanel::typeChoices() const
             if (graph.FindEnum(e.name) == nullptr)
                 inScope.push_back(&e);
     for (const auto* e : inScope)
-            choices.push_back({ ns::DataType::Int, e->name, juce::String(e->displayName.empty() ? e->name : e->displayName) });
+            choices.push_back({ ns::DataType::Int, e->name, juce::String(e->displayName.empty() ? e->name : e->displayName), {} });
+    // Structs in scope, the same way.
+    std::vector<const ns::StructDef*> structsInScope;
+    for (const auto& st : graph.Structs())
+        structsInScope.push_back(&st);
+    if (enumSource != nullptr)
+        for (const auto& st : enumSource->Structs())
+            if (graph.FindStruct(st.name) == nullptr)
+                structsInScope.push_back(&st);
+    for (const auto* st : structsInScope)
+        choices.push_back({ ns::DataType::Struct, {}, juce::String(st->displayName.empty() ? st->name : st->displayName), st->name });
     return choices;
+}
+
+const ns::StructDef* SymbolsPanel::structOf(const ns::Symbol& symbol) const
+{
+    if (symbol.structType.empty())
+        return nullptr;
+    if (const auto* own = graph.FindStruct(symbol.structType))
+        return own;
+    return enumSource != nullptr ? enumSource->FindStruct(symbol.structType) : nullptr;
 }
 
 const ns::EnumDef* SymbolsPanel::enumOf(const ns::Symbol& symbol) const
@@ -361,6 +465,8 @@ const ns::EnumDef* SymbolsPanel::enumOf(const ns::Symbol& symbol) const
 
 juce::String SymbolsPanel::typeLabel(const ns::Symbol& symbol) const
 {
+    if (const auto* def = structOf(symbol))
+        return def->displayName.empty() ? juce::String(def->name) : juce::String(def->displayName);
     if (const auto* def = enumOf(symbol))
         return def->displayName.empty() ? juce::String(def->name) : juce::String(def->displayName);
     return symbolTypeName(symbol.type);
@@ -457,7 +563,9 @@ void SymbolsPanel::paintListBoxItem(int row, juce::Graphics& g, int width, int h
     g.setFont(juce::FontOptions(11.0f));
     const auto* def = enumOf(symbol);
     const auto* index = std::get_if<std::int64_t>(&symbol.value);
-    const auto value = def != nullptr && index != nullptr ? juce::String(ns::EnumVariantName(*def, *index)) : valueSummary(symbol.value);
+    const auto* structDef = structOf(symbol);
+    const auto value = structDef != nullptr ? juce::String(structDef->members.size()) + " members"
+                     : def != nullptr && index != nullptr ? juce::String(ns::EnumVariantName(*def, *index)) : valueSummary(symbol.value);
     g.drawText(typeLabel(symbol) + "  " + value, text, juce::Justification::centredRight, true);
 }
 
@@ -488,11 +596,14 @@ void SymbolsPanel::showAddMenu()
     const auto choices = typeChoices();
     for (int k = 0; k < 3; ++k)
     {
-        juce::PopupMenu types, enums;
+        juce::PopupMenu types, enums, structs;
         for (size_t t = 0; t < choices.size(); ++t)
-            (choices[t].enumType.empty() ? types : enums).addItem(1000 * (k + 1) + static_cast<int>(t), choices[t].label);
+            (! choices[t].structType.empty() ? structs : choices[t].enumType.empty() ? types : enums)
+                .addItem(1000 * (k + 1) + static_cast<int>(t), choices[t].label);
         if (enums.getNumItems() > 0)
             types.addSubMenu("Choice", enums);
+        if (structs.getNumItems() > 0)
+            types.addSubMenu("Struct", structs);
         menu.addSubMenu(symbolKindName(kinds[k]) + hints[k], types);
     }
     // A button-triggered menu opens at its button.
@@ -512,7 +623,11 @@ void SymbolsPanel::addSymbol(ns::SymbolKind kind, const TypeChoice& type)
     symbol.kind = kind;
     symbol.type = type.type;
     symbol.enumType = type.enumType;
+    symbol.structType = type.structType;
     symbol.value = ns::DefaultValueFor(type.type);
+    if (const auto* def = structOf(symbol))
+        for (const auto& m : def->members)
+            symbol.memberValues.push_back(m.defaultValue);
     symbol.name = (symbolKindName(kind) + " " + juce::String(static_cast<int>(graph.Symbols().size()) + 1)).toStdString();
     symbol.id = ns::MakeSymbolId(symbol.name, graph.Symbols());
     symbol.accessibility = kind == ns::SymbolKind::Param ? "public" : "graph";

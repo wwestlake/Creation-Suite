@@ -37,6 +37,33 @@ void NodeTypeRegistry::ReplaceEnums(TypeScope scope, std::vector<EnumDef> defs) 
     }
 }
 
+void NodeTypeRegistry::RegisterStruct(StructDef def) {
+    for (auto& existing : structs_) {
+        if (existing.name == def.name) {
+            existing = std::move(def);
+            return;
+        }
+    }
+    structs_.push_back(std::move(def));
+}
+
+const StructDef* NodeTypeRegistry::FindStruct(const std::string& name) const {
+    for (const auto& def : structs_) {
+        if (def.name == name) {
+            return &def;
+        }
+    }
+    return nullptr;
+}
+
+void NodeTypeRegistry::ReplaceStructs(TypeScope scope, std::vector<StructDef> defs) {
+    structs_.erase(std::remove_if(structs_.begin(), structs_.end(), [scope](const StructDef& s) { return s.scope == scope; }), structs_.end());
+    for (auto& def : defs) {
+        def.scope = scope;
+        RegisterStruct(std::move(def));
+    }
+}
+
 const EnumDef* NodeTypeRegistry::FindEnum(const std::string& name) const {
     for (const auto& def : enums_) {
         if (def.name == name) {

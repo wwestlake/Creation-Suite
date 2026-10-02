@@ -57,6 +57,8 @@ enum class DataType {
     // Brush it is painted with. Opaque to the node system; the host defines the data (Djehuti Texture's Image Graph).
     Drawing,
     Brush,
+    // A struct made in the Struct Editor (structs.h, TYPES.md); PinTypeDesc::structType names which.
+    Struct,
 };
 
 enum class MonadKind {
@@ -79,9 +81,12 @@ struct PinTypeDesc {
     MonadTypeDesc monad;
     // An Int data pin whose values are named by a registered enum (enums.h): "BlendMode". Empty for a plain pin.
     std::string enumType;
+    // A Struct pin's struct (structs.h): "SurfaceSettings". Only the same struct connects.
+    std::string structType;
 
     bool operator==(const PinTypeDesc& other) const {
-        return kind == other.kind && dataType == other.dataType && monad == other.monad && enumType == other.enumType;
+        return kind == other.kind && dataType == other.dataType && monad == other.monad && enumType == other.enumType
+            && structType == other.structType;
     }
 };
 
@@ -108,6 +113,10 @@ inline bool IsConnectionCompatible(const PinTypeDesc& output, const PinTypeDesc&
         // an enum both ways - a number computed elsewhere, or an enum read as its number.
         if (!output.enumType.empty() && !input.enumType.empty() && output.enumType != input.enumType) {
             return false;
+        }
+        // A struct only into the same struct (a struct node not yet set to one takes nothing); "any" takes a struct too.
+        if (output.dataType == DataType::Struct && input.dataType == DataType::Struct) {
+            return !output.structType.empty() && output.structType == input.structType;
         }
         return output.dataType == input.dataType || output.dataType == DataType::Any
             || input.dataType == DataType::Any;

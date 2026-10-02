@@ -6,8 +6,10 @@
 #include <node_system/symbol_nodes.h>
 #include <node_system/graph_nodes.h>
 #include <node_system/flow_nodes.h>
+#include <node_system/struct_nodes.h>
 #include <node_system/frust_codegen.h>
 
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 
@@ -465,6 +467,15 @@ int main()
             if (names(*sw) != std::vector<std::string> { "Hue", "Saturation", "Brightness" } || ns::FlowCasePins(*sw)[2]->id != valueCase
                 || own.Connections().size() != 2)
                 fail("Renaming a variant lost the case's wire.");
+            // Reordering values reorders the cases, each wire staying with its value: Brightness moves first.
+            auto& hsvValues = own.FindEnum("HsvChannel")->variants;
+            std::rotate(hsvValues.begin(), hsvValues.begin() + 2, hsvValues.end());
+            ns::SyncFlowNodeCases(own, reg, sw->Id());
+            if (names(*sw) != std::vector<std::string> { "Brightness", "Hue", "Saturation" } || ns::FlowCasePins(*sw)[0]->id != valueCase
+                || own.Connections().size() != 2)
+                fail("Reordering values did not carry the wires with them.");
+            std::rotate(hsvValues.begin(), hsvValues.begin() + 1, hsvValues.end()); // back to Hue, Saturation, Brightness
+            ns::SyncFlowNodeCases(own, reg, sw->Id());
 
             // Saved with the graph, before the symbols that use it, and read back the same.
             const std::string text = ns::SerializeGraph(own);
@@ -507,6 +518,111 @@ int main()
             if (projectRegistry.FindEnum("Weather") != nullptr || projectRegistry.FindEnum("Axis") == nullptr)
                 fail("Replacing the project's enums touched the built-in ones.");
             std::cout << "NodeSystem graph enums: ok" << std::endl;
+        }
+
+        // Structs (TYPES.md): made in the Struct Editor, used by params, wires and the struct nodes.
+        {
+            namespace ns = ce::node_system;
+            ns::NodeTypeRegistry reg;
+            ns::RegisterSymbolGetNodes(reg);
+            ns::RegisterStructNodes(reg);
+            reg.RegisterEnum({ "BlendMode", "Blend Mode", { "Normal", "Multiply" }, "" });
+
+            ns::Graph g("Structs", ns::GraphTarget::Dataflow);
+            ns::StructDef surface;
+            surface.name = ns::MakeTypeName("Surface Settings", {});
+            surface.displayName = "Surface Settings";
+            ns::StructMember strength { "strength", { ns::PinKind::Data, ns::DataType::Float }, 0.5f, "How strong", true, 0.0, 1.0 };
+            ns::StructMember tint { "tint", { ns::PinKind::Data, ns::DataType::Color }, ns::Vec3Default { 1.0f, 1.0f, 1.0f }, "", false, 0.0, 1.0 };
+            ns::StructMember mode { "mode", { ns::PinKind::Data, ns::DataType::Int }, std::int64_t { 1 }, "", false, 0.0, 1.0 };
+            mode.type.enumType = "BlendMode";
+            surface.members = { strength, tint, mode };
+            if (surface.name != "SurfaceSettings" || ! g.AddStruct(surface) || g.AddStruct(surface) || ns::StructMemberNameReserved("Strength")
+                || ! ns::StructMemberNameReserved("value"))
+                fail("A struct did not add with a made name, or the reserved names are wrong.");
+            if (ns::FrustStructDeclaration(surface) != "struct SurfaceSettings { strength: f64, tint: Array<f64, 3>, mode: BlendMode }")
+                fail("Unexpected FRust struct: " + ns::FrustStructDeclaration(surface));
+
+            auto structNode = [&](const char* type, const char* member = nullptr, const char* members = nullptr) {
+                auto* n = ns::AddRegisteredNode(g, reg, type, &error);
+                for (const auto& p : n->Inputs()) {
+                    if (p.name == ns::kStructTypePin) n->FindPin(p.id)->defaultValue = std::string("SurfaceSettings");
+                    if (member != nullptr && p.name == ns::kStructMemberPin) n->FindPin(p.id)->defaultValue = std::string(member);
+                    if (members != nullptr && p.name == ns::kStructMembersPin) n->FindPin(p.id)->defaultValue = std::string(members);
+                }
+                ns::SyncStructNodePins(g, reg, n->Id());
+                return n;
+            };
+            auto pinOf = [](ns::Node* n, const std::string& name, bool input) -> ns::PinId {
+                for (const auto& p : input ? n->Inputs() : n->Outputs()) if (p.name == name) return p.id;
+                return 0;
+            };
+            auto* make = structNode(ns::kMakeStructType);
+            auto* brk = structNode(ns::kBreakStructType);
+            auto* set = structNode(ns::kSetMembersType, nullptr, "tint");
+            auto* get = structNode(ns::kGetMemberType, "strength");
+            if (make->Inputs().size() != 4 || pinOf(make, "mode", true) == 0 || make->Outputs().front().type.structType != "SurfaceSettings"
+                || brk->Outputs().size() != 3 || set->Inputs().size() != 4 || pinOf(set, "tint", true) == 0 || pinOf(set, "strength", true) != 0
+                || get->Outputs().size() != 1 || get->Outputs().front().name != "strength" || get->Outputs().front().type.dataType != ns::DataType::Float)
+                fail("Struct nodes' pins do not follow the struct.");
+            if (! g.Connect(make->Id(), pinOf(make, "value", false), brk->Id(), pinOf(brk, "value", true)))
+                fail("A struct did not wire into a Break of the same struct.");
+
+            // A struct of another type does not wire in.
+            ns::StructDef other { "Other", "Other", { strength }, "", ns::TypeScope::graph };
+            g.AddStruct(other);
+            auto* otherMake = ns::AddRegisteredNode(g, reg, ns::kMakeStructType, &error);
+            for (const auto& p : otherMake->Inputs()) if (p.name == ns::kStructTypePin) otherMake->FindPin(p.id)->defaultValue = std::string("Other");
+            ns::SyncStructNodePins(g, reg, otherMake->Id());
+            if (g.Connect(otherMake->Id(), pinOf(otherMake, "value", false), set->Id(), pinOf(set, "value", true)))
+                fail("A struct of another type wired in.");
+
+            // Renaming a member renames the pins in place: the wire into Make's "strength" stays.
+            auto* feed = ns::AddRegisteredNode(g, reg, "core.symbol.get.float", &error);
+            g.Connect(feed->Id(), feed->Outputs().front().id, make->Id(), pinOf(make, "strength", true));
+            const auto before = g.Connections().size();
+            g.FindStruct("SurfaceSettings")->members[0].name = "amount";
+            ns::SyncStructNodePins(g, reg, make->Id());
+            if (pinOf(make, "amount", true) == 0 || g.Connections().size() != before)
+                fail("Renaming a member lost its pin's wire.");
+            // Reordering members reorders the pins, the wire staying with "amount".
+            auto& surfaceMembers = g.FindStruct("SurfaceSettings")->members;
+            std::swap(surfaceMembers[0], surfaceMembers[2]);
+            ns::SyncStructNodePins(g, reg, make->Id());
+            if (make->Inputs()[1].name != "mode" || make->Inputs()[3].name != "amount" || g.Connections().size() != before)
+                fail("Reordering members did not carry the wire with them.");
+            std::swap(surfaceMembers[0], surfaceMembers[2]);
+            ns::SyncStructNodePins(g, reg, make->Id());
+
+            // A struct param with member values, and its Get node carrying the struct.
+            ns::Symbol look { "look", "Look", ns::SymbolKind::Param, ns::DataType::Struct, {}, "agent", false, "", "", "SurfaceSettings",
+                              { 0.25f, ns::Vec3Default { 0.5f, 0.25f, 0.0f }, std::int64_t { 0 } } };
+            g.AddSymbol(look);
+            auto* lookGet = ns::AddSymbolGetNode(g, reg, look, &error);
+            if (lookGet == nullptr || lookGet->TypeName() != "core.symbol.get.struct" || lookGet->Outputs().front().type.structType != "SurfaceSettings")
+                fail("A struct param's Get node does not carry the struct.");
+
+            std::vector<std::string> structErrors;
+            if (! ns::ValidateAgainstRegistry(g, reg, &structErrors))
+                fail("Struct nodes do not validate: " + (structErrors.empty() ? std::string() : structErrors.front()));
+            const std::string text = ns::SerializeGraph(g);
+            std::string structError;
+            auto reloaded = ns::DeserializeGraph(text, structError);
+            if (text.find("structmember SurfaceSettings float default float 0.5\nstructmembername SurfaceSettings 0 amount\n") == std::string::npos
+                || text.find("symbolstruct look SurfaceSettings\nsymbolmember look 0 default float 0.25\n") == std::string::npos)
+                fail("Unexpected struct lines:\n" + text);
+            if (reloaded == nullptr || ns::SerializeGraph(*reloaded) != text || reloaded->FindStruct("SurfaceSettings")->members[0].maximum != 1.0
+                || reloaded->FindSymbol("look")->memberValues.size() != 3)
+                fail("A graph with structs does not round-trip: " + structError);
+
+            // A types file with a struct.
+            std::vector<ns::EnumDef> fileEnums;
+            std::vector<ns::StructDef> fileStructs;
+            std::string fileError;
+            if (! ns::DeserializeTypes(ns::SerializeTypes({}, { surface }), ns::TypeScope::project, fileEnums, fileStructs, fileError)
+                || fileStructs.size() != 1 || fileStructs[0].members.size() != 3 || fileStructs[0].scope != ns::TypeScope::project)
+                fail("A types file with a struct did not read back: " + fileError);
+            std::cout << "NodeSystem structs: ok" << std::endl;
         }
 
         return 0;

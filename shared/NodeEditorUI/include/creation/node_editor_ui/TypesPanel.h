@@ -20,17 +20,17 @@ namespace creation::node_editor_ui
 //   Project    - the project's types, for every graph in the project in any app; the app saves them.
 //   Built-in   - the app's and pods' types, read-only here.
 //
-// Selecting a type opens its editor below the list. Enums so far; structs follow.
+// Selecting a type opens its editor below the list: the Enum Editor or the Struct Editor.
 class TypesPanel final : public juce::Component, private juce::ListBoxModel
 {
 public:
     TypesPanel(ce::node_system::Graph& graph, const ce::node_system::NodeTypeRegistry& registry);
     ~TypesPanel() override;
 
-    // The project's own enums, edited here. onProjectTypesChanged hands them back for the app to save and to put in
-    // its registry (NodeTypeRegistry::ReplaceEnums). Not editable without an open project.
-    void setProjectTypes(std::vector<ce::node_system::EnumDef> enums, bool editable);
-    std::function<void(const std::vector<ce::node_system::EnumDef>&)> onProjectTypesChanged;
+    // The project's own types, edited here. onProjectTypesChanged hands them back for the app to save and to put in
+    // its registry (ReplaceEnums / ReplaceStructs). Not editable without an open project.
+    void setProjectTypes(std::vector<ce::node_system::EnumDef> enums, std::vector<ce::node_system::StructDef> structs, bool editable);
+    std::function<void(const std::vector<ce::node_system::EnumDef>&, const std::vector<ce::node_system::StructDef>&)> onProjectTypesChanged;
     // The graph's own types changed (or a use of a type was updated): the owner marks the document edited and
     // refreshes what shows types (Variables, Properties).
     std::function<void()> onGraphTypesChanged;
@@ -42,12 +42,16 @@ public:
     void resized() override;
 
 private:
+    class TypeEditor;
     class EnumEditor;
+    class StructEditor;
     friend class EnumEditor;
+    friend class StructEditor;
 
     struct Row
     {
         bool header = false;
+        bool isStruct = false;
         ce::node_system::TypeScope scope = ce::node_system::TypeScope::builtin;
         std::string name;    // the type's identifier
         juce::String title;  // shown
@@ -59,14 +63,28 @@ private:
 
     void showAddMenu();
     void addEnum(ce::node_system::TypeScope scope);
+    void addStruct(ce::node_system::TypeScope scope);
+    std::vector<std::string> takenNames() const;
     void rebuildRows();
     void refreshSoon();
 
     // The enum being edited, wherever it lives; null if it is gone. Read-only for built-in ones.
     ce::node_system::EnumDef* editableEnum(ce::node_system::TypeScope scope, const std::string& name);
     const ce::node_system::EnumDef* findEnum(ce::node_system::TypeScope scope, const std::string& name) const;
-    // An enum changed: the graph's own -> onGraphTypesChanged; the project's -> onProjectTypesChanged.
+    // A type changed: the graph's own -> onGraphTypesChanged; the project's -> onProjectTypesChanged as well.
     void enumChanged(ce::node_system::TypeScope scope);
+
+    const ce::node_system::StructDef* findStruct(ce::node_system::TypeScope scope, const std::string& name) const;
+    ce::node_system::StructDef* editableStruct(ce::node_system::TypeScope scope, const std::string& name);
+    int structUsesInGraph(const std::string& name) const;
+    // Members moved or removed: struct params' member values follow (mapping[old] = new, -1 = removed).
+    // A member renamed: Set Members / Get Member nodes naming it follow.
+    void renameMemberInNodes(const std::string& structName, const std::string& from, const std::string& to);
+    void remapMembers(const std::string& name, const std::vector<int>& mapping);
+    void forgetStruct(const std::string& name);
+    // Every enum and struct in scope (graph's own first), for a struct member's type list.
+    std::vector<const ce::node_system::EnumDef*> enumsInScope() const;
+    std::vector<const ce::node_system::StructDef*> structsInScope() const;
     // How many things in this graph use an enum (params of it, settings of it).
     int usesInGraph(const std::string& name) const;
     // Values moved or removed: what this graph stores as numbers follows (mapping[old] = new, -1 = removed).
@@ -78,6 +96,7 @@ private:
     ce::node_system::Graph& graph;
     const ce::node_system::NodeTypeRegistry& registry;
     std::vector<ce::node_system::EnumDef> projectEnums;
+    std::vector<ce::node_system::StructDef> projectStructs;
     bool projectEditable = false;
 
     juce::Label title;
@@ -86,8 +105,9 @@ private:
     std::vector<Row> rows;
     ce::node_system::TypeScope selectedScope = ce::node_system::TypeScope::builtin;
     std::string selectedName;
+    bool selectedIsStruct = false;
     juce::Viewport editorView;              // declared before the editor it shows, so it outlives it
-    std::unique_ptr<EnumEditor> editor;
+    std::unique_ptr<TypeEditor> editor;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TypesPanel)
 };
