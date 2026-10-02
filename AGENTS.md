@@ -135,6 +135,8 @@ git config push.recurseSubmodules check
 
 The actual sequencing discipline this supports is unchanged, per the Personal Development Branch Rule above: commit in the submodule → open its PR → get it merged → sync that submodule to the new `master` → only then commit the gitlink bump in the umbrella repo. Never bump a gitlink to a commit that isn't merged and pushed on the submodule's own remote.
 
+**FrustLang is always the latest: `third_party/FrustLang` follows FrustLang `master`.** Whenever a FrustLang PR merges to `master` — yours or anyone's, including research's — the next suite PR bumps `third_party/FrustLang` to the new `master` tip, rebuilt and smoke-tested against it. Before starting suite work that compiles FRust, compare the pin with `origin/master` (`git -C third_party/FrustLang fetch` then `git -C third_party/FrustLang log --oneline HEAD..origin/master`); anything listed is owed to the suite. Work done in FrustLang only lands in the suite through FrustLang `master`, so FrustLang work on any other branch has to reach `master` by PR before the suite can have it. Owner decision, 2026-10-02, after the pin sat at FrustLang #40 while #41 merged and later FrustLang work never reached `master`, so the suite built against an old FrustLang without anyone noticing.
+
 ## Secrets Directory Rule
 
 The `Secrets/` directory contains critical credentials and private keys.
