@@ -42,6 +42,7 @@ private:
 
     bool active = false;
     bool isBeingDragged = false;
+    bool showingDragCursor = false; // a drag is under way and owns the cursor
     bool closeHovered = false;
 
     juce::Rectangle<int> closeButtonBounds;

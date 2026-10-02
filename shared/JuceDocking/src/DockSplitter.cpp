@@ -29,13 +29,19 @@ void DockSplitter::mouseDown(const juce::MouseEvent&)
     if (onDragStart) onDragStart();
 }
 
-void DockSplitter::mouseUp(const juce::MouseEvent&)
+void DockSplitter::mouseUp(const juce::MouseEvent& e)
 {
     repaint();
+    auto source = e.source; // the event is const; a copy is the same mouse
+    source.forceMouseCursorUpdate(); // the drag let go of the cursor: back to whatever is under the mouse
 }
 
 void DockSplitter::mouseDrag(const juce::MouseEvent& e)
 {
+    // The resize cursor stays for the whole drag, even when the mouse runs ahead of the thin splitter.
+    auto source = e.source;
+    source.showMouseCursor(getMouseCursor());
+
     auto delta = orientation == SplitterOrientation::Vertical
         ? e.getDistanceFromDragStartX()
         : e.getDistanceFromDragStartY();
