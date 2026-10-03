@@ -18,15 +18,11 @@ Concrete example: load up the DAW (Creation Station) and the video editor (Creat
 
 Existing docs (`docs/SUITE_PLATFORM_ARCHITECTURE.md`, and the original board item this replaces, "Phase 4: Real cross-app import via ProjectRegistry") described this as an import/export contract between separate per-app projects: Station has its project, Movie has its project, and an explicit action moves an asset from one into the other. That is the wrong model. There is one project. Apps are viewers/editors onto it, not owners of separate copies that occasionally exchange assets.
 
-## Project storage: a real folder, not a packed container file
+## Project storage: inside the one container
 
-A project is a real folder tree in the VFS — plain files and subdirectories on disk under the VFS root — not a single packed container file. This is an explicit, repeated user decision. Every app just stores files in the project it has open; there is no packing/unpacking step and nothing app-specific about the storage shape.
-
-`ProjectSession` / `ProjectContainerService` (`shared/AssetSystem`) today implement a project as a single packed container file (a FatFs-formatted virtual-disk-image, after the `VFS-M1`–`VFS-M4` milestones cut it over from an earlier zip format) — that packed-file mechanism is what needs to change to real folders; it does not reflect the target model and should not be treated as settled. `AssetDescriptor`/`AssetKind` typing and the manifest/catalog concepts are not in question, only the packed-single-file storage underneath them.
+Every project lives inside the suite's single container, `vfs.bin`, in the VFS root, reached only through the VFS service (`docs/architecture/Suite-VFS-Single-Container-Plan.md`). `ProjectContainerService` (`shared/AssetSystem`) creates and opens projects through the service, by project id; no caller ever sees a real path. Every app just stores files in the project it has open; nothing about the storage shape is app-specific. `AssetDescriptor`/`AssetKind` typing and the manifest/catalog concepts sit on top of that.
 
 `SuiteAppDomain` on `ProjectManifest` today tags a project with an *originating* domain, which is fine as metadata (whose project is this "for" by default) but must not be read as "only this app may open it."
-
-**Status of this correction**: documented now (2026-08-11) after being stated more than once and not landing in this doc previously — see the root `AGENTS.md`'s Storage Boundary Rule and "No false backward-compat" precedent (memory: `feedback-no-false-backward-compat`) for the same underlying pattern: don't preserve an implementation choice just because it already exists and works, in a suite that is still under construction. The actual migration off the packed-container format to plain folders has not been implemented yet — tracked as follow-up work.
 
 ## Mechanism: a suite-owned background VFS service, sole owner of the entire VFS
 
@@ -49,7 +45,20 @@ Once an app has pulled bytes through the API, it holds them exactly as it always
 
 ### Suite-wide config, not per-app
 
-There is exactly one setting a user makes: the VFS root path (recommended: a large storage device). This is suite-level configuration owned by the background service as the single source of truth, not six copies of the same setting duplicated per app. The pointer to that root (plus other bootstrap config) lives in the normal per-OS app-data location; the actual project/asset data lives wherever the user pointed the VFS.
+There is exactly one setting a user makes outside the suite: the VFS root path (recommended: a large storage device). Everything else lives in the VFS, once, for every app.
+
+**On the OS, exactly one file:** `%APPDATA%\Djehuti-Suite\suite-settings.json`, which holds only the VFS root pointer. Nothing else is written there, by any app or shared library; even the service's process registry (how apps find or start the service) lives inside the VFS root. One place for everything is the point: per-app folders in AppData would scatter copies of settings and keys across the machine, and nothing would know which is current.
+
+**Everything else is a suite entry in the VFS**, read and written through the service with `SuiteVfsJsonStore` (`shared/Services`). The suite's own entries:
+
+- `ai-settings.json`: the AI accounts, their keys and models, and which account each app uses. A key is entered once, in the suite's settings; every app and tool that uses AI reads it from here. No app asks for or stores a key of its own.
+- `suite-ai-health.json`: each AI account's recent health (rate limits, failures, cooldowns).
+- `suite-ai-diagnostics.json`: the AI diagnostics events.
+- `suite-activity-log.json`: the suite activity log.
+
+Each app's own settings are entries too (`station-settings.json`, `engine-settings.json`, ...), never files beside the app.
+
+Tests never touch these: `SuiteVfsJsonStore::setScopeForTesting` sends every entry a test saves to `tests/<scope>/` in the VFS, and `removeScopeForTesting` removes them afterwards.
 
 ### Startup flow
 
@@ -91,6 +100,6 @@ That doc is about multiple *users*, potentially on different machines, editing t
 
 ## Status
 
-Mechanism decided and partially implemented: `services/VfsService` is real, built, and functional today for suite-level entries (settings, AI config — confirmed working end to end in the 2026-08-11 settings-storage migration). Not yet implemented: migrating project storage off `ProjectContainerService`'s packed-container format onto real folders under the same service-owned tree. Open follow-ups: exact endpoint/message shapes for project-folder operations, service lifecycle (who launches it, whether it outlives all apps or exits when the last one closes).
+`services/VfsService` is real and is the only owner of the VFS: suite entries (above) and projects both live inside `vfs.bin` and go through it. The first app that needs it starts it (`SuiteVfsServiceClient::discover`), and it closes itself after 60 minutes without requests. What is still unfinished is tracked in `docs/architecture/Suite-VFS-Single-Container-Plan.md`.
 
 This replaces "Phase 4: Real cross-app import via ProjectRegistry" as the framing for that board item.

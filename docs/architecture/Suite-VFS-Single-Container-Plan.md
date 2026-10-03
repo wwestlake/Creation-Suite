@@ -1,6 +1,10 @@
 # Suite VFS: One Container, Nothing Else On Disk
 
-Status: plan, agreed in conversation 2026-09-20. Phase 1 starting.
+Status (2026-10-03), agreed in conversation 2026-09-20:
+
+- **Phase 1 done:** the service keeps everything in `vfs.bin` and announces itself with `VfsHeartbeat.json`; a VFS root holds only those two files (checked by `shared/Services/tests/ServicesSmoke.cpp`). App registration code (`RegisterSelf`) is still in the code and has not been removed.
+- **Phase 2 partly done:** every suite and app settings entry, AI health, AI diagnostics and the activity log are entries inside the container (the last three moved off the OS on 2026-10-03). Still in code: `getScratchDirectory`, `getCurrentScratchDirectory`, `getLogsDirectory`, `getCacheDirectory`, `getProjectContainerDirectory`.
+- **Phase 3 not started:** `AssetMaterializer`, `MaterializedAssetLease` and `getMaterializedFilesDirectory` still copy assets out to real files.
 
 ## The rule
 
