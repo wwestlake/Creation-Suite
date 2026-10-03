@@ -1,13 +1,12 @@
 #include <creation/services/SuiteAiService.h>
 #include <creation/services/SuiteAiSettings.h>
-#include <creation/suite/SuiteSettings.h>
+#include <creation/services/SuiteVfsJsonStore.h>
 
 namespace
 {
-juce::File getSuiteConfigDirectory()
-{
-    return creation::suite::SuiteSettingsStore().getSuiteConfigDirectory();
-}
+// Suite VFS entries (docs/architecture/Suite-Shared-Project-Model.md): like ai-settings.json, never files on the OS.
+constexpr const char* healthEntry = "suite-ai-health.json";
+constexpr const char* diagnosticsEntry = "suite-ai-diagnostics.json";
 
 juce::var toVar(const creation::services::SuiteAiProviderHealthSnapshot& snapshot)
 {
@@ -79,100 +78,47 @@ namespace creation::services
 juce::Array<SuiteAiProviderHealthSnapshot> SuiteAiHealthSnapshotStore::load(juce::String& errorMessage) const
 {
     juce::Array<SuiteAiProviderHealthSnapshot> snapshots;
-    auto settingsFile = getSettingsFile();
-    if (! settingsFile.existsAsFile())
-        return snapshots;
-
-    const auto parsed = juce::JSON::parse(settingsFile);
-    if (parsed.isVoid())
-    {
-        errorMessage = "Could not parse the suite AI health snapshot file.";
-        return {};
-    }
-
+    const auto parsed = SuiteVfsJsonStore::loadJson(healthEntry, errorMessage);
     if (const auto* object = parsed.getDynamicObject())
         if (const auto* array = object->getProperty("snapshots").getArray())
             for (const auto& value : *array)
                 snapshots.add(snapshotFromVar(value));
-
     return snapshots;
 }
 
 bool SuiteAiHealthSnapshotStore::save(const juce::Array<SuiteAiProviderHealthSnapshot>& snapshots,
                                       juce::String& errorMessage) const
 {
-    auto configDirectory = getSuiteConfigDirectory();
-    if (! configDirectory.exists() && ! configDirectory.createDirectory())
-    {
-        errorMessage = "Could not create the suite configuration folder for AI health snapshots.";
-        return false;
-    }
-
     juce::Array<juce::var> values;
     for (const auto& snapshot : snapshots)
         values.add(toVar(snapshot));
 
     auto* object = new juce::DynamicObject();
     object->setProperty("snapshots", values);
-    if (! getSettingsFile().replaceWithText(juce::JSON::toString(juce::var(object), true)))
-    {
-        errorMessage = "Could not save the suite AI health snapshot file.";
-        return false;
-    }
-
-    return true;
-}
-
-juce::File SuiteAiHealthSnapshotStore::getSettingsFile() const
-{
-    return getSuiteConfigDirectory().getChildFile("suite-ai-health.json");
+    return SuiteVfsJsonStore::saveJson(healthEntry, juce::var(object), errorMessage);
 }
 
 SuiteAiDiagnosticsLog SuiteAiDiagnosticsStore::load(juce::String& errorMessage) const
 {
     SuiteAiDiagnosticsLog log;
-    auto settingsFile = getSettingsFile();
-    if (! settingsFile.existsAsFile())
-        return log;
-
-    const auto parsed = juce::JSON::parse(settingsFile);
-    if (parsed.isVoid())
-    {
-        errorMessage = "Could not parse the suite AI diagnostics file.";
-        return {};
-    }
-
+    const auto parsed = SuiteVfsJsonStore::loadJson(diagnosticsEntry, errorMessage);
     if (const auto* object = parsed.getDynamicObject())
         if (const auto* array = object->getProperty("events").getArray())
             for (const auto& value : *array)
                 log.events.add(diagnosticsEventFromVar(value));
-
     return log;
 }
 
 bool SuiteAiDiagnosticsStore::save(const SuiteAiDiagnosticsLog& log,
                                    juce::String& errorMessage) const
 {
-    auto configDirectory = getSuiteConfigDirectory();
-    if (! configDirectory.exists() && ! configDirectory.createDirectory())
-    {
-        errorMessage = "Could not create the suite configuration folder for AI diagnostics.";
-        return false;
-    }
-
     juce::Array<juce::var> values;
     for (const auto& event : log.events)
         values.add(toVar(event));
 
     auto* object = new juce::DynamicObject();
     object->setProperty("events", values);
-    if (! getSettingsFile().replaceWithText(juce::JSON::toString(juce::var(object), true)))
-    {
-        errorMessage = "Could not save the suite AI diagnostics file.";
-        return false;
-    }
-
-    return true;
+    return SuiteVfsJsonStore::saveJson(diagnosticsEntry, juce::var(object), errorMessage);
 }
 
 bool SuiteAiDiagnosticsStore::append(const SuiteAiDiagnosticsEvent& event,
@@ -188,11 +134,6 @@ bool SuiteAiDiagnosticsStore::append(const SuiteAiDiagnosticsEvent& event,
         log.events.remove(0);
 
     return save(log, errorMessage);
-}
-
-juce::File SuiteAiDiagnosticsStore::getSettingsFile() const
-{
-    return getSuiteConfigDirectory().getChildFile("suite-ai-diagnostics.json");
 }
 
 SuiteAiService::RoutePlanningResult SuiteAiService::planRequest(const SuiteAiRequestDescriptor& request,

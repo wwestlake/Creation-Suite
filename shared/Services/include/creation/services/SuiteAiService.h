@@ -15,8 +15,6 @@ class SuiteAiHealthSnapshotStore final
 public:
     juce::Array<SuiteAiProviderHealthSnapshot> load(juce::String& errorMessage) const;
     bool save(const juce::Array<SuiteAiProviderHealthSnapshot>& snapshots, juce::String& errorMessage) const;
-
-    juce::File getSettingsFile() const;
 };
 
 class SuiteAiDiagnosticsStore final
@@ -27,8 +25,6 @@ public:
     bool append(const SuiteAiDiagnosticsEvent& event,
                 int maxEventsToKeep,
                 juce::String& errorMessage) const;
-
-    juce::File getSettingsFile() const;
 };
 
 class SuiteAiService final

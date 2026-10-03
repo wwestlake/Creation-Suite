@@ -31,8 +31,6 @@ public:
     juce::Array<SuiteLogEntry> loadRecent(int maxEntries, juce::String& errorMessage) const;
     bool save(const juce::Array<SuiteLogEntry>& entries, juce::String& errorMessage) const;
     bool append(const SuiteLogEntry& entry, juce::String& errorMessage, int maxEntriesToKeep = 1000) const;
-
-    juce::File getSettingsFile() const;
 };
 
 class SuiteLogger final
