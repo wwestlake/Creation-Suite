@@ -276,6 +276,48 @@ void AgentApi::handle(juce::StreamingSocket& socket)
         return;
     }
 
+    if (request.method == "GET" && request.path == "/v1/tools")
+    {
+        auto& eng = engineer;
+        auto list = std::make_shared<juce::Array<juce::var>>();
+        onMessageThread([&eng, list] {
+            for (const auto& definition : eng.getTools().definitions())
+            {
+                auto* tool = new juce::DynamicObject();
+                tool->setProperty("name", definition.name);
+                tool->setProperty("title", definition.title);
+                tool->setProperty("description", definition.description);
+                tool->setProperty("effect", effectName(definition.effect));
+                tool->setProperty("parameters", definition.parameters);
+                list->add(juce::var(tool));
+            }
+        }, 5000);
+        auto* body = new juce::DynamicObject();
+        body->setProperty("tools", juce::var(*list));
+        writeJson(socket, 200, "OK", juce::var(body));
+        return;
+    }
+
+    // Undoes the last request that changed something. {"evenIfEditedSince": true} also when the work changed after it.
+    if (request.method == "POST" && request.path == "/v1/undo")
+    {
+        const bool force = static_cast<bool>(juce::JSON::parse(request.body).getProperty("evenIfEditedSince", false));
+        auto& eng = engineer;
+        auto outcome = std::make_shared<VirtualEngineer::UndoOutcome>(VirtualEngineer::UndoOutcome::nothing);
+        auto label = std::make_shared<juce::String>();
+        onMessageThread([&eng, outcome, label, force] {
+            *label = eng.lastRequestLabel();
+            *outcome = eng.undoLastRequest(force);
+        }, 5000);
+        auto* body = new juce::DynamicObject();
+        body->setProperty("outcome", *outcome == VirtualEngineer::UndoOutcome::undone        ? "undone"
+                                     : *outcome == VirtualEngineer::UndoOutcome::editedSince ? "edited-since"
+                                                                                               : "nothing");
+        body->setProperty("request", *label);
+        writeJson(socket, 200, "OK", juce::var(body));
+        return;
+    }
+
     if (request.method == "GET" && request.path == "/v1/cards/match")
     {
         juce::String error;

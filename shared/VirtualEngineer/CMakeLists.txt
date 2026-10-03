@@ -1,6 +1,7 @@
 add_library(creation_suite_virtual_engineer STATIC
     src/VirtualEngineer.cpp
     src/AgentApi.cpp
+    src/Tools.cpp
 )
 
 target_include_directories(creation_suite_virtual_engineer PUBLIC include)
@@ -23,6 +24,16 @@ target_link_libraries(creation_suite_virtual_engineer_smoke
 add_test(
     NAME creation_suite_virtual_engineer_smoke
     COMMAND creation_suite_virtual_engineer_smoke
+)
+
+# The engineer acting: a scripted model drives the real run loop against real tools (Suite-Agent-Runtime-Spec.md, 14).
+add_executable(creation_suite_agent_run_smoke
+    tests/AgentRunSmoke.cpp
+)
+target_link_libraries(creation_suite_agent_run_smoke PRIVATE creation_suite_virtual_engineer)
+add_test(
+    NAME creation_suite_agent_run_smoke
+    COMMAND creation_suite_agent_run_smoke
 )
 
 # The panels: the chat bound to the engineer, and the Cards panel. A separate target so the engineer itself needs no GUI.

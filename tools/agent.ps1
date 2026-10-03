@@ -4,11 +4,13 @@
 #   tools\agent.ps1 ask "Why is node 4 failing?"
 #   tools\agent.ps1 cards "add a struct node"    which cards a request would bring up
 #   tools\agent.ps1 app graph                   one of the app's endpoints (tools\agent.ps1 app lists them)
+#   tools\agent.ps1 tools                       what the engineer may do in the app, with each tool's effect
+#   tools\agent.ps1 undo                        undo the last request that changed something ("undo force": also after later edits)
 #
 # It finds the API the way the apps find each other: the VFS root pointer, the VFS service's heartbeat in that root,
 # then the app's announcement, the VFS entry agents/<app>.json. Nothing is read from or written to any other file.
 param(
-    [Parameter(Position = 0)][ValidateSet("status", "ask", "cards", "app")][string]$Command = "status",
+    [Parameter(Position = 0)][ValidateSet("status", "ask", "cards", "app", "tools", "undo")][string]$Command = "status",
     [Parameter(Position = 1)][string]$Text = "",
     [string]$App = "texture",
     [int]$TimeoutSeconds = 180
@@ -45,6 +47,13 @@ switch ($Command) {
     "app" {
         $path = if ($Text) { "/v1/app/$Text" } else { "/v1/app" }
         Invoke-RestMethod "$base$path" -Headers $headers | ConvertTo-Json -Depth 8
+    }
+    "tools" {
+        (Invoke-RestMethod "$base/v1/tools" -Headers $headers).tools | ForEach-Object { "{0,-28} {1,-12} {2}" -f $_.name, $_.effect, $_.title }
+    }
+    "undo" {
+        $body = @{ evenIfEditedSince = ($Text -eq "force") } | ConvertTo-Json
+        Invoke-RestMethod "$base/v1/undo" -Method Post -Headers $headers -ContentType "application/json" -Body $body | ConvertTo-Json
     }
     "ask" {
         if (-not $Text) { throw "ask needs the message: tools\agent.ps1 ask ""...""" }
