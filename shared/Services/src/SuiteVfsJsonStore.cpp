@@ -68,6 +68,18 @@ juce::var SuiteVfsJsonStore::loadJson(const juce::String& entryName, juce::Strin
     return parsed;
 }
 
+bool SuiteVfsJsonStore::removeJson(const juce::String& entryName, juce::String& errorMessage)
+{
+    SuiteVfsServiceClient client;
+    if (! client.discover())
+    {
+        errorMessage = "Could not reach the suite VFS service.";
+        return false;
+    }
+    client.removeEntry(scoped(entryName)); // false only when it was not there
+    return true;
+}
+
 bool SuiteVfsJsonStore::saveJson(const juce::String& entryName, const juce::var& value, juce::String& errorMessage)
 {
     const auto logicalPath = scoped(entryName);

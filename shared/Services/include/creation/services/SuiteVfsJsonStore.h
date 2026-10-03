@@ -18,6 +18,9 @@ public:
 
     static bool saveJson(const juce::String& logicalPath, const juce::var& value, juce::String& errorMessage);
 
+    // Removes an entry; one that is not there is no error.
+    static bool removeJson(const juce::String& logicalPath, juce::String& errorMessage);
+
     // For tests: every entry this process loads or saves goes under "tests/<scope>/" instead, so a test never reads or
     // overwrites the real suite settings (the AI accounts and their keys among them). Empty turns it off.
     // removeScopeForTesting deletes everything the test left there.
