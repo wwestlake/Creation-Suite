@@ -91,7 +91,7 @@ Use this layer for:
 
 - AI account/provider orchestration
 - suite logging
-- legal/EULA settings
+- the EULA's text and version
 - cross-app service behavior
 
 Do not add new app-local copies of these behaviors.

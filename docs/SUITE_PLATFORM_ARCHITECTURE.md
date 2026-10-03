@@ -389,7 +389,7 @@ This includes:
 - model routing metadata
 - request policy and throttling
 - subscription/license state
-- EULA state
+- the EULA's text and version
 - account/profile data
 
 ### 12. Shared Suite UI Shell

@@ -338,7 +338,7 @@ Current suite config covers:
 - app project roots
 - suite AI account storage
 - per-app AI account/model routing
-- licensing/EULA presentation and acceptance persistence
+- licensing/EULA presentation (the EULA text and version)
 
 Still needed:
 

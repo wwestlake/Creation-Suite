@@ -1,12 +1,10 @@
 #include <creation/services/SuiteLogging.h>
-#include <creation/suite/SuiteSettings.h>
+#include <creation/services/SuiteVfsJsonStore.h>
 
 namespace
 {
-juce::File getSuiteConfigDirectory()
-{
-    return creation::suite::SuiteSettingsStore().getSuiteConfigDirectory();
-}
+// A suite VFS entry (docs/architecture/Suite-Shared-Project-Model.md), never a file on the OS.
+constexpr const char* activityLogEntry = "suite-activity-log.json";
 
 juce::var toVar(const creation::services::SuiteLogEntry& entry)
 {
@@ -46,22 +44,11 @@ namespace creation::services
 juce::Array<SuiteLogEntry> SuiteLogStore::load(juce::String& errorMessage) const
 {
     juce::Array<SuiteLogEntry> entries;
-    auto settingsFile = getSettingsFile();
-    if (! settingsFile.existsAsFile())
-        return entries;
-
-    const auto parsed = juce::JSON::parse(settingsFile);
-    if (parsed.isVoid())
-    {
-        errorMessage = "Could not parse the suite log file.";
-        return {};
-    }
-
+    const auto parsed = SuiteVfsJsonStore::loadJson(activityLogEntry, errorMessage);
     if (const auto* object = parsed.getDynamicObject())
         if (const auto* array = object->getProperty("entries").getArray())
             for (const auto& value : *array)
                 entries.add(fromVar(value));
-
     return entries;
 }
 
@@ -80,26 +67,13 @@ juce::Array<SuiteLogEntry> SuiteLogStore::loadRecent(int maxEntries, juce::Strin
 bool SuiteLogStore::save(const juce::Array<SuiteLogEntry>& entries,
                          juce::String& errorMessage) const
 {
-    auto configDirectory = getSuiteConfigDirectory();
-    if (! configDirectory.exists() && ! configDirectory.createDirectory())
-    {
-        errorMessage = "Could not create the suite configuration folder for logging.";
-        return false;
-    }
-
     juce::Array<juce::var> values;
     for (const auto& entry : entries)
         values.add(toVar(entry));
 
     auto* object = new juce::DynamicObject();
     object->setProperty("entries", values);
-    if (! getSettingsFile().replaceWithText(juce::JSON::toString(juce::var(object), true)))
-    {
-        errorMessage = "Could not save the suite log file.";
-        return false;
-    }
-
-    return true;
+    return SuiteVfsJsonStore::saveJson(activityLogEntry, juce::var(object), errorMessage);
 }
 
 bool SuiteLogStore::append(const SuiteLogEntry& entry,
@@ -115,11 +89,6 @@ bool SuiteLogStore::append(const SuiteLogEntry& entry,
         entries.remove(0);
 
     return save(entries, errorMessage);
-}
-
-juce::File SuiteLogStore::getSettingsFile() const
-{
-    return getSuiteConfigDirectory().getChildFile("suite-activity-log.json");
 }
 
 SuiteLogEntry SuiteLogger::makeEntry(const juce::String& subsystem,

@@ -8,7 +8,7 @@ juce::File installedServicesDirectory()
     // The installer records the folder it put the shared services in; the default is where it puts them unless told otherwise.
     juce::String recorded;
 #if JUCE_WINDOWS
-    recorded = juce::WindowsRegistry::getValue("HKEY_LOCAL_MACHINE\SOFTWARE\LagDaemon Software\Djehuti Suite\ServicesDir", {},
+    recorded = juce::WindowsRegistry::getValue("HKEY_LOCAL_MACHINE\\SOFTWARE\\LagDaemon Software\\Djehuti Suite\\ServicesDir", {},
                                                juce::WindowsRegistry::WoW64_64bit);
 #endif
     if (recorded.isNotEmpty() && juce::File(recorded).getChildFile(vfsServiceExecutableName).existsAsFile())

@@ -27,7 +27,7 @@ VFS rather than needing to be rebuilt alongside one:
   `CreationSuiteVfsService` reports (`GET /suite/entries`, via the new
   `SuiteVfsServiceClient::listEntries()`), split into a tree client-side. These are the
   small JSON settings entries apps store through the VFS service (`station-settings.json`,
-  `ai-settings.json`, etc.) — they live inside the suite root project's own container, not
+  `ai-settings.json`, etc.) — they live inside the suite's one container, `vfs.bin`, not
   as loose files, so they don't show up in the filesystem tree above at all.
 
 Selecting a file or entry shows its content in the right-hand pane, formatted by what kind
@@ -36,10 +36,8 @@ Parse failures show the raw content with a note rather than failing silently.
 
 ## Known limitation
 
-Real per-app/per-project containers (`.csproj` files — actual project storage) show up in
-the filesystem tree as opaque binary blobs; the tool reports their size but doesn't browse
-their internal contents. `creation::vfs::SuiteVolume::listFiles()` exists and could back
-that view later, but opening a container that may already be mounted read-write elsewhere
-(by the very app you're inspecting from) risks a real lock conflict — that needs its own
-concurrency-safe design, not something bolted onto this tool as-is. Flagged here rather
-than silently faked.
+The VFS root holds only `vfs.bin` (the one container: every project, asset and setting) and
+`VfsHeartbeat.json` (docs/architecture/Suite-VFS-Single-Container-Plan.md). The filesystem tree
+shows `vfs.bin` as one opaque file with its size; it does not browse the projects inside it.
+Only the VFS service opens `vfs.bin`, so a browser of projects has to ask the service for them
+(`SuiteVfsServiceClient::listProjects` / `listProjectEntries`) rather than open the file.

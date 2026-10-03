@@ -1,6 +1,21 @@
 # Suite Agent Runtime: an agent that understands, plans, acts and corrects
 
-Status: specification, for review. Nothing here is built yet. Drafted 2026-09-20 from the conversation that asked for "the kind of thing that Claude or Codex is", not a single command.
+Status: specification, for review. Drafted 2026-09-20 from the conversation that asked for "the kind of thing that Claude or Codex is", not a single command.
+
+Built so far (2026-10-03). The runtime is the Virtual Engineer itself (`shared/VirtualEngineer`), not a separate `shared/AgentRuntime`: there is one way an app reaches the AI, and acting is part of it.
+
+- `shared/LiteSemRag`: the guidance as LiteSemRAG cards (rules, processes, tools, knowledge) in the VFS, by scope (shipped, suite, app, project), retrieved per request by meaning and by words, a card's own tokens first (section 6A.5's "exact tokens must beat semantic similarity"). This is the "policies, process records and knowledge" input of section 9.
+- `shared/VirtualEngineer`: the suite account and key, the matching cards, the app's own context and the recent conversation, and now acting:
+  - tools (section 5): `ToolDefinition` with an effect class, `ToolRegistry` (registration refuses bad names, duplicates, missing descriptions), arguments checked against a JSON Schema subset before a call runs, the result contract of 5.3;
+  - the run loop (section 4, Direct path only): the model calls tools until it answers; limits on model calls, tool calls and the same call repeating; Stop between calls; an honest report when a run stops partway;
+  - effect gates (section 10.1): `read` and `write` run; `destructive` and `external` ask the user in the app every time, also for requests that come through the API; without a way to ask they are refused;
+  - one request, one undo step (section 8): registered state domains are captured before a request's first change; "Undo last request" restores them, and asks first if the work changed since;
+  - the Run Store (section 11), simplified: the project entry `Agent/runs.json`, the latest 50 runs with every action;
+  - the provider layer (section 12), OpenAI-style tool calling only (`SuiteAiChatClient::sendTurn`); another provider talks without tools and the reply says so;
+  - the scenario tests of section 14 against a scripted model (`tests/AgentRunSmoke.cpp`): direct, correct, policy and injection, undo, undo after an edit, limits, Stop, a tool that answers later.
+  - First host: Texture's Graph editor (`GraphAgentTools.cpp`): read the graph and node types, add, wire, unwire, set an input, remove (destructive), check.
+
+Not built yet: planning (Plan and Clarify paths, plan cards, section 7), checkpoints and rollback within a run, the Anthropic and Ollama adapters and the structured-output fallback, routing through `SuiteAiOrchestration`, tool cards and `tools.search` for large tool sets (5.4), resuming a run after a restart. Modeler and Station still send their own requests and move onto the Virtual Engineer next.
 
 ## 1. What this is
 
@@ -485,7 +500,7 @@ A run must be testable without a network and without a person.
 
 ## 15. Where the code goes
 
-- `shared/AgentRuntime/` (new): `AgentRun`, `AgentPlan`, `RunStore`, `Verifier`, `Corrector`, `Limits`, `ToolRegistry`, `ToolProvider`, `ToolDefinition`, `Transaction`/`StateDomain`, `ContextAssembler` (uses the policy and process data compiled by the help build), `ModelProvider` interface and the adapters, `ScriptedModelProvider` (test), `AgentRuntimeSmoke` tests.
+- `shared/VirtualEngineer/` (the runtime): `Tools.h` (`ToolDefinition`, `ToolResult`, `ToolRegistry`, `StateDomain`, argument checking), the run loop, gates, undo and run records in `VirtualEngineer`, the panels (`EngineerChat` with Stop, Undo and approval), the API, and the tests (`AgentRunSmoke` with a scripted model). Plans, checkpoints and a `ContextAssembler` for policy and process data are added here as they are built. Provider adapters live with the transport in `shared/Services` (`SuiteAiChatClient`).
 - `apps/CreationStation/Source/Agent/`: `StationToolProviders` (tracker, mixer, ...), `StationStateDomains`, the panel wiring.
 - Removed as replaced (greenfield rule, no compatibility layer): `CreationStationTaskPlanner` and `MainComponent::executeAiTaskStep`, and the plain one-shot completion path in `launchAiCompletion` once the runtime carries requests.
 - Help and policies: policy and process records live next to the help sources and are embedded the same way.
@@ -534,7 +549,7 @@ Each phase ends with its tests passing and something the user can try.
 | Specific requests act at once; general requests plan first | Yes | agreed |
 | "Ask first" gates only destructive or external actions, because project changes are undoable | Yes | agreed |
 | Tools snap in through a registry | Yes | agreed |
-| Runtime lives in `shared/`, not in Station | Proposed | for review |
+| Runtime lives in `shared/`, not in Station | Yes: in `shared/VirtualEngineer`, the one AI path | built 2026-10-03 |
 | One run equals one undo step, including engine-side mixer state | Proposed | for review |
 | Agent state stored in the VFS only | Proposed (follows the storage rule) | for review |
 | The agent is a coder: writes, compiles, tests and uses FRust and nodes | Yes (user, 2026-09-20) | agreed |

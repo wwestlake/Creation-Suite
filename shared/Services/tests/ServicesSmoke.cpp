@@ -2,11 +2,10 @@
 #include <creation/services/SuiteAiOrchestration.h>
 #include <creation/services/SuiteAiProviderRuntime.h>
 #include <creation/services/SuiteAiService.h>
-#include <creation/services/SuiteLegalSettings.h>
 #include <creation/services/SuiteLogging.h>
-#include <creation/services/SuiteProcessRegistry.h>
 #include <creation/services/SuiteContextEngine.h>
 #include <creation/services/SuiteVfsServiceClient.h>
+#include <creation/services/SuiteVfsJsonStore.h>
 #include <creation/assets/ProjectManifest.h>
 #include <creation/suite/SuiteSettings.h>
 #include <creation/suite/SuiteStoragePaths.h>
@@ -27,26 +26,29 @@ int main()
 {
     try
     {
-        creation::services::SuiteAiSettingsStore aiStore;
-        creation::services::SuiteLegalSettingsStore legalStore;
-        creation::services::SuiteAiHealthSnapshotStore healthStore;
-        creation::services::SuiteAiDiagnosticsStore diagnosticsStore;
-        creation::services::SuiteLogStore logStoreForCleanup;
+        // The real suite settings - the AI accounts and their keys among them - must never be read or overwritten by a
+        // test. Remember them exactly, then send every settings entry this test saves to its own scope in the VFS.
+        juce::MemoryBlock realAiSettings;
+        bool hadRealAiSettings = false;
+        {
+            creation::services::SuiteVfsServiceClient realClient;
+            if (! realClient.discover())
+                fail("Could not reach the suite VFS service.");
+            hadRealAiSettings = realClient.readEntry("ai-settings.json", realAiSettings);
+        }
+        // Nothing but the VFS root pointer belongs on the OS (AGENTS.md, Storage Boundary Rule): none of these may be
+        // written there any more. Files an older build left behind keep their old times.
+        const auto testStarted = juce::Time::getCurrentTime() - juce::RelativeTime::seconds(2);
+        const auto osConfigFolder = creation::suite::SuiteSettingsStore().getSuiteConfigDirectory();
+        const char* formerOsFiles[] = { "suite-ai-health.json", "suite-ai-diagnostics.json", "suite-activity-log.json",
+                                        "suite-legal-settings.json" };
 
-        // AI settings now live inside the suite root project via
-        // SuiteVfsServiceClient (requires services/VfsService to be built
-        // and reachable, per docs/architecture/Suite-Shared-Project-Model.md)
-        // rather than a loose file -- save() below overwrites whatever was
-        // there, so no separate pre-test delete step is needed for it.
-        auto legalFile = legalStore.getSettingsFile();
-        legalFile.deleteFile();
-        // These three persist across runs and are never reset by the settings-file
-        // deletes above -- a prior direct run of this executable (e.g. manual
-        // debugging) otherwise leaves rate-limit/health state that silently breaks
-        // THIS run's "fresh state" assumptions below. Confirmed reproducible.
-        healthStore.getSettingsFile().deleteFile();
-        diagnosticsStore.getSettingsFile().deleteFile();
-        logStoreForCleanup.getSettingsFile().deleteFile();
+        juce::String scopeError;
+        creation::services::SuiteVfsJsonStore::setScopeForTesting("services-smoke");
+        if (! creation::services::SuiteVfsJsonStore::removeScopeForTesting(scopeError)) // what an earlier run left
+            fail("Could not clear the test's VFS scope: " + scopeError.toStdString());
+
+        creation::services::SuiteAiSettingsStore aiStore;
 
         creation::services::SuiteAiSettings aiSettings;
         aiSettings.defaultAccountId = "primary";
@@ -262,70 +264,21 @@ int main()
             fail("Suite centralized logging verification failed.");
         }
 
-        creation::services::SuiteLegalSettings legalSettings;
-        legalSettings.eulaAccepted = true;
-        legalSettings.acceptedEulaVersion = "2026-07-29";
-        legalSettings.acceptedAt = juce::Time::getCurrentTime();
-
-        if (! legalStore.save(legalSettings, errorMessage))
-            fail("Failed saving legal settings: " + errorMessage.toStdString());
-
-        auto loadedLegal = legalStore.load(errorMessage);
-        if (! loadedLegal.eulaAccepted || loadedLegal.acceptedEulaVersion != "2026-07-29")
-            fail("Legal settings round-trip mismatch.");
-
-        // --- IPC-1: SuiteProcessRegistry -----------------------------
+        // AI health, AI diagnostics and the activity log are VFS entries, in the test's scope - not files on the OS.
         {
-            creation::services::SuiteProcessRegistration freshRegistration;
-            freshRegistration.RegisterSelf("TestAppFresh", 9000, "TestAppFresh-pipe");
-
-            creation::services::SuiteProcessRegistration staleRegistration;
-            staleRegistration.RegisterSelf("TestAppStale", 9001, "TestAppStale-pipe");
-
-            // Backdate the stale registration's own file directly on disk
-            // (bypassing the real 5s heartbeat interval, which a fast
-            // smoke test shouldn't have to wait out) so
-            // EnumerateLiveProcesses has something genuinely old to
-            // filter, deterministically, without a real sleep.
-            auto findFileFor = [](const juce::String& appId) -> juce::File {
-                juce::Array<juce::File> files;
-                creation::services::SuiteProcessRegistry::RegistryDirectory().findChildFiles(
-                    files, juce::File::findFiles, false, appId + "-*.json");
-                return files.isEmpty() ? juce::File() : files.getFirst();
-            };
-
-            auto staleFile = findFileFor("TestAppStale");
-            if (! staleFile.existsAsFile())
-                fail("SuiteProcessRegistry: stale test registration file was not written.");
-
-            auto staleJson = juce::JSON::parse(staleFile);
-            if (auto* object = staleJson.getDynamicObject())
+            creation::services::SuiteVfsServiceClient client;
+            juce::StringArray entries;
+            if (! client.discover() || ! client.listEntries(entries))
+                fail("Could not list the suite VFS entries.");
+            for (const char* name : { "suite-ai-health.json", "suite-ai-diagnostics.json", "suite-activity-log.json", "ai-settings.json" })
+                if (! entries.contains("suite/tests/services-smoke/" + juce::String(name)))
+                    fail("Expected the VFS entry tests/services-smoke/" + std::string(name) + " - it is not there.");
+            for (const char* name : formerOsFiles)
             {
-                const auto ancientMs = (juce::Time::getCurrentTime() - juce::RelativeTime::seconds(1000)).toMilliseconds();
-                object->setProperty("lastHeartbeatMs", ancientMs);
-                staleFile.replaceWithText(juce::JSON::toString(staleJson, true));
+                const auto file = osConfigFolder.getChildFile(name);
+                if (file.existsAsFile() && file.getLastModificationTime() > testStarted)
+                    fail(std::string(name) + " was written to the OS (" + file.getFullPathName().toStdString() + ").");
             }
-            else
-            {
-                fail("SuiteProcessRegistry: could not parse stale test registration file to backdate it.");
-            }
-
-            const auto live = creation::services::SuiteProcessRegistry::EnumerateLiveProcesses(15.0);
-
-            const auto findRecord = [&live](const juce::String& appId) {
-                return std::find_if(live.begin(), live.end(),
-                                    [&appId](const auto& record) { return record.appId == appId; });
-            };
-
-            const auto freshRecord = findRecord("TestAppFresh");
-            if (freshRecord == live.end() || freshRecord->oscPort != 9000 || freshRecord->pipeName != "TestAppFresh-pipe")
-                fail("SuiteProcessRegistry: fresh registration was not enumerated correctly.");
-
-            if (findRecord("TestAppStale") != live.end())
-                fail("SuiteProcessRegistry: stale registration should have been excluded.");
-
-            if (staleFile.existsAsFile())
-                fail("SuiteProcessRegistry: stale registration's file should have been deleted during enumeration.");
         }
 
         // --- CTX-1: SuiteContextEngine -------------------------------
@@ -443,39 +396,42 @@ int main()
             engine.UnregisterProvider(&provider);
         }
 
-        // --- Project storage: real folders under the configured VFS root, all through the
-        // running service (docs/architecture/Suite-Shared-Project-Model.md, VfsProjectStore
-        // in services/VfsService). Proves both the new /project/* endpoints and this session's
-        // getProjectContainerDirectory path-bug fix (folder must land under the CONFIGURED
-        // suiteVfsRoot, not AppData).
+        // --- Project storage: projects live inside the one container (vfs.bin), reached only through the service
+        // (docs/architecture/Suite-VFS-Single-Container-Plan.md). Everything here goes through the client; the test
+        // removes its projects with deleteProject, including any an earlier run left behind.
         {
             creation::services::SuiteVfsServiceClient client;
             if (! client.discover())
                 fail("VfsProjectStore smoke: could not reach the suite VFS service.");
 
-            juce::String suiteSettingsError;
-            const auto suiteSettings = creation::suite::SuiteSettingsStore().load(suiteSettingsError);
+            const juce::String testProjectName = "Services Smoke Test Project";
+            {
+                juce::Array<creation::services::SuiteVfsServiceClient::ProjectSummary> earlier;
+                juce::String deleteError;
+                if (client.listProjects(earlier))
+                    for (const auto& summary : earlier)
+                        if (summary.manifest.projectName.startsWith(testProjectName))
+                            client.deleteProject(summary.projectId, deleteError);
+            }
 
             juce::String createError, projectId;
             creation::assets::ProjectManifest manifest;
-            if (! client.createProject(creation::assets::SuiteAppDomain::station, "Services Smoke Test Project",
+            if (! client.createProject(creation::assets::SuiteAppDomain::station, testProjectName,
                                        "0.0.0-smoke", "0.0.0-smoke", projectId, manifest, createError))
                 fail("VfsProjectStore smoke: createProject failed: " + createError.toStdString());
 
             if (projectId.isEmpty() || manifest.projectId != projectId)
                 fail("VfsProjectStore smoke: createProject returned a mismatched projectId.");
 
-            // Flat layout -- no app-domain subfolder (see
-            // docs/architecture/Suite-Shared-Project-Model.md).
-            const auto expectedFolder = creation::suite::getProjectContainerDirectory(suiteSettings)
-                                            .getChildFile(projectId);
-            if (! expectedFolder.isDirectory())
-                fail("VfsProjectStore smoke: project folder does not exist at the configured VFS root: "
-                     + expectedFolder.getFullPathName().toStdString());
-            if (expectedFolder.getFullPathName().contains("AppData") && suiteSettings.suiteVfsRoot.isNotEmpty()
-                && ! suiteSettings.suiteVfsRoot.contains("AppData"))
-                fail("VfsProjectStore smoke: project folder landed in AppData despite a real configured VFS root -- "
-                     "the getProjectContainerDirectory bug fix did not take effect.");
+            // The VFS root holds the container and the service's heartbeat, and nothing else - no project folders.
+            {
+                juce::String suiteSettingsError;
+                const auto root = creation::suite::getSuiteRootDirectory(creation::suite::SuiteSettingsStore().load(suiteSettingsError));
+                for (const auto& item : root.findChildFiles(juce::File::findFilesAndDirectories, false))
+                    if (item.getFileName() != "vfs.bin" && item.getFileName() != "VfsHeartbeat.json")
+                        fail("VfsProjectStore smoke: the VFS root holds something besides vfs.bin and VfsHeartbeat.json: "
+                             + item.getFullPathName().toStdString());
+            }
 
             const juce::String entryText = "hello from ServicesSmoke";
             const juce::MemoryBlock entryData(entryText.toRawUTF8(), entryText.getNumBytesAsUTF8());
@@ -538,18 +494,35 @@ int main()
                 fail("VfsProjectStore smoke: /suite/entry regression read-back mismatch.");
             client.removeEntry("services-smoke-regression.txt");
 
-            // Clean up only the two project folders this test created -- never touch the rest
-            // of "Project Containers" (real projects, or other tests' data, may live alongside).
-            expectedFolder.deleteRecursively();
-            const auto clonedFolder = creation::suite::getProjectContainerDirectory(suiteSettings)
-                                          .getChildFile(clonedProjectId);
-            clonedFolder.deleteRecursively();
+            // Remove the two projects this test made - never anything else.
+            juce::String deleteError;
+            if (! client.deleteProject(projectId, deleteError) || ! client.deleteProject(clonedProjectId, deleteError))
+                fail("VfsProjectStore smoke: deleteProject failed: " + deleteError.toStdString());
+            juce::Array<creation::services::SuiteVfsServiceClient::ProjectSummary> remaining;
+            if (! client.listProjects(remaining))
+                fail("VfsProjectStore smoke: listProjects failed after the clean-up.");
+            for (const auto& summary : remaining)
+                if (summary.projectId == projectId || summary.projectId == clonedProjectId)
+                    fail("VfsProjectStore smoke: a deleted test project is still listed.");
+        }
+
+        // Leave nothing behind, and prove the real settings were never touched.
+        if (! creation::services::SuiteVfsJsonStore::removeScopeForTesting(scopeError))
+            fail("Could not remove the test's VFS entries: " + scopeError.toStdString());
+        creation::services::SuiteVfsJsonStore::setScopeForTesting({});
+        {
+            creation::services::SuiteVfsServiceClient realClient;
+            juce::MemoryBlock afterAiSettings;
+            const bool hasRealAiSettings = realClient.discover() && realClient.readEntry("ai-settings.json", afterAiSettings);
+            if (hasRealAiSettings != hadRealAiSettings || afterAiSettings != realAiSettings)
+                fail("The real suite AI settings changed during the test.");
         }
 
         return 0;
     }
     catch (const std::exception& exception)
     {
+        creation::services::SuiteVfsJsonStore::setScopeForTesting({});
         std::cerr << "ServicesSmoke failure: " << exception.what() << std::endl;
         return 1;
     }
