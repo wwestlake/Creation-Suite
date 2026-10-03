@@ -1,6 +1,13 @@
 # Suite Agent Runtime: an agent that understands, plans, acts and corrects
 
-Status: specification, for review. Nothing here is built yet. Drafted 2026-09-20 from the conversation that asked for "the kind of thing that Claude or Codex is", not a single command.
+Status: specification, for review. Drafted 2026-09-20 from the conversation that asked for "the kind of thing that Claude or Codex is", not a single command.
+
+Built so far (2026-10-03), the knowledge and transport underneath it, not the run loop:
+
+- `shared/LiteSemRag`: the guidance as LiteSemRAG cards (rules, processes, tools, knowledge) in the VFS, by scope (shipped, suite, app, project), retrieved per request. This is the "policies, process records and knowledge" input of section 9.
+- `shared/VirtualEngineer`: the one shared way an app asks the AI (the suite account and key, the matching cards, the app's own context, the recent conversation), the shared chat and Cards panels, and a local API (`agents/<app>.json` in the VFS) for talking to the engineer and looking into the app. First host: Texture.
+
+Not built yet: tools and the tool-calling loop (sections 4 and 5), plans, transactions and undo, the Run Store. Modeler and Station still send their own requests and move onto the Virtual Engineer next.
 
 ## 1. What this is
 

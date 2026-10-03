@@ -62,18 +62,13 @@ Do not collapse these into one generic "popup menu" pattern. If the user right-c
 
 This rule is mandatory, not stylistic. If a right-click menu is anchored to an unrelated toolbar button, parent panel edge, or generic fallback location, that implementation is wrong and should be treated as a bug.
 
-## LiteSemRAG Memory Cards (ISD Structure)
+## LiteSemRAG Cards and the Virtual Engineer
 
-This workspace uses a hierarchical Information Space Design (ISD) structure based on JSONL memory cards to organize durable agent rules without cluttering context windows.
+The suite's AI is one shared component, the Virtual Engineer (`shared/VirtualEngineer`, README there): every app asks the AI through it, with the suite's AI account and key (`ai-settings.json`, entered once in the suite's settings - no app asks for or stores a key). An app supplies only its panel (`EngineerChat`, `CardsPanel`), its own context (`appContext`) and its own API endpoints (`AgentApi::addAppEndpoint`). Do not write another per-app AI request path.
 
-- **Suite-Level Cards**: `D:\CreationSuite-Workspaces\CreationSuite-Gemini\.frusty\MEMORY_SUITE_CARDS.jsonl`
-  - Scope: `suite`
-  - Use for: Suite-wide rules (e.g., C++ standards, single-core build mandates, VFS rules).
-- **App-Level Cards**: `D:\CreationSuite-Workspaces\CreationSuite-Gemini\apps\<AppName>\.frusty\MEMORY_APP_CARDS.jsonl`
-  - Scope: `app`
-  - Use for: Application-specific rules (e.g., audio threading in Station, Node catalogs in Texture).
+Its guidance is LiteSemRAG cards (`shared/LiteSemRag`, README there): rules, processes, tools, knowledge, personality, retrieved per request so only what matches goes into the prompt. Cards live in the VFS, never in files on the OS: the suite's in `cards/suite.json`, each app's in `cards/app/<app>.json`, a project's inside the project (`Cards/cards.json`); shipped cards are built from source and read-only. A card id is one card across scopes and the closest scope wins (project, app, suite, shipped), so a project can sharpen or retire a suite rule. The user writes cards in the Cards panel; "Try a request" there shows which cards a request brings up.
 
-When building context, agents should prioritize App-Level cards over Suite-Level cards to allow specific domains to override global defaults. All memory interactions should read/write to these exact paths depending on the active working context.
+Each running app's Virtual Engineer serves a local API (loopback, bearer token) announced as the VFS entry `agents/<app>.json`: talk to the engineer (`POST /v1/messages`, `GET /v1/requests/{id}`), see which cards a request would bring up (`GET /v1/cards/match?q=`), and look into the app (`GET /v1/app/{name}`). An agent working on the suite uses it instead of guessing at an app's state.
 
 ## Shared Ownership Rule
 
