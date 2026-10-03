@@ -312,8 +312,13 @@ void recordRun(const juce::String& projectId, const juce::var& details)
     juce::Array<juce::var> runs;
     juce::MemoryBlock stored;
     if (client.readProjectEntry(projectId, "Agent/runs.json", stored))
-        if (const auto* list = juce::JSON::parse(stored.toString()).getProperty("runs", {}).getArray())
-            runs = *list;
+    {
+        // Kept in named values: a pointer into a temporary's array dangles once the statement ends.
+        const auto parsed = juce::JSON::parse(stored.toString());
+        const auto list = parsed.getProperty("runs", {});
+        if (const auto* existing = list.getArray())
+            runs = *existing;
+    }
     runs.add(details);
     while (runs.size() > 50)
         runs.remove(0);

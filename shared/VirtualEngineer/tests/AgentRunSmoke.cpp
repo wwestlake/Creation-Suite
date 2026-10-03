@@ -474,6 +474,34 @@ int main()
         api.stop();
     }
 
+    // 9. With a project open, every run is recorded in it (Agent/runs.json) - the second record is added to the first
+    //    (this crashed the app once: the earlier records were read through a dangling pointer).
+    {
+        juce::String projectId, createError;
+        creation::assets::ProjectManifest manifest;
+        const bool created = client.createProject(creation::assets::SuiteAppDomain::texture, "Agent Run Smoke Test Project", "0.0.0-smoke",
+                                                  "0.0.0-smoke", projectId, manifest, createError);
+        Host host;
+        auto engineer = makeEngineer();
+        host.install(*engineer);
+        engineer->setProjectId(projectId);
+        Script script;
+        script.steps = { [](auto&) { return answer("Hello."); }, [](auto&) { return answer("Hello again."); } };
+        script.attach(*engineer);
+        const auto first = run(*engineer, "hello");
+        const auto second = run(*engineer, "hello again");
+        juce::MemoryBlock stored;
+        const bool read = created && client.readProjectEntry(projectId, "Agent/runs.json", stored);
+        const auto parsed = juce::JSON::parse(stored.toString());
+        const auto runs = parsed.getProperty("runs", {});
+        check("With a project open, each run is recorded in it, one after another",
+              first.ok && second.ok && read && runs.size() == 2 && runs[0].getProperty("reply", {}).toString() == "Hello."
+                  && runs[1].getProperty("reply", {}).toString() == "Hello again.");
+        juce::String deleteError;
+        if (created)
+            client.deleteProject(projectId, deleteError);
+    }
+
     services::SuiteVfsJsonStore::removeScopeForTesting(error);
     services::SuiteVfsJsonStore::setScopeForTesting({});
     juce::MemoryBlock afterAiSettings;
