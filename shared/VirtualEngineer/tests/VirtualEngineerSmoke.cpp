@@ -3,6 +3,7 @@
 #include <creation/services/SuiteVfsJsonStore.h>
 #include <creation/services/SuiteVfsServiceClient.h>
 
+#include <atomic>
 #include <iostream>
 
 namespace ls = creation::litesemrag;
@@ -99,6 +100,30 @@ int main()
         result.text = "Answer " + juce::String(++answers);
         return true;
     };
+    // Embeddings by hand: text about storage or files points along x, about graphs along y, anything else along z.
+    std::atomic<int> embedCalls { 0 }, textsEmbedded { 0 };
+    std::atomic<bool> embeddingsFail { false };
+    engineer.embedderForTesting = [&](const services::SuiteAiResolvedRuntimeSettings&, const juce::StringArray& texts,
+                                      services::SuiteAiEmbeddingClient::Result& result) {
+        ++embedCalls;
+        textsEmbedded += texts.size();
+        if (embeddingsFail)
+        {
+            result.errorMessage = "test provider is down";
+            return false;
+        }
+        for (const auto& text : texts)
+        {
+            const auto lower = text.toLowerCase();
+            if (lower.contains("storage") || lower.contains("files") || lower.contains("root pointer"))
+                result.vectors.push_back({ 1.0f, 0.0f, 0.0f });
+            else if (lower.contains("graph"))
+                result.vectors.push_back({ 0.0f, 1.0f, 0.0f });
+            else
+                result.vectors.push_back({ 0.0f, 0.0f, 1.0f });
+        }
+        return true;
+    };
 
     // 1. The storage card and the app's context go in; the reply comes back.
     creation::agent::AskResult first;
@@ -117,6 +142,35 @@ int main()
     check("The next request brings its own cards",
           second.ok && lastSystem.contains("Image graphs are typed image.") && ! lastSystem.contains("Nothing but the root pointer"));
     check("The earlier exchange goes along", lastUser.contains("Earlier in this conversation:\nUser: Where does storage go?\nYou: Answer 1"));
+    check("The details say the cards were matched by meaning", second.details.getProperty("matchedBy", {}).toString() == "meaning and words");
+
+    // 2b. Meaning. "Where do my saved files live?" shares no word with the Storage card (saved, files, live), but means
+    // the same; the cards were embedded by the first request, so now only the request itself is.
+    embedCalls = 0;
+    textsEmbedded = 0;
+    error.clear();
+    const auto byMeaning = engineer.retrieveFor("Where do my saved files live?", error);
+    check("Meaning brings up a card that shares no word with the request",
+          byMeaning.byMeaning && byMeaning.cards.size() == 1 && byMeaning.cards[0].card.id == "suite.rule.vfs"
+              && byMeaning.cards[0].wordsMatched.isEmpty() && byMeaning.cards[0].meaning > 0.99f && error.isEmpty());
+    check("A card is embedded once; after that only the request is", embedCalls == 1 && textsEmbedded == 1);
+    ls::CardStore::upsert(ls::CardStore::suite(), card("suite.rule.files", "Files", "Project files are entries in the VFS.", {}), error);
+    textsEmbedded = 0;
+    engineer.retrieveFor("Where do my saved files live?", error);
+    check("A new card is embedded the first time it could apply", textsEmbedded == 2);
+    embeddingsFail = true;
+    const auto wordsOnly = engineer.retrieveFor("Where does storage go?", error);
+    check("When embeddings fail, cards are matched on words and the reason is given",
+          ! wordsOnly.byMeaning && wordsOnly.cards.size() == 1 && wordsOnly.cards[0].card.id == "suite.rule.vfs"
+              && wordsOnly.wordsOnlyBecause.contains("test provider is down"));
+    embeddingsFail = false;
+    ls::Retrieval later;
+    std::atomic<bool> delivered { false };
+    engineer.retrieveAsync("Where do my saved files live?", [&](const ls::Retrieval& r, const juce::String&) { later = r; delivered = true; });
+    for (int i = 0; i < 500 && ! delivered; ++i)
+        juce::Thread::sleep(10);
+    check("The same off the message thread (the Cards panel's Try)", delivered && later.byMeaning && later.cards.size() == 2);
+    ls::CardStore::remove(ls::CardStore::suite(), "suite.rule.files", error);
 
     // 3. One request at a time.
     release.reset();

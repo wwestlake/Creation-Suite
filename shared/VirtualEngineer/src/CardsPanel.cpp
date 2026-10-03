@@ -400,17 +400,35 @@ void CardsPanel::retireOrDelete(bool deleteIt)
 
 void CardsPanel::tryRequest()
 {
-    juce::String error;
-    const auto retrieval = engineer.retrieveFor(tryRequestText.getText(), error);
-    juce::String shown;
-    shown << "Matched on: " << (retrieval.tokens.isEmpty() ? juce::String("(no words long enough)") : retrieval.tokens.joinIntoString(", ")) << "\n";
-    if (retrieval.cards.empty())
-        shown << "No card applies.";
-    for (size_t i = 0; i < retrieval.cards.size(); ++i)
-        shown << (i + 1) << ". [" << ls::scopeName(retrieval.cards[i].scope) << "] " << retrieval.cards[i].card.title << "  (priority "
-              << retrieval.cards[i].card.priority << ")\n";
-    tryResult.setText(shown, juce::dontSendNotification);
-    problem(error);
+    // Matching by meaning asks the suite account for embeddings, so it runs off the message thread.
+    tryButton.setEnabled(false);
+    tryResult.setText("Matching...", juce::dontSendNotification);
+    juce::Component::SafePointer<CardsPanel> self(this);
+    engineer.retrieveAsync(tryRequestText.getText(), [self](const ls::Retrieval& retrieval, const juce::String& error) {
+        if (self == nullptr)
+            return;
+        juce::String shown;
+        shown << "Matched by " << (retrieval.byMeaning ? "meaning and words" : "words alone");
+        shown << "; words: " << (retrieval.tokens.isEmpty() ? juce::String("(none long enough)") : retrieval.tokens.joinIntoString(", ")) << "\n";
+        if (retrieval.wordsOnlyBecause.isNotEmpty())
+            shown << retrieval.wordsOnlyBecause << "\n";
+        if (retrieval.cards.empty())
+            shown << "No card applies.";
+        for (size_t i = 0; i < retrieval.cards.size(); ++i)
+        {
+            const auto& retrieved = retrieval.cards[i];
+            shown << (i + 1) << ". [" << ls::scopeName(retrieved.scope) << "] " << retrieved.card.title << "  (priority "
+                  << retrieved.card.priority;
+            if (retrieved.meaning >= 0.0f)
+                shown << ", meaning " << juce::String(retrieved.meaning, 2);
+            if (! retrieved.wordsMatched.isEmpty())
+                shown << ", words " << retrieved.wordsMatched.joinIntoString(" ");
+            shown << ")\n";
+        }
+        self->tryResult.setText(shown, juce::dontSendNotification);
+        self->tryButton.setEnabled(true);
+        self->problem(error);
+    });
 }
 
 void CardsPanel::problem(const juce::String& text, bool good)

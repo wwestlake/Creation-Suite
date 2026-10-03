@@ -1,7 +1,9 @@
 #include <creation/agent/VirtualEngineer.h>
 
+#include <creation/litesemrag/Embeddings.h>
 #include <creation/services/SuiteAiProviderRuntime.h>
 
+#include <cmath>
 #include <thread>
 
 namespace creation::agent
@@ -29,9 +31,108 @@ juce::var cardsUsed(const ls::Retrieval& retrieval)
         card->setProperty("scope", ls::scopeName(retrieved.scope));
         card->setProperty("kind", retrieved.card.kind);
         card->setProperty("title", retrieved.card.title);
+        card->setProperty("priority", retrieved.card.priority);
+        if (retrieved.meaning >= 0.0f)
+            card->setProperty("meaning", std::round(retrieved.meaning * 1000.0f) / 1000.0f);
+        juce::Array<juce::var> words;
+        for (const auto& word : retrieved.wordsMatched)
+            words.add(word);
+        card->setProperty("words", juce::var(words));
         cards.add(juce::var(card));
     }
     return juce::var(cards);
+}
+
+// The suite's AI account for this app - entered once in the suite's settings, never asked for by an app. Empty
+// accountId, with `problem` saying why, when there is none to use.
+struct Account
+{
+    services::SuiteAiResolvedRuntimeSettings runtime;
+    juce::String problem;
+};
+
+Account accountFor(creation::assets::SuiteAppDomain app)
+{
+    Account account;
+    juce::String settingsError;
+    const auto settings = services::SuiteAiSettingsStore().load(settingsError);
+    account.runtime = services::SuiteAiSettingsResolver::resolveRuntimeSettingsForApp(settings, app);
+    const auto profile = services::SuiteAiProviderRuntime::resolveProfile(account.runtime.providerId);
+    if (settingsError.isNotEmpty())
+        account.problem = "The suite's AI settings could not be read: " + settingsError;
+    else if (account.runtime.accountId.isEmpty() || services::SuiteAiProviderRuntime::requiresApiKey(profile, account.runtime.apiKey))
+        account.problem = "No AI account is set up for this app. Add one in the suite's settings (AI Accounts); every app uses it.";
+    if (account.problem.isNotEmpty())
+        account.runtime.accountId = {};
+    return account;
+}
+
+using Embedder = std::function<bool(const services::SuiteAiResolvedRuntimeSettings&, const juce::StringArray&,
+                                    services::SuiteAiEmbeddingClient::Result&)>;
+
+// The cards for a request, matched by meaning when the account's provider can embed, else on words alone (the
+// retrieval says why). The request is embedded every time; a card only the first time its words are seen, after which
+// its embedding comes from the cache in the VFS.
+ls::Retrieval retrieveCards(const juce::String& prompt, const std::vector<ls::ScopedCards>& scopes, const Account& account,
+                            const Embedder& embedderForTesting, juce::String& warning)
+{
+    auto wordsOnly = [&](const juce::String& because) {
+        auto retrieval = ls::retrieve(prompt, scopes);
+        retrieval.wordsOnlyBecause = because;
+        return retrieval;
+    };
+    if (prompt.trim().isEmpty())
+        return ls::retrieve(prompt, scopes);
+    if (account.runtime.accountId.isEmpty())
+        return wordsOnly(account.problem);
+
+    // A test's embedder stands in for a measured model, at OpenAI's values.
+    const auto embedding = embedderForTesting ? services::SuiteAiEmbeddingClient::EmbeddingModel { "test-embedder", 0.18f, 0.08f }
+                                              : services::SuiteAiEmbeddingClient::embeddingModelFor(account.runtime);
+    const auto& model = embedding.name;
+    if (model.isEmpty())
+        return wordsOnly(services::SuiteAiProviderRuntime::resolveProfile(account.runtime.providerId).displayName
+                         + " has no embedding model the suite has measured, so cards are matched on words alone.");
+
+    juce::String cacheError;
+    auto cache = ls::EmbeddingCache::load(model, cacheError);
+    if (cacheError.isNotEmpty())
+        warning = "The card embeddings could not be read: " + cacheError;
+
+    juce::StringArray texts { prompt };
+    juce::StringArray newKeys;
+    for (const auto& scoped : scopes)
+        for (const auto& card : scoped.cards)
+        {
+            if (! card.isActive() || card.text.trim().isEmpty())
+                continue;
+            const auto key = ls::embeddingKey(card, model);
+            if (cache.find(key) == nullptr && ! newKeys.contains(key))
+            {
+                newKeys.add(key);
+                texts.add(ls::embeddingText(card));
+            }
+        }
+
+    services::SuiteAiEmbeddingClient::Result embedded;
+    const bool ok = embedderForTesting ? embedderForTesting(account.runtime, texts, embedded)
+                                       : services::SuiteAiEmbeddingClient().embed(account.runtime, texts, embedded);
+    if (! ok || embedded.vectors.size() != static_cast<size_t>(texts.size()))
+        return wordsOnly("Matching by meaning failed, so cards were matched on words alone: "
+                         + (embedded.errorMessage.isNotEmpty() ? embedded.errorMessage : juce::String("no embeddings came back.")));
+
+    for (int i = 0; i < newKeys.size(); ++i)
+        cache.put(newKeys[i], embedded.vectors[static_cast<size_t>(i + 1)]);
+    juce::String saveError;
+    if (! cache.save(saveError))
+        warning = "The card embeddings could not be saved: " + saveError;
+
+    ls::MeaningMatch meaning;
+    meaning.query = embedded.vectors.front();
+    meaning.floor = embedding.floor;
+    meaning.margin = embedding.margin;
+    meaning.cardVector = [&cache, &model](const ls::Card& card) { return cache.find(ls::embeddingKey(card, model)); };
+    return ls::retrieve(prompt, scopes, 6, &meaning);
 }
 
 // The scopes as they stand. A free function: the request's worker uses it without the engineer, which may be gone
@@ -111,7 +212,35 @@ std::vector<ls::ScopedCards> VirtualEngineer::loadCards(juce::String& errorMessa
 
 ls::Retrieval VirtualEngineer::retrieveFor(const juce::String& prompt, juce::String& errorMessage) const
 {
-    return ls::retrieve(prompt, loadCards(errorMessage));
+    const auto scopes = loadCards(errorMessage);
+    juce::String warning;
+    auto retrieval = retrieveCards(prompt, scopes, accountFor(app), embedderForTesting, warning);
+    if (errorMessage.isEmpty())
+        errorMessage = warning;
+    return retrieval;
+}
+
+void VirtualEngineer::retrieveAsync(const juce::String& prompt,
+                                    std::function<void(const ls::Retrieval& retrieval, const juce::String& error)> done) const
+{
+    juce::String loadError;
+    auto scopes = loadCards(loadError);
+    const auto appDomain = app;
+    const auto embedder = embedderForTesting;
+    const bool direct = deliverDirectlyForTesting;
+    std::thread([prompt, scopes = std::move(scopes), loadError, appDomain, embedder, direct, done = std::move(done)]() {
+        juce::String warning;
+        auto retrieval = retrieveCards(prompt, scopes, accountFor(appDomain), embedder, warning);
+        const auto error = loadError.isNotEmpty() ? loadError : warning;
+        auto finish = [retrieval = std::move(retrieval), error, done]() {
+            if (done)
+                done(retrieval, error);
+        };
+        if (direct)
+            finish();
+        else
+            juce::MessageManager::callAsync(std::move(finish));
+    }).detach();
 }
 
 bool VirtualEngineer::ask(const juce::String& prompt, Completion completion)
@@ -134,6 +263,7 @@ bool VirtualEngineer::ask(const juce::String& prompt, Completion completion)
     }
     const auto appDomain = app;
     const auto transport = transportForTesting;
+    const auto embedder = embedderForTesting;
 
     const int myGeneration = ++*generation;
     auto alive = generation;
@@ -158,7 +288,7 @@ bool VirtualEngineer::ask(const juce::String& prompt, Completion completion)
             juce::MessageManager::callAsync(std::move(finish));
     };
 
-    std::thread([appDomain, prompt, context, earlier, shipped, project, transport, deliver]() {
+    std::thread([appDomain, prompt, context, earlier, shipped, project, transport, embedder, deliver]() {
         const auto started = juce::Time::getMillisecondCounterHiRes();
         AskResult result;
         auto* details = new juce::DynamicObject();
@@ -166,33 +296,30 @@ bool VirtualEngineer::ask(const juce::String& prompt, Completion completion)
         details->setProperty("request", prompt);
         details->setProperty("app", creation::assets::toStorageToken(appDomain));
 
-        // The suite's AI account for this app - entered once in the suite's settings, never asked for by an app.
-        juce::String settingsError;
-        const auto settings = services::SuiteAiSettingsStore().load(settingsError);
-        const auto runtime = services::SuiteAiSettingsResolver::resolveRuntimeSettingsForApp(settings, appDomain);
-        const auto profile = services::SuiteAiProviderRuntime::resolveProfile(runtime.providerId);
-        if (settingsError.isNotEmpty() || runtime.accountId.isEmpty()
-            || services::SuiteAiProviderRuntime::requiresApiKey(profile, runtime.apiKey)) // a key is needed and missing
+        const auto account = accountFor(appDomain);
+        if (account.runtime.accountId.isEmpty())
         {
-            result.error = settingsError.isNotEmpty()
-                               ? "The suite's AI settings could not be read: " + settingsError
-                               : juce::String("No AI account is set up for this app. Add one in the suite's settings (AI Accounts); every app uses it.");
+            result.error = account.problem;
             deliver(result);
             return;
         }
+        const auto& runtime = account.runtime;
         details->setProperty("account", runtime.accountId);
         details->setProperty("provider", runtime.providerId);
         details->setProperty("model", runtime.modelName);
 
-        juce::String cardsError;
-        const auto retrieval = ls::retrieve(prompt, cardScopes(appDomain, shipped, project, cardsError));
+        juce::String cardsError, cardsWarning;
+        const auto retrieval = retrieveCards(prompt, cardScopes(appDomain, shipped, project, cardsError), account, embedder, cardsWarning);
         details->setProperty("cards", cardsUsed(retrieval));
+        details->setProperty("matchedBy", retrieval.byMeaning ? "meaning and words" : "words");
+        if (retrieval.wordsOnlyBecause.isNotEmpty())
+            details->setProperty("wordsOnlyBecause", retrieval.wordsOnlyBecause);
         juce::Array<juce::var> tokens;
         for (const auto& token : retrieval.tokens)
             tokens.add(token);
         details->setProperty("tokens", juce::var(tokens));
-        if (cardsError.isNotEmpty())
-            details->setProperty("cardsWarning", cardsError);
+        if (cardsError.isNotEmpty() || cardsWarning.isNotEmpty())
+            details->setProperty("cardsWarning", cardsError.isNotEmpty() ? cardsError : cardsWarning);
 
         juce::String user;
         if (context.trim().isNotEmpty())

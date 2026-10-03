@@ -1,8 +1,10 @@
 #include <creation/litesemrag/CardStore.h>
+#include <creation/litesemrag/Embeddings.h>
 #include <creation/litesemrag/Retrieval.h>
 #include <creation/services/SuiteVfsJsonStore.h>
 #include <creation/services/SuiteVfsServiceClient.h>
 
+#include <cmath>
 #include <iostream>
 #include <stdexcept>
 
@@ -77,6 +79,56 @@ int main()
     check("At most maxCards", ls::retrieve("add a struct node to the graph", scopes, 1).cards.size() == 1);
     const auto nothing = ls::retrieve("hello there", scopes);
     check("Nothing matching: only the personality card", nothing.cards.size() == 1 && nothing.cards[0].card.id == "suite.personality");
+    // A word matches where it starts a word of the card: "constructor" is not "struct".
+    const auto inWord = ls::retrieve("constructor", { { ls::CardScope::suite, { structs } } });
+    check("A word inside another word does not match", inWord.cards.empty() && ! inWord.byMeaning);
+    const auto prefix = ls::retrieve("node", { { ls::CardScope::app, { nodes } } });
+    check("A word that starts a card's word matches, and says which",
+          prefix.cards.size() == 1 && prefix.cards[0].wordsMatched == juce::StringArray { "node" } && prefix.cards[0].meaning < 0.0f);
+
+    // Meaning. Hand-made vectors stand in for embeddings: the query points along x; Structs nearly along it
+    // (similarity 0.9 / sqrt(0.82) = 0.994), Adding a node a little (0.3 / sqrt(0.9925) = 0.301, under 0.35), Storage
+    // not at all (0).
+    // "how do I keep a record of fields" shares no card word (keep, record, fields), so only meaning can find Structs.
+    ls::MeaningMatch meaning;
+    meaning.query = { 1.0f, 0.0f, 0.0f };
+    meaning.cardVector = [](const ls::Card& c) -> const std::vector<float>* {
+        static const std::vector<float> structsVector { 0.9f, 0.1f, 0.0f }, nodesVector { 0.3f, 0.95f, 0.0f }, storageVector { 0.0f, 1.0f, 0.0f };
+        if (c.id == "suite.knowledge.structs") return &structsVector;
+        if (c.id == "texture.process.nodes") return &nodesVector;
+        if (c.id == "suite.rule.vfs") return &storageVector;
+        return nullptr;
+    };
+    const std::vector<ls::ScopedCards> plain { { ls::CardScope::suite, { storage, structs } }, { ls::CardScope::app, { nodes } } };
+    const auto byMeaning = ls::retrieve("how do I keep a record of fields", plain, 6, &meaning);
+    check("Meaning finds a card that shares no word with the request",
+          byMeaning.byMeaning && byMeaning.cards.size() == 1 && byMeaning.cards[0].card.id == "suite.knowledge.structs"
+              && byMeaning.cards[0].meaning > 0.99f && byMeaning.cards[0].wordsMatched.isEmpty());
+    check("Without meaning the same request finds nothing", ls::retrieve("how do I keep a record of fields", plain).cards.empty());
+    // Same priority: the closer meaning goes first. Both 50; Structs 0.994, Adding a node 0.301 plus 0.1 for "palette" (a
+    // word of its text, not one of its tokens).
+    auto structs50 = structs;
+    structs50.priority = 50;
+    auto nodes50 = nodes;
+    nodes50.priority = 50;
+    const auto ranked = ls::retrieve("the palette", { { ls::CardScope::suite, { nodes50, structs50 } } }, 6, &meaning);
+    check("Of the same priority, the closer match goes first",
+          ranked.cards.size() == 2 && ranked.cards[0].card.id == "suite.knowledge.structs" && ranked.cards[1].card.id == "texture.process.nodes");
+
+    // An exact name beats a near meaning: the error card answers to its token "e0042" and has no embedding; Structs is
+    // 0.994 close in meaning. Both priority 50.
+    const auto errorCard = card("suite.knowledge.e0042", "knowledge", "Error E0042", "E0042 means a type was used before it was declared.", { "e0042" }, 50);
+    const auto exact = ls::retrieve("what does e0042 mean for a record", { { ls::CardScope::suite, { structs50, errorCard } } }, 6, &meaning);
+    check("A card's own token outranks a closer meaning",
+          exact.cards.size() == 2 && exact.cards[0].card.id == "suite.knowledge.e0042" && exact.cards[0].tokenMatched
+              && exact.cards[1].card.id == "suite.knowledge.structs" && ! exact.cards[1].tokenMatched);
+
+    check("Similarity: same direction 1, at right angles 0, different lengths 0",
+          std::abs(ls::similarity({ 2.0f, 0.0f }, { 1.0f, 0.0f }) - 1.0f) < 1.0e-6f && ls::similarity({ 1.0f, 0.0f }, { 0.0f, 3.0f }) == 0.0f
+              && ls::similarity({ 1.0f }, { 1.0f, 0.0f }) == 0.0f);
+    check("An embedding key follows the card's words and the model",
+          ls::embeddingKey(structs, "m") == ls::embeddingKey(structs, "m") && ls::embeddingKey(structs, "m") != ls::embeddingKey(projectStructs, "m")
+              && ls::embeddingKey(structs, "m") != ls::embeddingKey(structs, "other"));
 
     // Validation and the stored form.
     check("A card needs an id without spaces, a title and text, and a unique id",
@@ -120,6 +172,17 @@ int main()
                                                             && error.contains("no spaces"));
     error.clear();
     check("Shipped cards cannot be written", ! ls::CardStore::save({ ls::CardScope::shipped }, { storage }, error) && error.contains("built into"));
+
+    // The embedding cache: saved to the VFS and read back.
+    error.clear();
+    auto cache = ls::EmbeddingCache::load("test-model", error);
+    cache.put("k1", { 0.25f, -0.5f, 0.125f });
+    const bool cacheSaved = cache.save(error);
+    const auto reread = ls::EmbeddingCache::load("test-model", error);
+    const auto* vector = reread.find("k1");
+    check("Embeddings are kept in the VFS and read back",
+          cacheSaved && ! cache.hasChanges() && vector != nullptr && *vector == std::vector<float> { 0.25f, -0.5f, 0.125f }
+              && reread.find("k2") == nullptr && error.isEmpty());
 
     // Project cards live inside the project.
     juce::String projectId, createError;

@@ -2,6 +2,8 @@
 
 #include <creation/services/SuiteVfsJsonStore.h>
 
+#include <cmath>
+
 #include <mutex>
 
 namespace creation::agent
@@ -290,8 +292,17 @@ void AgentApi::handle(juce::StreamingSocket& socket)
             card->setProperty("kind", retrieved.card.kind);
             card->setProperty("title", retrieved.card.title);
             card->setProperty("priority", retrieved.card.priority);
+            if (retrieved.meaning >= 0.0f)
+                card->setProperty("meaning", std::round(retrieved.meaning * 1000.0f) / 1000.0f);
+            juce::Array<juce::var> words;
+            for (const auto& word : retrieved.wordsMatched)
+                words.add(word);
+            card->setProperty("words", juce::var(words));
             cards.add(juce::var(card));
         }
+        body->setProperty("matchedBy", retrieval.byMeaning ? "meaning and words" : "words");
+        if (retrieval.wordsOnlyBecause.isNotEmpty())
+            body->setProperty("wordsOnlyBecause", retrieval.wordsOnlyBecause);
         body->setProperty("tokens", juce::var(tokens));
         body->setProperty("cards", juce::var(cards));
         body->setProperty("context", retrieval.context);

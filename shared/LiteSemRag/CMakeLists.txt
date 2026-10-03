@@ -2,6 +2,7 @@ add_library(creation_suite_litesemrag STATIC
     src/Cards.cpp
     src/CardStore.cpp
     src/Retrieval.cpp
+    src/Embeddings.cpp
 )
 
 target_include_directories(creation_suite_litesemrag PUBLIC include)

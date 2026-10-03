@@ -3,6 +3,7 @@
 #include <creation/litesemrag/CardStore.h>
 #include <creation/litesemrag/Retrieval.h>
 #include <creation/services/SuiteAiChatClient.h>
+#include <creation/services/SuiteAiEmbeddingClient.h>
 #include <creation/services/SuiteAiSettings.h>
 #include <juce_events/juce_events.h>
 
@@ -56,8 +57,13 @@ public:
     void cancel();
     void clearConversation();
 
-    // The cards a request would bring up, without sending anything (for the API and the Cards panel).
+    // The cards a request would bring up, without asking the AI anything. Matching by meaning embeds the request
+    // through the suite account (and any card not embedded yet), so this waits on the network: call it off the message
+    // thread, or use retrieveAsync.
     creation::litesemrag::Retrieval retrieveFor(const juce::String& prompt, juce::String& errorMessage) const;
+    // The same on a worker thread, delivered on the message thread (for the Cards panel).
+    void retrieveAsync(const juce::String& prompt,
+                       std::function<void(const creation::litesemrag::Retrieval& retrieval, const juce::String& error)> done) const;
 
     // The scopes as they stand: shipped, suite, this app, the open project.
     std::vector<creation::litesemrag::ScopedCards> loadCards(juce::String& errorMessage) const;
@@ -68,6 +74,10 @@ public:
                        const juce::String& userPrompt, creation::services::SuiteAiChatClient::ChatResult& result)>
         transportForTesting;
     bool deliverDirectlyForTesting = false;
+    // For tests: a stand-in for the provider's embeddings (and its model name, which names the cache).
+    std::function<bool(const creation::services::SuiteAiResolvedRuntimeSettings& settings, const juce::StringArray& texts,
+                       creation::services::SuiteAiEmbeddingClient::Result& result)>
+        embedderForTesting;
 
 private:
     struct Exchange
@@ -75,8 +85,6 @@ private:
         juce::String request;
         juce::String reply;
     };
-
-    juce::String systemPromptFor(const creation::litesemrag::Retrieval& retrieval) const;
 
     const creation::assets::SuiteAppDomain app;
     mutable std::mutex lock;

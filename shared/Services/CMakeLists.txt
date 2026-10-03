@@ -10,6 +10,7 @@ add_library(creation_suite_services STATIC
     src/SuiteVfsJsonStore.cpp
     src/SuiteContextEngine.cpp
     src/SuiteAiChatClient.cpp
+    src/SuiteAiEmbeddingClient.cpp
     src/SuiteUndoService.cpp
     # SuiteVfsServiceClient/SuiteProcessRegistry moved to shared/AssetSystem to break a
     # dependency cycle (this library already depends PUBLIC on creation_suite_asset_system) --

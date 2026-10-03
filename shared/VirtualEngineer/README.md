@@ -14,13 +14,19 @@ description of what is open) and `setProjectId` when a project opens.
 
 1. reads the suite's AI account for this app (no account: it says to add one in
    the suite's settings);
-2. brings up the cards that match (shipped, suite, this app, the open project);
+2. brings up the cards that match (shipped, suite, this app, the open project),
+   by meaning when the account's provider has a measured embedding model, else
+   on words (`shared/LiteSemRag/README.md`, Retrieval);
 3. sends the cards (system prompt), the app's context, the last few exchanges
    and the request;
 4. delivers the reply on the message thread, with details: model, account,
-   which cards were used, timing.
+   which cards were used and how they matched (`matchedBy`, each card's
+   `meaning` and `words`, `wordsOnlyBecause`), timing.
 
-One request at a time; `cancel()` drops the running one's reply.
+One request at a time; `cancel()` drops the running one's reply. `retrieveFor`
+(blocking) and `retrieveAsync` (delivered on the message thread) give the cards a
+request would bring up without asking the AI anything; matching by meaning still
+embeds the request.
 
 ## AgentApi
 
@@ -35,7 +41,7 @@ file on the OS, and removes it when it stops.
 | `POST /v1/messages` | `{"content": "..."}` → `202 {"requestId"}` |
 | `GET /v1/requests/{id}` | `queued` / `running` / `completed` / `failed`, with `response` or `error`, and `details` |
 | `POST /v1/cancel` | stops waiting for the running request |
-| `GET /v1/cards/match?q=...` | the cards a request would bring up, nothing sent |
+| `GET /v1/cards/match?q=...` | the cards a request would bring up and how each matched; the AI is not asked |
 | `GET /v1/app` | the app's endpoints |
 | `GET /v1/app/{name}` | one of them (`addAppEndpoint`, before `start`) |
 
@@ -45,6 +51,11 @@ Ported from the FrustIDE research agent's `LocalAgentApi` (FrustLang
 ## Tests
 
 `tests/VirtualEngineerSmoke.cpp` runs against a stand-in provider, in its own VFS
-scope: cards and context going out, the conversation, one request at a time,
-no account, and every API endpoint. It checks the real AI settings were not
-touched.
+scope: cards and context going out, matching by meaning with hand-made
+embeddings (a card embedded once, words alone when embedding fails), the
+conversation, one request at a time, no account, and every API endpoint. It
+checks the real AI settings were not touched.
+
+`tests/MeaningLiveCheck.cpp` (`creation_suite_meaning_live_check`) is not a test:
+it asks the real suite account for embeddings of sample cards and requests and
+prints the similarities, which is what a model's floor and margin are set from.
