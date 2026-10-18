@@ -1,209 +1,62 @@
-# Creation Suite Multi-Agent Workflow
+# Creation Suite Shared LLM Workspace
 
-Date: July 29, 2026
+Updated October 17, 2026, by the owner's shared-workspace decision.
 
-This document defines how Codex, Claude, Gemini, or any other agent should work in parallel on the Creation Suite without corrupting each other's checkouts, creating merge confusion, or reporting false completion.
+## Shared location
 
-## Bottom Line
+Every LLM uses `D:\CreationSuite-Workspaces\DjehutiSuite`. The umbrella contains the initialized application and dependency submodules. Switching between Claude, Codex, Gemini, or another LLM does not create a new clone, worktree, dependency installation, build tree, or executable drop area.
 
-Use **one owner per repo/worktree at a time**.
+This replaces the July policy of separate worktrees and the later per-LLM clone/bin arrangement. The machine-wide architecture briefing is `D:\CreationSuite-Workspaces\LLM_ARCHITECTURE_BRIEFING.md`; the location inventory is `D:\CreationSuite-Workspaces\DRIVE_REPOSITORY_MAP.md`.
 
-Do not point multiple agents at the same writable checkout unless one of them is strictly read-only.
+## Coordinate ownership
 
-If multiple agents need to work in parallel, give them:
+- One writable owner uses a given repository at a time. Others can inspect read-only. Transfer ownership explicitly before changing its branch, index, files, or build state.
+- Different independent application submodules may be assigned to different agents when their changes do not overlap. The umbrella branch, shared code, dependency state, and submodule-pointer updates require coordination.
+- Do not switch the umbrella branch or run recursive submodule updates while app owners have active work.
+- Inspect existing changes before beginning. Preserve unfinished edits, identify their owner, and hand them off; never reset/clean/stage them as an incidental part of another assignment.
+- Resolve contention by handing off or sequencing work in the existing checkout. Another per-agent clone/build area is not the default solution.
 
-- different repositories, or
-- different git worktrees of the same repository, or
-- clearly separated phases where only one agent is allowed to commit/integrate
+## Feature branches and completion
 
-## The Main Problem We Must Avoid
+Start each authorized implementation assignment on one focused feature branch from the repository's current default branch. An owner/topic name is useful; a standing personal integration branch is unnecessary. Do not implement directly on `main`/`master` or stack unfinished features.
 
-Agents are fast, but git state is literal.
+Finish each assignment with this cycle:
 
-If two agents share one writable checkout, they will see:
+1. Inspect and implement only its authorized scope.
+2. Run the appropriate build and minimal functional check for what changed. Documentation-only work needs text/link checks, not an application build.
+3. Inspect status and the actual diff; stage only the intended files, commit, and push the feature branch.
+4. Merge into the repository's actual default branch and push that branch in the same assignment. Use a PR if repository protection requires it; do not bypass protection or hooks.
+5. For a changed app submodule, finish its default-branch push first, then explicitly commit, merge, and push the corresponding umbrella gitlink update.
+6. Confirm the resulting default branch is on the server, record the actual checks and remaining limits in the relevant handoff, and stop.
 
-- each other's untracked files
-- half-finished edits
-- stale build outputs
-- branch confusion
-- false "already migrated" or "missing" conclusions
+The standing task workflow includes integration authorization for the assignment. Do not leave completed work parked on agent branches or ask again solely because an older policy gated each push/merge. An explicit review-only/context-only request, pause, or instruction to withhold integration still governs. Never force-push or include unrelated staged changes. Report a concrete blocker if closeout cannot finish; do not claim it is complete.
 
-That is not a model problem. It is a workspace-coordination problem.
+Only one agent integrates a repository at a time. The agent closing its authorized assignment performs that integration after coordinating ownership; a separate permanent integrator assignment is not needed for every feature.
 
-## Required Operating Model
+For a documentation-only update on an older Suite app pin, publish the identical policy on the app's default branch and on a version-preserving backport with a remote ref. The umbrella may retain that backported source pin. Do not adopt unrelated app changes just to update instructions, and never reference an unavailable local-only commit.
 
-### Rule 1: One Writable Owner Per Checkout
+## Shared builds and dependencies
 
-At any moment, each checkout or worktree must have exactly one writable owner:
+Reuse canonical project build/output locations across LLMs. Only one build runs at a time on this machine, single-core (`--parallel 1` or `/m:1`). Use Debug for development and diagnostics, Release for distribution and installers. Configuration separation is valid; per-agent duplication is retired.
 
-- one agent, or
-- one human
+Do not add POST_BUILD copies into agent-named bin folders. Use the application's canonical output directly; create a single shared staging area per configuration only when the assignment actually requires one.
 
-Everyone else is read-only until handoff.
+Reuse verified installed dependencies through configuration. Do not copy LLVM per LLM or let a package command rebuild it implicitly. Its specific authorization and protection rules remain in `AGENTS.md`. This documentation change does not relocate installed dependencies or reconfigure application builds.
 
-### Rule 2: Prefer Separate Worktrees For Parallel Work In The Same Repo
+Redirect compiler output to a log and await completion. Do not poll build processes/timers/logs. On failure, inspect the relevant diagnostics. Check the changed function; run broad regression only after a substantial section when the user directs it.
 
-If two agents need to touch the same repo, do not share one working directory.
+## Handoff
 
-Use separate git worktrees or separate clones so each agent gets:
+An agent taking over receives the same checkout and a concise record of:
 
-- its own branch
-- its own untracked files
-- its own build folder
-- its own scratch state
+- the current assignment and scope;
+- repository, branch, working edits, and any staged files;
+- what is complete, pushed, and merged, versus still local;
+- relevant build configuration, canonical output, and any running operation;
+- actual functional checks and unresolved limitations;
+- the next action and who owns each involved repository.
 
-### Rule 3: One Integrator
-
-Only one actor should do integration merges at a time.
-
-That integrator can be:
-
-- you
-- Codex
-- another designated agent
-
-But it must be explicit.
-
-The integrator is the only one who should:
-
-- merge branches
-- resolve conflicts
-- update the umbrella repo's submodule pointers
-- declare a feature branch "landed"
-
-### Rule 4: Shared Suite Code Has Explicit Ownership
-
-`shared/` is the highest-risk collision zone in this workspace.
-
-Only one agent should actively modify `shared/` at a time unless the work is split into different worktrees and intentionally coordinated.
-
-If one agent is doing suite-platform work, other agents should stay inside app-local repos unless told otherwise.
-
-## Recommended Setup For This Suite
-
-### Best Setup
-
-Use this pattern:
-
-- one agent owns `shared/` and umbrella-repo integration
-- one agent owns `apps/CreationMovie`
-- one agent owns `apps/CreationTexture`
-- one agent owns another app repo only if that repo is isolated from the current shared-platform work
-
-### For Same-Repo Parallelism
-
-If two agents must work on `Creation Suite` itself:
-
-1. create a separate worktree per agent
-2. assign one branch per worktree
-3. assign one clear ownership area per branch
-4. do not merge directly from one agent's worktree into another by hand-copying files
-5. integrate only through git commits and an explicit merge step
-
-## Branching Rules
-
-### Naming
-
-Use clear branch names with an owner/topic shape, for example:
-
-- `codex/frust-suite-cutover`
-- `claude/movie-transport-pass`
-- `gemini/texture-domain-spec`
-
-### Scope
-
-Each branch should have one main purpose.
-
-Good:
-
-- shared FRust migration
-- Movie shell fixes
-- Station remote-control MVP planning
-
-Bad:
-
-- "misc cleanup"
-- "suite stuff"
-- "a bunch of fixes"
-
-### Branch Ownership
-
-Once an agent starts writing on a branch, no other agent should also write to that same branch unless you intentionally hand it off.
-
-## Merge Rules
-
-### When To Merge
-
-Merge when all of these are true:
-
-- the branch has a single coherent purpose
-- the branch builds or is documented as blocked by one explicit dependency
-- the affected tests or smoke checks were run when possible
-- the branch is not hiding unrelated local edits
-- the integrator has reviewed the actual diff
-
-### When Not To Merge
-
-Do not merge when:
-
-- the branch contains unrelated experiments
-- the branch depends on uncommitted local files
-- the branch is only "working in this one checkout"
-- another agent is actively editing the same target files
-- the build is red for unknown reasons
-
-### Merge Direction In This Suite
-
-For app-local work:
-
-- merge inside the app repo first
-- then update the umbrella repo's submodule pointer
-
-For suite-shared work:
-
-- merge in the umbrella repo
-- then cut app repos over to consume the shared result
-
-Do not silently do both at once without saying so.
-
-## Handoff Rules
-
-When one agent hands work to another, the handoff must say:
-
-- repo
-- branch
-- files touched
-- what is complete
-- what is still risky
-- what was verified
-- what was not verified
-
-Short example:
-
-`Repo: Creation Suite`
-`Branch: codex/frust-suite-cutover`
-`Touched: FRust, shared/NodeSystem, wiki/Roadmap.md`
-`Done: suite FRust targets wired`
-`Risk: LLVM environment still rebuilding`
-`Verified: configure logic updated, source copied`
-`Not verified: clean JIT build yet`
-
-## Build Folder Rules
-
-Build outputs are the second major collision source after source edits.
-
-Rules:
-
-- do not share one scratch build folder across agents
-- if a repo already has a user-mandated build directory, only one writable owner should use it at a time
-- if parallel work is necessary, the parallel agent must use its own worktree-local build directory unless project instructions forbid it
-
-For this suite specifically:
-
-- respect any per-app `AGENTS.md` rule about fixed build directories
-- use `Debug` builds for normal development work
-- reserve `Release` builds for tagged release work or explicit release verification
-- if that rule prevents safe parallel builds, then parallel writable work in that repo should not happen in the same checkout
+Read the current files and handoff before continuing. Another agent's report is evidence to check, not permission to overwrite its work. Commit identifiers can be recorded internally, but user-facing summaries should name the feature and result.
 
 ## Issue And Board Rules
 
@@ -222,36 +75,3 @@ Tasks must be managed on the official GitHub Project Board (**Creation Suite Roa
   - a branch exists
   - files were copied
   - one partial build once worked in another checkout
-
-## Recommended Workflow For You Right Now
-
-For the current team setup, the least painful process is:
-
-1. assign one agent as suite integrator
-2. keep Movie, Texture, and other app-local work on separate agents
-3. keep shared FRust / shared platform work on one agent only
-4. let app-local agents merge only inside their app repos unless told otherwise
-5. have the suite integrator update the umbrella repo and submodule pointers after review
-
-## Simple Policy You Can Paste To Other Agents
-
-Use this workspace policy:
-
-`You are not the integrator unless explicitly told otherwise.`
-
-`Do not edit shared/ if another agent owns suite-platform work.`
-
-`Do not use the same writable checkout as another agent.`
-
-`Do not merge anything outside your assigned repo or branch.`
-
-`If you finish app-local work, stop at a clean branch and report repo, branch, files, verification, and risks.`
-
-## Current Recommendation
-
-For the Creation Suite as of July 29, 2026:
-
-- keep one agent on suite/FRust integration
-- keep other agents on isolated app repos only
-- do not let multiple agents write to the umbrella repo working tree at the same time
-- do not treat untracked files in a shared checkout as authoritative work unless the owning agent confirms them

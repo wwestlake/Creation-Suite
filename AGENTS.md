@@ -12,7 +12,7 @@ App-specific repositories under `apps/` may also have their own `AGENTS.md` file
 - this top-level suite policy
 - the app-local policy
 
-If they conflict, stop and ask the user which rule should govern the task.
+Current user instructions take precedence. The October 17 shared-workspace and task-completion policy below supersedes older per-agent workspace/branch/build-drop rules. Ask only about a remaining conflict that the user has not already resolved.
 
 ## USER CODE AUTHORSHIP RULE — READ THIS FIRST
 
@@ -80,42 +80,33 @@ Each running app's Virtual Engineer serves a local API (loopback, bearer token) 
 
 ## Multi-Agent Rule
 
-Each LLM has its own fully independent `git clone` of the Creation Suite umbrella repo, with its own independently-cloned submodules underneath (`apps/CreationEngine`, `apps/CreationLive`, `apps/CreationMovie`, `apps/CreationStation`) — not a git worktree, not a shared checkout. Each one has its own separate `.git` object database, so nothing done in one is visible in another until it is pushed to and fetched from GitHub.
+Owner decision, October 17, 2026: **all LLMs share `D:\CreationSuite-Workspaces\DjehutiSuite` and its initialized submodules.** This replaces the former per-LLM clone/worktree arrangement.
 
-- **Claude Workspace**: `D:\CreationSuite-Workspaces\CreationSuite-Claude` (Branch prefix: `claude/...`)
-- **Codex Workspace**: `D:\CreationSuite-Workspaces\CreationSuite-Codex` (Branch prefix: `codex/...`)
-- **Gemini Workspace**: `D:\CreationSuite-Workspaces\CreationSuite-Gemini` (Branch prefix: `gemini/...`)
+- Do not recreate separate Claude, Codex, or Gemini Suite clones, worktrees, build trees, or executable drop areas for agent isolation. Reuse the shared project locations.
+- Coordinate one writable owner per repository at a time. Another agent may inspect read-only; a takeover hands off the existing branch and working state instead of making another copy.
+- Distinct application submodule repositories may have different owners when their work does not collide. Coordinate umbrella branch changes, `shared/`, gitlinks, and shared dependencies explicitly.
+- Before switching branches, building, staging, or integrating, establish that no other agent is using that repository or build. Preserve and identify existing edits; never reset, clean, or absorb another agent's work silently.
+- Use `docs/MULTI_AGENT_WORKFLOW.md` for the handoff and integration sequence. The machine-wide architecture briefing is `D:\CreationSuite-Workspaces\LLM_ARCHITECTURE_BRIEFING.md`.
 
-**`D:\000 Creation Suite` is the user's own personal clone. No LLM may read, explore, build in, or otherwise touch it, for any reason** — with exactly one narrow, explicit exception: reading (never writing to) `D:\000 Creation Suite\apps\CreationEngine\vcpkg_installed` as the source for the one-time LLVM bootstrap copy described below. Nothing else in that directory is fair game. Do not extend this exception to any other file or purpose without the user saying so again, in that conversation.
+### Shared LLVM installation
 
-### Getting LLVM working in your own workspace
+Reuse an existing verified LLVM installation through the build's configuration. Do not copy an LLVM installation for each LLM. The old personal checkout at `D:\000 Creation Suite` remains outside this shared source workspace; it is not an alternative agent checkout or a cleanup target.
 
-Creation Engine needs a real, already-built LLVM install at `apps/CreationEngine/vcpkg_installed/x64-windows/` to compile `Language/`. Building it from source takes hours — never do that without an explicit, in-the-moment yes from the user (see the LLVM / vcpkg Build Rule below). Instead:
+Older build caches reference `D:\000 Creation Suite\apps\CreationEngine\vcpkg_installed`. Verify that dependency before configuring a new build. This documentation update does not relocate it. Do not build/rebuild LLVM, modify its installation, or invoke vcpkg in a way that might rebuild it without the explicit authorization required below.
 
-1. Copy `D:\000 Creation Suite\apps\CreationEngine\vcpkg_installed` (a real, already-extracted install — ~11GB, contains `LLVMCore.lib` etc.) into your own workspace's `apps\CreationEngine\vcpkg_installed`. Plain file copy, no vcpkg command, no build — this is the one exception noted above.
-2. If that source ever goes stale or missing, the fallback is `vcpkg install` with `VCPKG_DEFAULT_BINARY_CACHE` pointed at `D:\vcpkg-cache` (see Engine's own README, per the Documentation Index below) — still needs an explicit yes first, since it can silently fall back to a real from-source build if the cache doesn't match.
+### Task Branch and Completion Rule
 
-Do not use the same writable checkout as another agent. Never assume that untracked files, half-finished edits, or local build outputs in another agent's checkout are safe to build on — each agent's checkout is independent and may be ahead, behind, or diverged from any other at any time. To get current shared code, `git pull`/`git fetch` your own clone against `origin` — never by reading another agent's directory.
+Work on one focused feature branch for the authorized assignment, starting from the repository's current default branch. Do not implement changes directly on `main`/`master`, stack unrelated feature branches, or maintain separate standing development branches for each LLM.
 
-Reading reference material from another agent's workspace (scripts, templates, docs) to use as a pattern or run as a tool is fine. Writing, committing, or building directly against files inside another agent's workspace is not — copy what you need into your own workspace first.
+An authorized implementation assignment includes its full Git closeout: appropriate build and focused checks, specific-file staging, commit and push the feature branch, merge into the repository's actual default branch, and push that default branch. Finish this cycle for each assignment. A context-only briefing or review-only request is not an implementation assignment. Respect an explicit user instruction to stop or withhold integration.
 
-### Personal Development Branch Rule
-
-Each agent maintains exactly one standing, personally-named development branch per repo — `claude/development`, `codex/development`, `gemini/development` — in every repo that agent touches (the umbrella repo and any app repo). This branch is that agent's own integration point for ALL of that agent's work in that repo, across sessions:
-
-- Do not create a fresh one-off branch off `master`/`main` for every task and leave it stranded there. Branch task work off your own `<agent>/development` (creating it first if it doesn't exist yet in a given repo), and merge each finished, verified piece of work back into it as you go.
-- **Merge and push per completed task, not batched at the end.** The moment one identified task is verified (builds, tests pass), merge it into `<agent>/development` and push that branch to `origin` immediately — in the same turn. Do not accumulate several finished tasks locally and merge them all together later; each completed task gets its own merge-and-push cycle.
-- `<agent>/development` should always build and pass its test/smoke checks. Do not merge broken or unverified work into it.
-- Only once `<agent>/development` builds and passes testing does it become eligible for a PR to `master`/`main` on the server — opening that PR still requires the same explicit push/merge authorization as any other push to a shared branch (see Push Authorization Rule below); reaching "buildable and tested" is a precondition for asking, not authorization by itself.
-- Short-lived task branches are still fine for isolating one piece of in-progress work, but they should merge into `<agent>/development` when done, not sit alongside it indefinitely as siblings nobody reconciles.
-- Before starting new work in any repo, check whether your own `<agent>/development` branch already exists there and what's on it — real, completed work can be sitting there from an earlier session.
-- **The instant a PR from `<agent>/development` into `master`/`main` is reported merged (by the user, or confirmed via `gh pr view`), sync `<agent>/development` to the new `master` (fetch + fast-forward) before doing anything else in that repo** — not after the next task, not "whenever it comes up." A small follow-up fix discovered right after (a gitlink bump, a stale test assertion) gets committed onto that freshly-synced branch directly, same as any other task — never a fresh one-off branch off `master`. Violated repeatedly (2026-09-06): opened `master`-targeted PRs directly per small fix instead of working this branch, then failed to sync back after one merged and branched off `master` again for the next fix, compounding into exactly the branch sprawl this rule exists to prevent.
+If repository protection requires a pull request, use that mechanism within the authorized scope; never disable protections, skip hooks, or force-push. If integration cannot be completed, report the concrete blocker and actual state rather than claiming the assignment is finished.
 
 ### Submodule Gitlink Sync Rule
 
 A submodule's gitlink is a pinned commit, not a tracked branch — the umbrella repo does not "follow" `master` in `apps/CreationEngine` or any other submodule automatically. If you merge/pull inside a submodule and never come back to commit the resulting gitlink bump in the umbrella repo, the umbrella's `git status` will just say the submodule is "modified" with no detail, and it's easy to lose track of *why* -- this is the recurring cause of gitlink drift.
 
-Run once per fresh clone (already applied to every repo in this workspace as of 2026-09-07, but a new clone or another agent's checkout won't have it):
+Configure once for this shared clone; subsequent agents reuse the same repository configuration:
 
 ```bash
 git config status.submodulesummary 1
@@ -128,9 +119,9 @@ git config push.recurseSubmodules check
 
 `scripts/agent-git-check.sh` applies all three automatically (self-healing, not just a warning) and reports any submodule whose checkout has drifted ahead of the recorded gitlink — run it instead of eyeballing `git status` across the umbrella repo and its submodules.
 
-The actual sequencing discipline this supports is unchanged, per the Personal Development Branch Rule above: commit in the submodule → open its PR → get it merged → sync that submodule to the new `master` → only then commit the gitlink bump in the umbrella repo. Never bump a gitlink to a commit that isn't merged and pushed on the submodule's own remote.
+Complete the submodule feature branch, push it, merge and push its default branch, then commit the resulting gitlink in the umbrella repository as part of the same assignment. Never publish an umbrella pointer to a local-only submodule commit. A documentation-only policy update may be backported to an intentionally older Suite source pin when the identical policy also lands on the app's default branch and the backport has a published remote ref. Preserve that app's existing source version; do not import unrelated application changes just to update agent instructions.
 
-**FrustLang is always the latest: `third_party/FrustLang` follows FrustLang `master`.** Whenever a FrustLang PR merges to `master` — yours or anyone's, including research's — the next suite PR bumps `third_party/FrustLang` to the new `master` tip, rebuilt and smoke-tested against it. Before starting suite work that compiles FRust, compare the pin with `origin/master` (`git -C third_party/FrustLang fetch` then `git -C third_party/FrustLang log --oneline HEAD..origin/master`); anything listed is owed to the suite. Work done in FrustLang only lands in the suite through FrustLang `master`, so FrustLang work on any other branch has to reach `master` by PR before the suite can have it. Owner decision, 2026-10-02, after the pin sat at FrustLang #40 while #41 merged and later FrustLang work never reached `master`, so the suite built against an old FrustLang without anyone noticing.
+**FrustLang is always the latest: `third_party/FrustLang` follows FrustLang `master`.** Whenever a FrustLang PR merges to `master` — yours or anyone's, including research's — the next authorized Suite integration bumps `third_party/FrustLang` to the new `master` tip, rebuilt and smoke-tested against it. Before starting suite work that compiles FRust, compare the pin with `origin/master` (`git -C third_party/FrustLang fetch` then `git -C third_party/FrustLang log --oneline HEAD..origin/master`); anything listed is owed to the suite. Work done in FrustLang only lands in the suite through FrustLang `master`, so FrustLang work on any other branch must be merged and pushed to `master` before updating the Suite pin. Owner decision, 2026-10-02, after the pin sat at FrustLang #40 while #41 merged and later FrustLang work never reached `master`, so the suite built against an old FrustLang without anyone noticing.
 
 ## Secrets Directory Rule
 
@@ -140,50 +131,17 @@ The `Secrets/` directory contains critical credentials and private keys.
 
 ### Branch Ownership Check
 
-Before committing anything, check `git rev-parse --abbrev-ref HEAD`. Branch names in this workspace follow an owner/topic convention (`codex/...`, `claude/...`, `gemini/...`, etc.) — if the current branch's prefix names a different agent, **that branch is not yours to commit on**, regardless of who happens to have it checked out right now.
-
-- If the checked-out branch belongs to another agent, create and switch to your own branch (matching your own name prefix) before making any commit — do not commit to someone else's named branch just because it was already checked out.
-- This applies even for small, low-risk changes (a doc fix, a wiki edit) — branch ownership isn't scaled by risk, same as the Push Authorization Rule below.
-- This rule exists because it was already violated: work happened for an entire session directly on `codex/suite-save-20260729` — a Codex-owned branch by naming convention — without it ever being handed off.
+Before editing or committing, inspect the current branch and working tree. A shared checkout retains the previous agent's state; an agent prefix is descriptive, not permission to switch away while that agent is active. Continue another agent's feature branch only through an explicit handoff. Start a new task branch only after the repository is available and its existing work is accounted for.
 
 ## Integration Rule
 
-Only one actor should act as the integrator at a time.
+Serialize integration within each repository. The agent completing the authorized assignment performs its commit/push/merge/default-branch push under the Task Branch and Completion Rule; do not park finished work awaiting a separate integration assignment unless the user directs that.
 
-The integrator is the only one who should:
-
-- merge branches
-- resolve conflicts
-- update umbrella-repo submodule pointers
-- declare work fully landed
-
-If you are not explicitly the integrator, stop at a clean branch and report:
-
-- repo
-- branch
-- files touched
-- what was verified
-- what remains risky or blocked
+For submodule work, finish and push the app's default-branch merge first. Then explicitly stage, commit, merge, and push the matching umbrella gitlink update. Coordinate umbrella ownership before changing that checkout. Keep unrelated edits and gitlinks out of the commit.
 
 ### Push Authorization Rule
 
-**Pushing your own dedicated branch to `origin` is routine, not gated.** A local-only branch is volatile — it exists on one machine, in one clone, invisible to every other agent and to the user until it's on GitHub. After every commit on a branch you created for your own work (`claude/...`), push it to `origin` in the same turn, no permission needed. This is git hygiene, the same category as creating the branch in the first place — do it, don't ask.
-
-**What still requires an explicit, in-the-moment instruction from the user, in that exact conversation:**
-
-- Pushing to `main`/`master`, or to any branch you don't own (another agent's `codex/...`/`gemini/...` branch, a shared integration branch).
-- Merging a branch into `main`/`master`, opening a PR that requests merge, or otherwise advancing work past "parked on my own branch, visible on GitHub."
-- Force-pushing anything, ever — including your own branch, if it means discarding commits that exist elsewhere.
-
-None of the following count as authorization for the gated actions above:
-
-- a request that would merely be *satisfied* by something existing on the remote (e.g. "give me a link to that file" does not mean "merge it")
-- a prior approval to merge/force-push something else, earlier or elsewhere
-- the fact that a task feels finished or ready
-
-If completing a request seems to require one of the gated actions and you are not the designated integrator for that repo, **stop and say so explicitly** before doing it: name the repo/branch, say what's needed, and ask. Do not act first and explain afterward.
-
-This rule was rewritten after repeated real-world friction: agents were treating "never push" as blanket policy and leaving work stranded in local-only branches indefinitely — the opposite of the original intent, which was only ever to gate *merging into main* and *force-pushing*. The original violation this rule was built to prevent (a request for "a link I can paste into a ticket" read as implicit permission to commit and push, which also carried unrelated staged submodule-pointer changes along with it) is still fully covered — that was a push to a shared/integration context, not a routine push of your own branch. See Commit Scope Rule below.
+The standing workflow authorizes pushing and merging the work in an assigned implementation task. Do not ask again merely because an old policy required per-action approval. This does not authorize unrelated repositories, deployments, credential changes, destructive cleanup, force-pushes, or new features. Stop and report a real authorization or repository-protection blocker when one remains.
 
 ## Commit Scope Rule
 
@@ -197,9 +155,7 @@ Before running `git commit` in ANY repo in this workspace — the umbrella repo,
 
 ## Build Rule
 
-Avoid sharing scratch build folders across multiple active agents.
-
-If an app repo has a fixed build-directory rule in its own `AGENTS.md`, respect it. If that makes safe parallel writable work impossible in that checkout, use a separate worktree or do not parallelize that repo.
+Reuse the project's canonical build directory and outputs across all LLMs. Coordinate access and run one build at a time; do not create per-agent build folders, separate checkouts, or binary drops as the default answer to contention. Hand off or wait for the existing build owner.
 
 ### Build Configuration Rule
 
@@ -216,25 +172,15 @@ Do not build with multi-core/parallel flags (`/m`, `--parallel`, `-j`) unless th
 
 ### Build Output Context Rule
 
-Never stream a verbose build's full compiler output into an AI conversation or tool result. Repetitive build progress and warning output consumes the session's context/token budget without providing useful information. Redirect the complete output to a log file inside the build directory and return only the process exit status. If the build fails, inspect and report only the relevant error lines plus the smallest amount of surrounding context needed to diagnose them. Poll long-running builds infrequently with tightly limited output; do not repeatedly ingest unchanged progress. Requested directly by the user on 2026-09-17 after streamed Station build warnings consumed a substantial part of the session budget.
+Never stream a verbose build's full compiler output into an AI conversation or tool result. Repetitive build progress and warning output consumes the session's context/token budget without providing useful information. Redirect the complete output to a log file inside the build directory and return only the process exit status. If the build fails, inspect and report only the relevant error lines plus the smallest amount of surrounding context needed to diagnose them. Await build completion without polling processes, timers, or unchanged logs. Inspect the log after completion only as needed to diagnose the result. Requested directly by the user on 2026-09-17 after streamed Station build warnings consumed a substantial part of the session budget.
 
-### Shared Bin Directory Rule
+### Shared Build Outputs
 
-Every agent maintains its own workspace-level shared bin directories, one per build configuration, at `D:\CreationSuite-Workspaces\<agent>-debug-bin\` and `D:\CreationSuite-Workspaces\<agent>-release-bin\` (e.g. Claude's are `claude-debug-bin`/`claude-release-bin`). These give a stable, no-need-to-hunt-for-it path to the latest built executable of every app in the suite, regardless of which app's build tree it actually lives in.
+Use the application's existing canonical CMake output location as the executable location for every LLM. Do not add per-agent POST_BUILD copies or recreate agent-specific debug/release bin folders. If a shared distribution/staging area is specifically required, configure one shared location per configuration rather than one per agent. Keep installed runtime dependencies and toolchains separate from disposable build output.
 
-For every real app executable target in your own repo (not test/smoke binaries), add a `POST_BUILD` custom command to that target's `CMakeLists.txt` that copies the built binary into your agent's bin directory for the configuration just built:
+### Focused Validation
 
-```cmake
-add_custom_command(TARGET <YourTargetName> POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "D:/CreationSuite-Workspaces/<agent>-$<LOWER_CASE:$<CONFIG>>-bin"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:<YourTargetName>>" "D:/CreationSuite-Workspaces/<agent>-$<LOWER_CASE:$<CONFIG>>-bin/"
-    COMMENT "Copying <YourTargetName> to the shared <agent> bin directory"
-)
-```
-
-Replace `<agent>` with your own name (`claude`, `codex`, `gemini`, ...) and `<YourTargetName>` with the real target. `$<LOWER_CASE:$<CONFIG>>` resolves to `debug`/`release` automatically, so one command handles both configurations.
-
-This is a plain file copy at build time -- it does not require OS symlink privileges (creating a real Windows symlink needs Administrator or a freshly-logged-in session with Developer Mode already active, which made it the wrong tool for this). Do not attempt to symlink instead; copy.
+Build the affected application target when code changes require it and check the function changed. Broad regression runs belong after a substantial completed section when the user directs them. Do not build applications to validate Markdown-only edits, run duplicate configurations without a reason, or claim a feature works solely because compilation passed.
 
 ## Merge Rule
 
@@ -307,6 +253,7 @@ Why this exists: real examples include a details panel that copied a 2 GB video 
 This file is a MAP, not a manual — it tells you which document governs a given topic; it does not restate that document's content. Before starting work in an area below, open the linked file(s) and read them, live, every session — do not rely on a memory of having read them before, and do not let anything here substitute for actually opening the file.
 
 **Suite-wide:**
+- Local ecosystem orientation → `D:\CreationSuite-Workspaces\LLM_ARCHITECTURE_BRIEFING.md`; current folder inventory → `D:\CreationSuite-Workspaces\DRIVE_REPOSITORY_MAP.md`.
 - Multi-agent concurrency/handoff process → [docs/MULTI_AGENT_WORKFLOW.md](docs/MULTI_AGENT_WORKFLOW.md)
 - Suite platform architecture → [docs/SUITE_PLATFORM_ARCHITECTURE.md](docs/SUITE_PLATFORM_ARCHITECTURE.md), [docs/architecture/Suite-Architecture.md](docs/architecture/Suite-Architecture.md)
 - Suite authored-control / trigger boundary → [docs/architecture/Suite-Control-Boundary-Plan.md](docs/architecture/Suite-Control-Boundary-Plan.md)
