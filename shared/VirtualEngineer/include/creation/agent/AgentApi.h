@@ -30,6 +30,14 @@ public:
     // An endpoint for looking into the app, answered on the message thread: GET /v1/app/<name>. Add them before start().
     void addAppEndpoint(const juce::String& name, const juce::String& description, std::function<juce::var()> handler);
 
+    // Explicit operator commands, without a model call. POST /v1/commands/{name} with
+    // schema-checked arguments returns a requestId; GET /v1/requests/{id} reports the
+    // result. Hosts register their normal UI command handlers, including undo and any
+    // confirmation appropriate to that command. Model-issued tools retain their own
+    // VirtualEngineer effect gates. Register before start().
+    void addAppCommand(const juce::String& name, const juce::String& description,
+                       juce::var parameters, ToolHandler handler);
+
     bool start(juce::String& errorMessage);
     void stop();
     bool isRunning() const { return isThreadRunning(); }
@@ -62,5 +70,7 @@ private:
     juce::String token;
     std::shared_ptr<State> state;
     std::map<juce::String, Endpoint> endpoints;
+    struct Command { juce::String description; juce::var parameters; ToolHandler handler; };
+    std::map<juce::String, Command> commands;
 };
 } // namespace creation::agent
