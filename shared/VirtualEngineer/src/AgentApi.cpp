@@ -88,6 +88,13 @@ int AgentApi::getPort() const
     return listener.getBoundPort();
 }
 
+void AgentApi::addAppCommand(const juce::String& name, const juce::String& description,
+                             juce::var parameters, ToolHandler handler)
+{
+    jassert(! isThreadRunning());
+    commands[name] = { description, std::move(parameters), std::move(handler) };
+}
+
 bool AgentApi::start(juce::String& errorMessage)
 {
     if (isThreadRunning())
@@ -187,6 +194,80 @@ void AgentApi::handle(juce::StreamingSocket& socket)
             names.add(name);
         body->setProperty("appEndpoints", juce::var(names));
         writeJson(socket, 200, "OK", juce::var(body));
+        return;
+    }
+
+    if (request.method == "GET" && request.path == "/v1/commands")
+    {
+        auto* body = new juce::DynamicObject();
+        for (const auto& [name, command] : commands)
+        {
+            auto* entry = new juce::DynamicObject();
+            entry->setProperty("description", command.description);
+            entry->setProperty("parameters", command.parameters);
+            body->setProperty(name, juce::var(entry));
+        }
+        writeJson(socket, 200, "OK", juce::var(body));
+        return;
+    }
+    const juce::String commandPrefix = "/v1/commands/";
+    if (request.method == "POST" && request.path.startsWith(commandPrefix))
+    {
+        const auto found = commands.find(request.path.substring(commandPrefix.length()));
+        if (found == commands.end())
+        {
+            writeJson(socket, 404, "Not Found", errorBody("Unknown command. See GET /v1/commands."));
+            return;
+        }
+        const auto arguments = juce::JSON::parse(request.body);
+        const auto problem = validateArguments(found->second.parameters, arguments);
+        if (problem.isNotEmpty())
+        {
+            writeJson(socket, 400, "Bad Request", errorBody(problem));
+            return;
+        }
+        const auto id = juce::Uuid().toString();
+        const auto sharedState = state;
+        {
+            std::lock_guard lock(sharedState->mutex);
+            // Bound retained command results, never evict unfinished work.
+            if (sharedState->requests.size() >= 256)
+                for (auto it = sharedState->requests.begin(); it != sharedState->requests.end();)
+                    if (it->second.status == "completed" || it->second.status == "failed") it = sharedState->requests.erase(it);
+                    else ++it;
+            if (sharedState->requests.size() >= 256)
+            {
+                writeJson(socket, 429, "Too Many Requests", errorBody("Too many unfinished requests."));
+                return;
+            }
+            sharedState->requests[id] = {};
+        }
+        const auto handler = found->second.handler;
+        auto invoke = [sharedState, id, handler, arguments] {
+            {
+                std::lock_guard lock(sharedState->mutex);
+                if (! sharedState->active) return;
+                auto& entry = sharedState->requests[id];
+                entry.status = "running";
+                entry.startedAtMs = juce::Time::getMillisecondCounterHiRes();
+            }
+            handler(arguments, [sharedState, id](ToolResult result) {
+                std::lock_guard lock(sharedState->mutex);
+                auto foundResult = sharedState->requests.find(id);
+                if (! sharedState->active || foundResult == sharedState->requests.end()) return;
+                auto& entry = foundResult->second;
+                entry.status = result.ok ? "completed" : "failed";
+                entry.details = result.toVar();
+                entry.error = result.message;
+                entry.durationMs = juce::Time::getMillisecondCounterHiRes() - entry.startedAtMs;
+            });
+        };
+        if (runDirectlyForTesting) invoke();
+        else juce::MessageManager::callAsync(std::move(invoke));
+        auto* body = new juce::DynamicObject();
+        body->setProperty("requestId", id);
+        body->setProperty("status", "queued");
+        writeJson(socket, 202, "Accepted", juce::var(body));
         return;
     }
 
