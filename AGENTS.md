@@ -1,5 +1,21 @@
 # Agent Instructions
 
+## Current repository authority and PR workflow (October 25, 2026)
+
+The Executive Director owns all repositories. Codex is the designated working
+agent for the entire Creation Suite structure, including applications, shared
+libraries and submodules, until the Executive Director reassigns it. Do not
+request ownership negotiations or LLM handoffs under this assignment.
+
+All owned repositories use `master` as their primary branch. Start a task from
+clean, integrated `master` on a fresh task-specific branch. Preserve unfinished
+work. Complete implementation and appropriate tests, commit and publish a PR to
+`master` for the Executive Director's review/merge. Required reviews/checks must
+not be bypassed. After an actual merge, remove the completed branch, integrate
+dependent gitlink updates through PRs, and verify clean repository states.
+An open PR is ready for review, not integrated work. This supersedes conflicting
+ownership-transfer and automatic direct-merge instructions below.
+
 ## Tool Paths
 
 - **Node.js (node / npm / npx)**: `D:\tools\node22\node-v22.20.0-win-x64\node.exe` and `D:\tools\node22\node-v22.20.0-win-x64\npm.cmd`. Node is installed but not on the PATH. Always use absolute paths or set up the environment block when running web builds.

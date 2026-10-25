@@ -8,6 +8,19 @@ Every LLM uses `D:\CreationSuite-Workspaces\DjehutiSuite`. The umbrella contains
 
 This replaces the July policy of separate worktrees and the later per-LLM clone/bin arrangement. The machine-wide architecture briefing is `D:\CreationSuite-Workspaces\LLM_ARCHITECTURE_BRIEFING.md`; the location inventory is `D:\CreationSuite-Workspaces\DRIVE_REPOSITORY_MAP.md`.
 
+## Current authority and review boundary (October 25, 2026)
+
+Codex is the Executive Director's designated working agent for the entire Suite
+repository structure until reassigned. No ownership negotiations or LLM handoffs
+are required under that assignment. Existing unfinished work must be preserved.
+
+Use clean integrated `master`, then a fresh task-specific branch. Implement and
+test, commit and open a PR to `master` for Executive Director review/merge. Do not
+bypass required checks/reviews. Only delete the branch after its actual merge;
+finish dependent submodule/gitlink PRs and verify clean states. An open PR is not
+completed integration. These instructions supersede conflicting transfer and
+direct/automatic merge steps below; the single shared checkout/build policy stays.
+
 ## Coordinate ownership
 
 - One writable owner uses a given repository at a time. Others can inspect read-only. Transfer ownership explicitly before changing its branch, index, files, or build state.
