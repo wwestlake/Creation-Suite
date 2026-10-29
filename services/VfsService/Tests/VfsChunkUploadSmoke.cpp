@@ -69,6 +69,13 @@ int main()
     juce::CriticalSection lock;
     std::atomic<int> changed { 0 };
     httplib::Server http;
+    std::atomic<bool> storageUnavailable{false};
+    http.set_pre_routing_handler([&](const httplib::Request& req,httplib::Response& res)
+    {
+        if(storageUnavailable && req.path=="/project/stream" && req.get_param_value("action")=="write")
+        {res.status=507;res.set_content("Injected insufficient-storage response","text/plain");return httplib::Server::HandlerResponse::Handled;}
+        return httplib::Server::HandlerResponse::Unhandled;
+    });
     registerVfsChunkUploadRoutes(http, store, lock, [&](const juce::String&) { ++changed; });
     // The service's plain single-request route, for the small-entry case.
     http.Put("/project/entry", [&](const httplib::Request& req, httplib::Response& res)
@@ -283,6 +290,32 @@ int main()
 
         oldHttp.stop();
         oldServer.join();
+    }
+
+    // Open-ended stream API: real store/routes/client, no known final size.
+    {
+        const auto operation=juce::Uuid().toString(),path=juce::String("Media/stream-test.bin");juce::var status;
+        auto request=[&](const char* action,juce::int64 offset,juce::int64 revision,const char* data,size_t size)
+        {return client.streamProjectEntry(projectId,operation,action,path,offset,revision,data,size,status);};
+        check(client.supportsStreamingWrites(),"service advertises bounded streaming API");
+        check(request("begin",0,0,nullptr,0),"begin an open-ended project entry");
+        check(request("write",0,0,"abcdef",6) && (juce::int64)status["revision"]==1,"append without a final size");
+        check(request("begin",0,0,nullptr,0) && (juce::int64)status["size"]==6,"repeated begin never truncates acknowledged data");
+        check(request("write",0,0,"abcdef",6) && (juce::int64)status["revision"]==1,"exact lost-reply retry is idempotent");
+        check(!request("write",0,0,"xxxxxx",6),"different data at stale revision is rejected");
+        check(!request("write",8,1,"a",1),"sparse/out-of-order pieces are rejected");
+        check(request("write",2,1,"XY",2),"container header/index patch at explicit offset");
+        check(request("write",6,2,"T",1),"append after patch retains acknowledged high-water size");
+        juce::MemoryBlock hidden;check(!store.readEntry(projectId,path,hidden),"unfinished stream is not published as an ordinary entry");
+        check(request("inspect",0,0,nullptr,0) && (juce::int64)status["size"]==7,"retained partial stream can be inspected");
+        storageUnavailable=true;
+        check(!request("write",7,3,"lost",4) && client.getLastWriteError().isNotEmpty(),"insufficient-storage response is an explicit client failure");
+        storageUnavailable=false;
+        check(request("inspect",0,0,nullptr,0) && (juce::int64)status["size"]==7 && (juce::int64)status["revision"]==3,"failed write preserves acknowledged prefix and revision");
+        check(request("finish",0,3,nullptr,0) && request("finish",0,3,nullptr,0),"finalization is safe to retry");
+        check(store.readEntry(projectId,path,hidden) && hidden.toString()=="abXYefT","finalized stream is ordinary readable VFS media");
+        check(!request("write",7,3,"z",1),"writes after finalization are rejected");
+        juce::var conflict;check(!client.streamProjectEntry(projectId,juce::Uuid().toString(),"begin",path,0,0,nullptr,0,conflict),"existing destination cannot be overwritten");
     }
 
     http.stop();

@@ -16,10 +16,18 @@ endif()
 find_package(httplib CONFIG REQUIRED)
 find_package(ixwebsocket CONFIG REQUIRED)
 
-add_subdirectory("${JUCE_DIR}" juce)
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../shared/VFS" CreationSuiteSharedVFS)
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../shared/AssetSystem" CreationSuiteSharedAssetSystem)
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../shared/Services" CreationSuiteSharedServices)
+if(NOT TARGET juce::juce_core)
+    add_subdirectory("${JUCE_DIR}" juce)
+endif()
+if(NOT TARGET creation_suite_vfs)
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../shared/VFS" CreationSuiteSharedVFS)
+endif()
+if(NOT TARGET creation_suite_asset_system)
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../shared/AssetSystem" CreationSuiteSharedAssetSystem)
+endif()
+if(NOT TARGET creation_suite_services)
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../shared/Services" CreationSuiteSharedServices)
+endif()
 
 juce_add_console_app(CreationSuiteVfsService
     PRODUCT_NAME "DjehutiSuiteVFSService"
@@ -108,6 +116,8 @@ creation_suite_get_shared_bin_dir(CREATION_VFS_SHARED_BIN_DIR)
 # what caused Djehuti Station to hang on startup after the AppData folder
 # rename (the client's rebuilt code expected the new folder name; the old
 # service binary still assumed the old one).
+option(CREATION_VFS_COPY_SHARED_BIN "Copy service into shared runtime directory" ON)
+if(CREATION_VFS_COPY_SHARED_BIN)
 add_custom_command(TARGET CreationSuiteVfsService POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CREATION_VFS_SHARED_BIN_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:CreationSuiteVfsService>" "${CREATION_VFS_SHARED_BIN_DIR}/"
@@ -116,8 +126,28 @@ add_custom_command(TARGET CreationSuiteVfsService POST_BUILD
     COMMENT "Copying CreationSuiteVfsService (and its runtime DLLs) to the shared per-agent bin directory"
 )
 
+endif()
+
 install(TARGETS CreationSuiteVfsService
     RUNTIME DESTINATION .
 )
 
 set_target_properties(CreationSuiteVfsService PROPERTIES OUTPUT_NAME "DjehutiSuiteVfsService")
+
+# Imported zlib packages may be consumed without a vcpkg toolchain. Keep runtime
+# DLLs beside these directly built executables; never install or copy a toolchain.
+if(WIN32)
+    foreach(config DEBUG RELEASE)
+        if(ZLIB_LIBRARY_${config})
+            get_filename_component(zlib_lib_dir "${ZLIB_LIBRARY_${config}}" DIRECTORY)
+            get_filename_component(zlib_config_root "${zlib_lib_dir}" DIRECTORY)
+            get_filename_component(zlib_stem "${ZLIB_LIBRARY_${config}}" NAME_WE)
+            set(zlib_dll "${zlib_config_root}/bin/${zlib_stem}.dll")
+            if(EXISTS "${zlib_dll}")
+                foreach(executable CreationSuiteVfsService VfsChunkUploadSmoke)
+                    add_custom_command(TARGET ${executable} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different "${zlib_dll}" "$<TARGET_FILE_DIR:${executable}>/")
+                endforeach()
+            endif()
+        endif()
+    endforeach()
+endif()

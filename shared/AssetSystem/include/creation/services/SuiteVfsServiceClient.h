@@ -86,6 +86,13 @@ public:
     juce::String getLastReadError() const { return lastReadError_; }
     // One piece of an entry, read into memory (offset/length in bytes; fewer bytes come back at the end of the entry).
     // outTotalSize is the whole entry's size. This is how a big asset is read without ever copying it out to a file.
+    // Service-owned open-ended write; begin/write/inspect/finish, bounded 4 MiB pieces.
+    // Caller supplies a stable UUID and serialized revision; inspect/retry survives a lost reply.
+    // Unfinished bytes remain inside VFS until explicitly finalized; no OS scratch fallback.
+    bool streamProjectEntry(const juce::String& projectId,const juce::String& operationId,
+                            const juce::String& action,const juce::String& path,juce::int64 offset,
+                            juce::int64 revision,const void* bytes,size_t size,juce::var& status) const;
+    bool supportsStreamingWrites() const;
     bool readProjectEntryRange(const juce::String& projectId, const juce::String& logicalPath,
                                juce::int64 offset, juce::int64 length,
                                juce::MemoryBlock& outData, juce::int64& outTotalSize) const;
