@@ -13,6 +13,20 @@
 inline void registerVfsChunkUploadRoutes(httplib::Server& http, VfsProjectStore& store, juce::CriticalSection& storeLock,
                                          std::function<void(const juce::String& projectAndPath)> onEntryChanged)
 {
+    http.Get("/project/stream/capabilities",[](const httplib::Request&,httplib::Response& res)
+    {res.set_content("{\"version\":1,\"maxPieceBytes\":4194304}","application/json");});
+    http.Put("/project/stream",[&store,&storeLock,onEntryChanged](const httplib::Request& req,httplib::Response& res)
+    {
+        if(!req.has_param("projectId") || !req.has_param("operationId") || !req.has_param("action")){res.status=400;return;}
+        auto param=[&](const char* key){return juce::String(req.has_param(key)?req.get_param_value(key):"");};
+        juce::var status;juce::String error;
+        {const juce::ScopedLock lock(storeLock);
+         if(!store.streamEntry(param("projectId"),param("operationId"),param("action"),param("path"),param("offset").getLargeIntValue(),
+                               param("revision").getLargeIntValue(),req.body.data(),req.body.size(),status,error))
+         {res.status=409;res.set_content(error.toStdString(),"text/plain");return;}}
+        if(param("action")=="finish" && onEntryChanged)onEntryChanged(param("projectId")+":"+status["path"].toString());
+        res.set_content(juce::JSON::toString(status).toStdString(),"application/json");
+    });
     http.Put("/project/entry/chunk", [&store, &storeLock, onEntryChanged](const httplib::Request& req, httplib::Response& res)
     {
         if (! req.has_param("projectId") || ! req.has_param("path") || ! req.has_param("offset") || ! req.has_param("total"))

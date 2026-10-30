@@ -837,4 +837,24 @@ bool SuiteVfsServiceClient::listProjectEntries(const juce::String& projectId, ju
 
     return true;
 }
+
+bool SuiteVfsServiceClient::supportsStreamingWrites() const
+{
+    if(httpPort_<=0)return false;int status=0;
+    auto stream=baseUrl("/project/stream/capabilities").createInputStream(juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress).withConnectionTimeoutMs(5000).withStatusCode(&status));
+    return stream && status==200 && (int)juce::JSON::parse(stream->readEntireStreamAsString())["version"]==1;
+}
+bool SuiteVfsServiceClient::streamProjectEntry(const juce::String& project,const juce::String& operation,const juce::String& action,
+                                               const juce::String& path,juce::int64 offset,juce::int64 revision,
+                                               const void* bytes,size_t size,juce::var& result) const
+{
+    lastWriteError_={};if(httpPort_<=0 || size>4194304){lastWriteError_="Streaming service unavailable or piece too large.";return false;}
+    auto url=baseUrl("/project/stream").withParameter("projectId",project).withParameter("operationId",operation).withParameter("action",action)
+        .withParameter("path",path).withParameter("offset",juce::String(offset)).withParameter("revision",juce::String(revision)).withPOSTData(juce::MemoryBlock(bytes,size));
+    int code=0;auto reply=url.createInputStream(juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress).withHttpRequestCmd("PUT")
+        .withConnectionTimeoutMs(8000).withExtraHeaders("Content-Type: application/octet-stream\r\n").withStatusCode(&code));
+    if(!reply){lastWriteError_="Streaming request timed out; inspect retained operation before retrying.";return false;}
+    const auto text=reply->readEntireStreamAsString();if(code!=200){lastWriteError_=text.substring(0,512);return false;}
+    result=juce::JSON::parse(text);return result.isObject();
+}
 }

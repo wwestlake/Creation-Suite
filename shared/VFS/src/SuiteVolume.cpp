@@ -282,7 +282,7 @@ bool SuiteVolume::writeFile(const juce::String& logicalPath, const juce::MemoryB
         remaining -= thisChunk;
     }
 
-    f_close(&file);
+    if (f_close(&file) != FR_OK) ok = false;
 
     if (! ok) {
         errorMessage = "Could not write the asset's data.";
@@ -475,7 +475,7 @@ bool SuiteVolume::writeAt(const juce::String& logicalPath, juce::int64 offset, c
         done += thisChunk;
     }
 
-    f_close(&file);
+    if (f_close(&file) != FR_OK) ok = false;
     if (! ok) {
         errorMessage = "Could not write the asset's data (is the container full?).";
         return false;

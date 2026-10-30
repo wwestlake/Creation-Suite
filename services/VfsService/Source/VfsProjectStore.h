@@ -68,6 +68,10 @@ public:
                          std::int64_t offset, std::int64_t totalSize,
                          const void* chunk, size_t chunkSize,
                          bool& outCompleted, juce::String& errorMessage);
+    // Open-ended, project-scoped writes. State/partial bytes stay inside VFS.
+    bool streamEntry(const juce::String& projectId,const juce::String& operationId,
+                     const juce::String& action,const juce::String& path,juce::int64 offset,
+                     juce::int64 revision,const void* data,size_t size,juce::var& status,juce::String& error);
     bool readEntryRange(const juce::String& projectId, const juce::String& logicalPath,
                         std::int64_t offset, std::int64_t length,
                         juce::MemoryBlock& outData, std::int64_t& outTotalSize) const;

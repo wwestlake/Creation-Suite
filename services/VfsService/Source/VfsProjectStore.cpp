@@ -340,7 +340,7 @@ juce::StringArray VfsProjectStore::listEntryPaths(const juce::String& projectId)
         return paths;
 
     for (const auto& relative : volume.listFilesUnder(projectFolderPath(projectId)))
-        if (relative != ProjectContainerPaths::manifestPath && ! relative.endsWith(kPartialSuffix))
+        if (relative != ProjectContainerPaths::manifestPath && ! relative.endsWith(kPartialSuffix) && !relative.startsWith(".streams/"))
             paths.add(relative);
 
     return paths;
@@ -383,4 +383,68 @@ juce::StringArray VfsProjectStore::listSuiteEntryPaths() const
     for (const auto& relative : volume.listFilesUnder(kSuiteFolder))
         paths.add(juce::String(kSuiteFolder) + "/" + relative);
     return paths;
+}
+
+
+bool VfsProjectStore::streamEntry(const juce::String& project,const juce::String& operation,const juce::String& action,
+                                 const juce::String& requestedPath,juce::int64 offset,juce::int64 revision,
+                                 const void* data,size_t size,juce::var& status,juce::String& error)
+{
+    auto fail=[&](const juce::String& message){error=message;return false;};
+    if(!projectExists(project) || operation.length()<16 || operation.length()>64
+       || operation.containsOnly("0123456789abcdefABCDEF-")==false)return fail("Invalid project or stream operation identity.");
+    if(size>4*1024*1024 || offset<0 || offset>INT64_MAX-(juce::int64)size)return fail("Stream piece exceeds the bounded write limits.");
+    const auto root=projectFolderPath(project),journal=root+"/.streams/"+operation+".json";
+    juce::MemoryBlock metadata;juce::var state;
+    if(volume.readFile(journal,metadata,error))state=juce::JSON::parse(metadata.toString());
+    error={};
+    if(!state.isObject() && volume.readFile(journal+".next",metadata,error))state=juce::JSON::parse(metadata.toString());
+    if(!state.isObject())
+    {
+        if(action!="begin")return fail("Stream operation not found; no data was discarded.");
+        const auto path=normalizeLogicalPath(requestedPath);
+        if(!isSafePath(path) || (path==ProjectContainerPaths::manifestPath || path.startsWith(".streams/") || path.endsWith(kPartialSuffix)) || volume.fileExists(root+"/"+path))return fail("Stream destination must be a new safe project entry.");
+        auto* record=new juce::DynamicObject;state=juce::var(record);
+        record->setProperty("operationId",operation);record->setProperty("path",path);record->setProperty("state","writing");
+        record->setProperty("size",(juce::int64)0);record->setProperty("revision",(juce::int64)0);
+        const auto part=root+"/"+path+"."+operation+".upload-part";
+        if(!volume.writeAt(part,0,nullptr,0,true,error))return false;
+    }
+    auto* record=state.getDynamicObject();const auto path=state["path"].toString();
+    const auto finalPath=root+"/"+path,part=finalPath+"."+operation+".upload-part";
+    const auto current=(juce::int64)state["revision"],length=(juce::int64)state["size"];
+    if(action=="begin" && normalizeLogicalPath(requestedPath)!=path)return fail("Operation identity already belongs to another destination.");
+    if(action=="inspect"){status=state;return true;}
+    if(action=="write")
+    {
+        if(state["state"].toString()!="writing")return fail("Stream is already finalized; writes are rejected.");
+        if(revision!=current)
+        {
+            // Exact retry of the last acknowledged write is safe and does not advance revision.
+            juce::MemoryBlock previous;juce::int64 total=0;
+            if(revision==current-1 && offset==(juce::int64)state["lastOffset"] && (juce::int64)size==(juce::int64)state["lastSize"]
+               && volume.readRange(part,offset,(juce::int64)size,previous,total,error) && previous.getSize()==size
+               && (size==0 || std::memcmp(previous.getData(),data,size)==0)){status=state;return true;}
+            return fail("Stale/out-of-order stream write; inspect the acknowledged revision before retrying.");
+        }
+        if(offset>length)return fail("Sparse/out-of-order stream writes are not accepted.");
+        if(!volume.writeAt(part,offset,data,size,false,error))return false;
+        record->setProperty("size",std::max(length,offset+(juce::int64)size));record->setProperty("revision",current+1);
+        record->setProperty("lastOffset",offset);record->setProperty("lastSize",(juce::int64)size);
+    }
+    else if(action=="finish")
+    {
+        if(state["state"].toString()=="writing")
+        {
+            if(revision!=current)return fail("Stale finalization revision; inspect acknowledged stream progress first.");
+            if(volume.fileSize(part)>=0)
+            {if(volume.fileExists(finalPath))return fail("Refusing to overwrite an existing recording.");if(!volume.renameFile(part,finalPath,error))return false;}
+            if(volume.fileSize(finalPath)!=length)return fail("Final media size differs from acknowledged stream size; retained for recovery.");
+            record->setProperty("state","completed");
+        }
+    }
+    else if(action!="begin")return fail("Unknown streaming operation. Partial bytes have been retained.");
+    const auto json=juce::JSON::toString(state);juce::MemoryBlock bytes(json.toRawUTF8(),json.getNumBytesAsUTF8());
+    if(!volume.writeFile(journal+".next",bytes,error) || !volume.renameFile(journal+".next",journal,error))return false;
+    status=state;return true;
 }
