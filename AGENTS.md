@@ -1,11 +1,18 @@
 # Agent Instructions
 
-## Current repository authority and PR workflow (October 25, 2026)
+## Repository ownership and agent assignment policy (permanent; updated November 7, 2026)
 
-The Executive Director owns all repositories. Codex is the designated working
-agent for the entire Creation Suite structure, including applications, shared
-libraries and submodules, until the Executive Director reassigns it. Do not
-request ownership negotiations or LLM handoffs under this assignment.
+The Executive Director owns and controls all repositories, and assigns agents per-repository rather than once for the whole suite:
+
+1. The Executive Director owns and controls all repositories.
+2. Each repository has exactly one active coding agent at a time.
+3. The currently assigned agent has exclusive working ownership of that repository — all source files, build configuration, tests, documentation, and internal architecture, not just a named subsystem within it.
+4. The Executive Director may reassign any repository at any time.
+5. A previous agent's assignment to a repository does not restrict a later assignment of that same repository to a different agent.
+6. No agent may independently claim ownership of a repository currently assigned to another agent.
+7. Agents may inspect other repositories when necessary for integration research, but may not modify them without being assigned to them.
+
+This permanently supersedes the prior "Codex is the designated working agent for the entire Creation Suite structure... until the Executive Director reassigns it" language. Current per-repository assignments are tracked by the Executive Director, not fixed in this file — if a repository's current assignee is unclear, ask the Executive Director rather than assuming.
 
 All owned repositories use `master` as their primary branch. Start a task from
 clean, integrated `master` on a fresh task-specific branch. Preserve unfinished
@@ -13,8 +20,7 @@ work. Complete implementation and appropriate tests, commit and publish a PR to
 `master` for the Executive Director's review/merge. Required reviews/checks must
 not be bypassed. After an actual merge, remove the completed branch, integrate
 dependent gitlink updates through PRs, and verify clean repository states.
-An open PR is ready for review, not integrated work. This supersedes conflicting
-ownership-transfer and automatic direct-merge instructions below.
+An open PR is ready for review, not integrated work.
 
 ## Tool Paths
 
