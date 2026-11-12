@@ -303,40 +303,49 @@ bool SuiteVfsServiceClient::createProject(creation::assets::SuiteAppDomain appDo
     return creation::assets::fromVar(object->getProperty("manifest"), outManifest);
 }
 
-bool SuiteVfsServiceClient::readManifest(const juce::String& projectId, creation::assets::ProjectManifest& outManifest) const
+bool SuiteVfsServiceClient::readManifest(const juce::String& projectId, creation::assets::ProjectManifest& outManifest,
+                                        bool* conditionalWritesSupported) const
 {
+    if (conditionalWritesSupported != nullptr) *conditionalWritesSupported = false;
     if (httpPort_ <= 0)
         return false;
 
     int statusCode = 0;
+    juce::StringPairArray responseHeaders;
     auto stream = baseUrl("/project/manifest").withParameter("projectId", projectId).createInputStream(
         juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
             .withConnectionTimeoutMs(5000)
+            .withResponseHeaders(&responseHeaders)
             .withStatusCode(&statusCode));
 
     if (stream == nullptr || statusCode != 200)
         return false;
 
-    return creation::assets::fromVar(juce::JSON::parse(stream->readEntireStreamAsString()), outManifest);
+    if (!creation::assets::fromVar(juce::JSON::parse(stream->readEntireStreamAsString()), outManifest)) return false;
+    if (conditionalWritesSupported != nullptr)
+        *conditionalWritesSupported = responseHeaders.getValue("X-Djehuti-Manifest-CAS", {}) == "1";
+    return true;
 }
 
-bool SuiteVfsServiceClient::writeManifest(const juce::String& projectId, const creation::assets::ProjectManifest& manifest) const
+SuiteVfsServiceClient::ManifestWriteResult SuiteVfsServiceClient::compareAndWriteManifest(
+    const juce::String& projectId, const creation::assets::ProjectManifest& manifest,
+    int expectedRevision, creation::assets::ProjectManifest& savedManifest) const
 {
-    if (httpPort_ <= 0)
-        return false;
-
+    if (httpPort_ <= 0 || expectedRevision < 0) return ManifestWriteResult::failed;
     const auto json = creation::assets::serializeManifest(manifest, false);
-    const juce::MemoryBlock data(json.toRawUTF8(), json.getNumBytesAsUTF8());
-
     int statusCode = 0;
-    auto stream = baseUrl("/project/manifest").withParameter("projectId", projectId).withPOSTData(data).createInputStream(
-        juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
-            .withHttpRequestCmd("PUT")
-            .withConnectionTimeoutMs(5000)
-            .withExtraHeaders("Content-Type: application/json\r\n")
-            .withStatusCode(&statusCode));
-
-    return stream != nullptr && statusCode == 200;
+    auto stream = baseUrl("/project/manifest").withParameter("projectId", projectId)
+        .withPOSTData(juce::MemoryBlock(json.toRawUTF8(), json.getNumBytesAsUTF8())).createInputStream(
+            juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                .withHttpRequestCmd("PUT").withConnectionTimeoutMs(5000)
+                .withExtraHeaders("Content-Type: application/json\r\nIf-Match: " + juce::String(expectedRevision) + "\r\n")
+                .withStatusCode(&statusCode));
+    if (statusCode == 409) return ManifestWriteResult::conflict;
+    if (stream == nullptr || statusCode != 200
+        || !creation::assets::fromVar(juce::JSON::parse(stream->readEntireStreamAsString()), savedManifest)
+        || savedManifest.projectId != projectId || savedManifest.revision <= expectedRevision)
+        return ManifestWriteResult::failed;
+    return ManifestWriteResult::saved;
 }
 
 bool SuiteVfsServiceClient::listProjects(juce::Array<ProjectSummary>& outProjects) const

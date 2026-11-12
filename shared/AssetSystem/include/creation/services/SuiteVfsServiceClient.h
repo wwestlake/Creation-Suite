@@ -62,8 +62,12 @@ public:
                        const juce::String& suiteVersion, const juce::String& appVersion,
                        juce::String& outProjectId, creation::assets::ProjectManifest& outManifest,
                        juce::String& errorMessage) const;
-    bool readManifest(const juce::String& projectId, creation::assets::ProjectManifest& outManifest) const;
-    bool writeManifest(const juce::String& projectId, const creation::assets::ProjectManifest& manifest) const;
+    bool readManifest(const juce::String& projectId, creation::assets::ProjectManifest& outManifest,
+                      bool* conditionalWritesSupported = nullptr) const;
+    enum class ManifestWriteResult { saved, conflict, failed };
+    ManifestWriteResult compareAndWriteManifest(const juce::String& projectId,
+        const creation::assets::ProjectManifest& manifest, int expectedRevision,
+        creation::assets::ProjectManifest& savedManifest) const;
     // Unfiltered by design -- projects are not owned by any app. See
     // docs/architecture/Suite-Shared-Project-Model.md.
     bool listProjects(juce::Array<ProjectSummary>& outProjects) const;

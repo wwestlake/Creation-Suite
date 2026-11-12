@@ -30,8 +30,10 @@ bool ProjectSession::createNew(const creation::suite::SuiteSettings&,
         return false;
     }
 
-    return client.createProject(appDomain, projectName, suiteVersion, appVersion,
-                                outSession.projectId, outSession.manifest, errorMessage);
+    if (!client.createProject(appDomain, projectName, suiteVersion, appVersion,
+                              outSession.projectId, outSession.manifest, errorMessage)) return false;
+    outSession.baseManifest = outSession.manifest;
+    return true;
 }
 
 bool ProjectSession::open(const creation::suite::SuiteSettings&,
@@ -55,6 +57,7 @@ bool ProjectSession::open(const creation::suite::SuiteSettings&,
 
     outSession.projectId = projectIdToOpen;
     outSession.manifest = std::move(loadedManifest);
+    outSession.baseManifest = outSession.manifest;
     return true;
 }
 
@@ -112,6 +115,25 @@ juce::StringArray ProjectSession::listEntryPaths() const
     if (client.discover())
         client.listProjectEntries(projectId, paths);
     return paths;
+}
+
+bool ProjectSession::readOptionalEntry(const juce::String& logicalPath, juce::MemoryBlock& outData,
+                                       bool& found, juce::String& errorMessage) const
+{
+    found = false;
+    outData.reset();
+    creation::services::SuiteVfsServiceClient client;
+    juce::StringArray paths;
+    if (!isValid() || !client.discover() || !client.listProjectEntries(projectId, paths))
+    {
+        errorMessage = "Could not inspect the shared project's entries.";
+        return false;
+    }
+    found = paths.contains(normalizeLogicalPath(logicalPath));
+    if (!found) return true;
+    if (readEntry(logicalPath, outData)) return true;
+    errorMessage = "Could not read project entry: " + logicalPath;
+    return false;
 }
 
 bool ProjectSession::containsEntry(const juce::String& logicalPath) const
@@ -345,6 +367,21 @@ bool ProjectSession::reconcileMaterializedEntry(const creation::suite::SuiteSett
     return true;
 }
 
+bool ProjectSession::refreshManifest(juce::String& errorMessage)
+{
+    creation::services::SuiteVfsServiceClient client;
+    ProjectManifest current, merged;
+    if (!isValid() || !client.discover() || !client.readManifest(projectId, current))
+    {
+        errorMessage = "Could not refresh the shared project catalog.";
+        return false;
+    }
+    if (!mergeProjectManifest(baseManifest, manifest, current, merged, errorMessage)) return false;
+    manifest = std::move(merged);
+    baseManifest = std::move(current);
+    return true;
+}
+
 bool ProjectSession::commit(juce::String& errorMessage)
 {
     if (! isValid())
@@ -353,8 +390,6 @@ bool ProjectSession::commit(juce::String& errorMessage)
         return false;
     }
 
-    manifest.modifiedAt = juce::Time::getCurrentTime();
-
     creation::services::SuiteVfsServiceClient client;
     if (! client.discover())
     {
@@ -362,12 +397,28 @@ bool ProjectSession::commit(juce::String& errorMessage)
         return false;
     }
 
-    if (! client.writeManifest(projectId, manifest))
+    for (int attempt = 0; attempt < 4; ++attempt)
     {
-        errorMessage = "Could not save the project manifest.";
-        return false;
+        ProjectManifest current, merged, saved;
+        bool conditionalWrites = false;
+        if (!client.readManifest(projectId, current, &conditionalWrites)) break;
+        if (!conditionalWrites)
+        {
+            errorMessage = "The VFS service needs an update before it can safely save shared projects.";
+            return false;
+        }
+        if (!mergeProjectManifest(baseManifest, manifest, current, merged, errorMessage)) return false;
+        merged.modifiedAt = juce::Time::getCurrentTime();
+        const auto result = client.compareAndWriteManifest(projectId, merged, current.revision, saved);
+        if (result == creation::services::SuiteVfsServiceClient::ManifestWriteResult::saved)
+        {
+            manifest = std::move(saved);
+            baseManifest = manifest;
+            return true;
+        }
+        if (result != creation::services::SuiteVfsServiceClient::ManifestWriteResult::conflict) break;
     }
-
-    return true;
+    errorMessage = "Could not commit the shared project manifest. Retry the save; local edits are retained.";
+    return false;
 }
 }
