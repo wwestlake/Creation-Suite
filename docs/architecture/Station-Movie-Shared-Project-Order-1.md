@@ -105,3 +105,14 @@ Catalog refresh while apps stay open is explicit. Automatic event-driven media
 refresh, shared transport, scoring/Foley work, new effects/plugin features,
 proxy/HDR work and same-app multi-user editing are outside this order. The
 acceptance run does not claim manual pointer interaction or subjective listening.
+
+## Published review changes
+
+| Repository | Pull request | Implementation commit |
+| --- | --- | --- |
+| Suite shared platform | [#214](https://github.com/wwestlake/Creation-Suite/pull/214) | `5dd3223` |
+| Station | [#94](https://github.com/wwestlake/CreationStation/pull/94) | `5767b7b` |
+| Movie | [#50](https://github.com/wwestlake/Creation-Movie/pull/50) | `c82d2fb` |
+
+All are submitted for review without merging. The Suite PR is the app PRs'
+shared-code prerequisite. No unmerged application gitlink is included.
