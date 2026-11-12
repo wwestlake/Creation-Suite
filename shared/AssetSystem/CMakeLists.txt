@@ -8,6 +8,7 @@ add_library(creation_suite_asset_system STATIC
     src/ProjectSession.cpp
     src/ProjectWorkspaceService.cpp
     src/ProjectManifest.cpp
+    src/ProjectManifestMerge.cpp
     src/DjehutiExportContract.cpp
     src/SuiteSettings.cpp
     src/SuiteStoragePaths.cpp
@@ -41,6 +42,12 @@ add_test(
     NAME creation_suite_asset_system_smoke
     COMMAND creation_suite_asset_system_smoke
 )
+
+add_executable(creation_suite_project_manifest_tests tests/ProjectManifestMergeTests.cpp)
+target_link_libraries(creation_suite_project_manifest_tests PRIVATE creation_suite_asset_system)
+add_test(NAME creation_suite_project_manifest_tests COMMAND creation_suite_project_manifest_tests)
+add_executable(creation_suite_project_session_tests tests/ProjectSessionIntegrationTests.cpp)
+target_link_libraries(creation_suite_project_session_tests PRIVATE creation_suite_asset_system)
 
 # Auto-generated output name overrides
 set_target_properties(creation_suite_asset_system PROPERTIES OUTPUT_NAME "djehuti_suite_asset_system")
