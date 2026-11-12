@@ -101,6 +101,15 @@ and the VFS service must be updated together. Existing app gitlinks stay on thei
 merged pins until the app PRs actually merge; that later pointer update requires
 its own review. Nothing in this order authorizes a merge or Order 2.
 
+GitHub Requirements CI remains blocked by the pre-existing Station R3 audit:
+`Source/Audio/PatchLiveVoice.cpp:193` (`CS_SIGNAL_LAB_RUNTIME`) and
+`Source/Language/AudioGraphSelfTest.cpp:46` (`CS_SIGNAL_LAB_NODE_LIBRARY`) in the
+unchanged pinned Station source. [PR run 43314020354](https://github.com/wwestlake/Creation-Suite/actions/runs/43314020354)
+and [master run 40992946726](https://github.com/wwestlake/Creation-Suite/actions/runs/40992946726)
+report the identical failures. These checks remain enforced; the local passing
+results do not make the PR merge-ready. The audit defect is outside this
+shared-project cleanup.
+
 Catalog refresh while apps stay open is explicit. Automatic event-driven media
 refresh, shared transport, scoring/Foley work, new effects/plugin features,
 proxy/HDR work and same-app multi-user editing are outside this order. The
