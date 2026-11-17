@@ -296,4 +296,6 @@ This file is a MAP, not a manual — it tells you which document governs a given
 
 **Task/status tracking:** GitHub Issues + the **Creation Suite Road Map** project board (Project #19) — see the GitHub Project Board Rule above, not a doc file.
 
+**Movie multitrack capture:** [Central Viewer and independent acquisition](apps/CreationMovie/docs/MULTITRACK_ACQUISITION.md) governs enabled source recording, monitoring-only viewer selection, retained originals and current validation.
+
 **Keeping this index honest:** if you find a document that governs a topic covered by a task you're doing, and it isn't listed here, add it here as part of that task — this index is only useful if it stays current. Conversely, if a linked file no longer exists or has been superseded, fix or remove the entry rather than leaving a dead pointer.
