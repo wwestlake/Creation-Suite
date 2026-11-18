@@ -101,14 +101,14 @@ and the VFS service must be updated together. Existing app gitlinks stay on thei
 merged pins until the app PRs actually merge; that later pointer update requires
 its own review. Nothing in this order authorizes a merge or Order 2.
 
-GitHub Requirements CI remains blocked by the pre-existing Station R3 audit:
+The original GitHub Requirements failures came from Station pin `717a5f0`:
 `Source/Audio/PatchLiveVoice.cpp:193` (`CS_SIGNAL_LAB_RUNTIME`) and
-`Source/Language/AudioGraphSelfTest.cpp:46` (`CS_SIGNAL_LAB_NODE_LIBRARY`) in the
-unchanged pinned Station source. [PR run 43314020354](https://github.com/wwestlake/Creation-Suite/actions/runs/43314020354)
-and [master run 40992946726](https://github.com/wwestlake/Creation-Suite/actions/runs/40992946726)
-report the identical failures. These checks remain enforced; the local passing
-results do not make the PR merge-ready. The audit defect is outside this
-shared-project cleanup.
+`Source/Language/AudioGraphSelfTest.cpp:46` (`CS_SIGNAL_LAB_NODE_LIBRARY`).
+[PR run 43314691246](https://github.com/wwestlake/Creation-Suite/actions/runs/43314691246)
+records that failure. A later local pass with a newer Station checkout did not
+clear the pinned PR. The November 18 baseline correction below replaces that
+pin with reviewed canonical Station master and checks the actual PR/submodule
+state. Requirements remain enforced; the updated PR must pass its own CI.
 
 Catalog refresh while apps stay open is explicit. Automatic event-driven media
 refresh, shared transport, scoring/Foley work, new effects/plugin features,
@@ -125,3 +125,126 @@ acceptance run does not claim manual pointer interaction or subjective listening
 
 All are submitted for review without merging. The Suite PR is the app PRs'
 shared-code prerequisite. No unmerged application gitlink is included.
+
+## Station baseline correction, November 18
+
+Authorized by [the corrective work order](https://github.com/wwestlake/Creation-Suite/issues/215#issuecomment-6992370794).
+The former pin `717a5f0` and Station master are divergent: their common ancestor
+is `5aafc83`. The old side includes `40bdb93` (a development merge), `79b4a50`
+(the unmerged beta-version bump), and policy backports `9f1b407` / `717a5f0`.
+This correction deliberately follows accepted master rather than retaining that
+development line or importing local casting work.
+
+Master `757a8c5` contains merged Station PRs #79–#90 and a shared-workspace policy
+commit. Its 47-file delta is inventoried below. The accepted changes are:
+
+| Accepted PRs | Effect relative to the old pin |
+| --- | --- |
+| #79–#80 | Use the Suite FRust host; embed built-in Signal Lab FRust and load from memory; move the path-based self-test out of app Source. This removes the R3 violations. |
+| #81–#84 | Assistant input/height fixes, Station script host/API, Producer/Engineer tools, listening analysis and help cards, project conversation storage/Chats UI. |
+| #85–#87, #89–#90 | Install the VFS service with Station; verify MSI contents; fix installer components/shortcuts and chosen suite-folder layout. |
+| #88 | Require pinned GPLv3 ASIO SDK 2.3.4 in every build and enforce it in release checks. |
+| `757a8c5` | Record the shared-workspace policy. |
+
+The added shared targets (AiCore, AudioAnalysis, AssistantStore, AiProviders and
+AiFrustTools) already exist in this Suite PR's shared baseline. Shared/service
+source at the previously tested Suite `85bf0ec` is identical to PR head
+`38a1e5a`; the canonical Station Debug/offline checks therefore exercised these
+same library sources. No dependency installation or LLVM change is required.
+The canonical version remains `0.5.1`; the unmerged beta-version branch is not
+silently retained.
+
+Executive Director review then merged Station #97 as canonical master
+`20d3c41b7c2156c022fd2509d8fc03d21fcd71a0`. Its delta from `757a8c5` is only
+README/quarantine documentation (`68d4416`, `dd5c7c6`, merge `20d3c41`); runtime,
+build and test sources are identical. This exact merged master is the new Suite
+pin. Casting, Station #94 and the preservation branch are excluded. The private
+casting archive remains intact. Movie/Android/FRust and all other pins are
+unchanged. This does not merge the app compatibility PRs or authorize transport,
+capture, MIDI, Android splitting or hardware work.
+
+
+### Complete master-side commit inventory through 757a8c5
+
+```text
+cbeb478 Merge pull request #79 from wwestlake/claude/frust-host
+a47d3e0 feat: Signal Lab FRust is embedded in the app and loaded from memory; release checks the exe ships no libraries
+04ec95b Merge pull request #80 from wwestlake/claude/rules-checks
+9793726 feat: Virtual Engineer message box starts one line and grows; arrow send button inside it; Enter-sends option
+494b3a8 Merge pull request #81 from wwestlake/claude/ai-prompt-box
+77c8ade fix: message box height comes from measuring the text, so it shrinks as well as grows; register the shared AI framework; Station's script API (not yet wired)
+7f780af Merge pull request #82 from wwestlake/claude/development
+ce0a837 feat: Station's host for AI scripts over the real project, and a smoke test of Station's script API
+64c1f8d feat: the Virtual Engineer works as a coder - writes and runs FRust against Station through the agent engine
+2f27360 feat: the Virtual Engineer is given a FRust guide; failed runs show the real errors; tests for the guide
+f2596d3 feat: Producer and Engineer roles; listening tools; full track control and automation for scripts; music and FRust help cards
+998b9cc Merge pull request #83 from wwestlake/claude/development
+ebf152a feat: the assistant's conversations are recorded in the project and managed from a Chats window
+cffaccd Merge pull request #84 from wwestlake/claude/development
+dce1491 feat: the release installs the storage service with Station, and refuses to publish without it
+8925d78 Merge pull request #85 from wwestlake/claude/development
+cec725d fix: installer - one file per component, and per-machine key paths for the shortcuts
+8b4bf82 Merge pull request #86 from wwestlake/claude/development
+da2d8bd fix: installer - per-user key paths for the shortcuts, and skip ICE57
+90a17f2 Merge pull request #87 from wwestlake/claude/development
+be80582 build: ASIO is required in every build (GPLv3 ASIO SDK 2.3.4, pinned), and the release checks for it
+9f5a270 docs: AGENTS.md - ASIO is required and must never be disabled
+6fd3ac3 Merge pull request #88 from wwestlake/claude/development
+156a294 fix: the release's installer check unpacks the MSI instead of querying it through COM
+691b22f Merge pull request #89 from wwestlake/claude/installer-verify-fix
+2130037 installer: everything goes into the suite folder the user chooses (Station and Services under it)
+5239cd5 Merge pull request #90 from wwestlake/claude/suite-folder-layout
+757a8c5 docs: use the shared Suite workspace for all LLMs
+```
+
+### Complete changed-file inventory through 757a8c5
+
+```text
+M	.github/workflows/release.yml
+M	CMakeLists.txt
+A	Source/Agent/StationAgentApi.frust
+A	Source/Agent/StationAgentHost.h
+A	Source/Agent/StationAgentHostImpl.cpp
+A	Source/Agent/StationAssistant.cpp
+A	Source/Agent/StationAssistant.h
+A	Source/Agent/StationConversations.cpp
+A	Source/Agent/StationScriptApi.cpp
+A	Source/Agent/StationScriptApi.h
+A	Source/Agent/StationScriptGuide.md
+A	Source/Agent/VfsAssistantFiles.h
+M	Source/Audio/PatchLiveVoice.cpp
+M	Source/MainComponent.cpp
+M	Source/MainComponent.h
+M	Source/Views/AiPanel.cpp
+M	Source/Views/AiPanel.h
+A	Source/Views/ConversationManager.cpp
+A	Source/Views/ConversationManager.h
+A	Source/Views/PromptInputParts.h
+A	help/tools/make_conversation_topics.py
+A	help/tools/make_frust_topics.py
+A	help/tools/make_music_topics.py
+A	help/tools/make_theory_topics.py
+A	help/topics/en-US/djehuti.station.assistant-writes-scripts.json
+A	help/topics/en-US/djehuti.station.conversations-managing.json
+A	help/topics/en-US/djehuti.station.conversations-saved-securely.json
+A	help/topics/en-US/djehuti.station.frust-compile-errors.json
+A	help/topics/en-US/djehuti.station.frust-language.json
+A	help/topics/en-US/djehuti.station.frust-station-api.json
+A	help/topics/en-US/djehuti.station.music-judging-intent.json
+A	help/topics/en-US/djehuti.station.music-pitch-interpretation.json
+A	help/topics/en-US/djehuti.station.music-rhythm-interpretation.json
+A	help/topics/en-US/djehuti.station.producer-tools-guide.json
+A	help/topics/en-US/djehuti.station.theory-chords-harmony.json
+A	help/topics/en-US/djehuti.station.theory-form-and-vocabulary.json
+A	help/topics/en-US/djehuti.station.theory-keys-circle-of-fifths.json
+A	help/topics/en-US/djehuti.station.theory-notes-intervals-scales.json
+A	help/topics/en-US/djehuti.station.theory-rhythm-meter.json
+A	help/topics/en-US/djehuti.station.theory-tuning-intonation.json
+A	installer/DjehutiStation.wxs
+A	installer/build-msi.ps1
+R100	Source/Language/AudioGraphSelfTest.cpp	tests/AudioGraphSelfTest.cpp
+R100	Source/Language/AudioGraphSelfTest.h	tests/AudioGraphSelfTest.h
+M	tests/StationFrustIntegrationSmoke.cpp
+A	tests/StationScriptApiSmoke.cpp
+A	tests/StationScriptGuideSmoke.cpp
+```
