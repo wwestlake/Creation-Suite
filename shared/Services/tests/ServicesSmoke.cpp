@@ -448,8 +448,10 @@ int main()
                 fail("VfsProjectStore smoke: listProjectEntries did not include the written entry.");
 
             manifest.tags.add("smoke-tested");
-            if (! client.writeManifest(projectId, manifest))
-                fail("VfsProjectStore smoke: writeManifest failed.");
+            creation::assets::ProjectManifest committedManifest;
+            if (client.compareAndWriteManifest(projectId, manifest, manifest.revision, committedManifest)
+                != creation::services::SuiteVfsServiceClient::ManifestWriteResult::saved)
+                fail("VfsProjectStore smoke: revision-checked manifest write failed.");
 
             creation::assets::ProjectManifest reloadedManifest;
             if (! client.readManifest(projectId, reloadedManifest) || ! reloadedManifest.tags.contains("smoke-tested"))

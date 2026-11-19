@@ -300,11 +300,18 @@ int main(int, char*[])
             }
         }
 
+        res.set_header("X-Djehuti-Manifest-CAS", "1");
         res.set_content(juce::JSON::toString(creation::assets::toVar(manifest), false).toStdString(), "application/json");
     });
 
     http.Put("/project/manifest", [&](const httplib::Request& req, httplib::Response& res)
     {
+        if (!req.has_header("If-Match"))
+        {
+            res.status = 428;
+            res.set_content("A revision-checked manifest save is required. Update the client to use ProjectSession::commit.", "text/plain");
+            return;
+        }
         if (! req.has_param("projectId"))
         {
             res.status = 400;
@@ -323,6 +330,26 @@ int main(int, char*[])
         juce::String errorMessage;
         {
             const juce::ScopedLock lock(storeLock);
+            const auto projectId = juce::String(req.get_param_value("projectId"));
+            creation::assets::ProjectManifest current;
+            if (!store.readManifest(projectId, current, errorMessage))
+            {
+                res.status = 404;
+                return;
+            }
+            if (manifest.projectId != projectId)
+            {
+                res.status = 400;
+                res.set_content("Project identity cannot be changed.", "text/plain");
+                return;
+            }
+            if (req.get_header_value("If-Match") != juce::String(current.revision).toStdString())
+            {
+                res.status = 409;
+                res.set_content("Project manifest changed; refresh and merge before saving.", "text/plain");
+                return;
+            }
+            manifest.revision = current.revision + 1;
             if (! store.writeManifest(juce::String(req.get_param_value("projectId")), manifest, errorMessage))
             {
                 res.status = 500;
@@ -331,7 +358,9 @@ int main(int, char*[])
             }
         }
 
-        res.set_content("{\"status\":\"ok\"}", "application/json");
+        broadcastEntryChanged(wsClients, wsClientsLock,
+            manifest.projectId + ":" + creation::assets::ProjectContainerPaths::manifestPath);
+        res.set_content(juce::JSON::toString(creation::assets::toVar(manifest), false).toStdString(), "application/json");
     });
 
     http.Get("/project/list", [&](const httplib::Request&, httplib::Response& res)

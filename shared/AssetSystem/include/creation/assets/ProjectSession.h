@@ -64,6 +64,9 @@ public:
     // if the entry does not exist or the service cannot be reached. Use this for anything big (video).
     std::unique_ptr<juce::InputStream> openEntryStream(const juce::String& logicalPath) const;
     bool readEntry(const juce::String& logicalPath, juce::MemoryBlock& outData) const;
+    // Absence is valid for another app's optional editing state; an I/O error is not.
+    bool readOptionalEntry(const juce::String& logicalPath, juce::MemoryBlock& outData,
+                           bool& found, juce::String& errorMessage) const;
     // Why the last writeEntry() failed, in words a user can act on ("" after a success).
     juce::String getLastWriteError() const { return lastWriteError; }
 
@@ -98,11 +101,14 @@ public:
     // Persists the manifest (asset catalog, revision, tags). Asset writes/removals themselves
     // are already durable on the VFS service by the time writeEntry/removeEntry return.
     bool commit(juce::String& errorMessage);
+    // Refresh metadata without discarding this session's unsaved catalog edits.
+    bool refreshManifest(juce::String& errorMessage);
 
 private:
     juce::String lastWriteError;
     bool lastWriteCancelled = false;
     juce::String projectId;
     ProjectManifest manifest;
+    ProjectManifest baseManifest;
 };
 }

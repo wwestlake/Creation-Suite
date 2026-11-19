@@ -63,4 +63,9 @@ juce::var toVar(const ProjectManifest& manifest);
 bool fromVar(const juce::var& value, ProjectManifest& outManifest);
 juce::String serializeManifest(const ProjectManifest& manifest, bool prettyPrint = true);
 bool deserializeManifest(const juce::String& jsonText, ProjectManifest& outManifest, juce::String& errorMessage);
+// Merge only this client's edits onto the service's current manifest. Conflicting
+// edits to the same metadata/asset version fail without changing the output.
+bool mergeProjectManifest(const ProjectManifest& base, const ProjectManifest& edited,
+                          const ProjectManifest& current, ProjectManifest& merged,
+                          juce::String& errorMessage);
 }
